@@ -1,452 +1,1191 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>The Claude Code System — Dashboard</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <style>
-    *, *::before, *::after {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The AI Builder Academy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    :root {
-      --bg: #FAFAF8;
-      --orange: #E06418;
-      --text: #1A1916;
-      --subtext: #4A4640;
-      --muted: #9A9288;
-      --card-bg: #FFFFFF;
-      --card-border: rgba(0,0,0,0.08);
-      --code-bg: #1A1916;
-      --code-text: #EDE8DF;
-      --divider: rgba(0,0,0,0.10);
-    }
+:root {
+  --bg: #09090E;
+  --surface: #111118;
+  --surface-2: #18181F;
+  --border: rgba(255,255,255,0.07);
+  --border-hover: rgba(249,115,22,0.35);
+  --orange: #F97316;
+  --orange-dim: rgba(249,115,22,0.12);
+  --orange-glow: rgba(249,115,22,0.25);
+  --text: #F0EAE0;
+  --text-2: #9A9098;
+  --text-3: #4A4850;
+  --green: #4ADE80;
+  --font-display: 'Syne', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+}
 
-    body {
-      font-family: 'Inter', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.6;
-      min-height: 100vh;
-    }
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  min-height: 100vh;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
 
-    .top-bar {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 4px;
-      background: var(--orange);
-      z-index: 100;
-    }
+/* ─── TOAST ─────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: none;
+  z-index: 9999;
+  white-space: nowrap;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
 
-    .container {
-      max-width: 860px;
-      margin: 0 auto;
-      padding: 0 24px;
-    }
+/* ─── VIEW TRANSITIONS ───────────────────── */
+#academy-view, #track-view {
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+#academy-view.hidden, #track-view.hidden {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 0; left: 0; right: 0;
+}
+#track-view { display: none; }
 
-    /* ── Header ── */
-    .header {
-      padding-top: 68px;
-      padding-bottom: 48px;
-    }
+/* ─── DOT GRID ───────────────────────────── */
+.dot-grid {
+  position: fixed;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(249,115,22,0.14) 1px, transparent 1px);
+  background-size: 28px 28px;
+  pointer-events: none;
+  z-index: 0;
+}
 
-    .header-label {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--orange);
-      margin-bottom: 10px;
-    }
+/* ─── ACADEMY VIEW ───────────────────────── */
+#academy-view {
+  position: relative;
+  min-height: 100vh;
+}
 
-    .header-title {
-      font-size: 42px;
-      font-weight: 700;
-      color: var(--text);
-      line-height: 1.15;
-      margin-bottom: 10px;
-    }
+.academy-wrap {
+  position: relative;
+  z-index: 1;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 24px 80px;
+}
 
-    .header-subtitle {
-      font-size: 17px;
-      color: var(--subtext);
-      font-weight: 400;
-      margin-bottom: 28px;
-    }
+/* Header */
+.academy-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 56px 0 52px;
+  gap: 24px;
+}
 
-    .header-divider {
-      width: 48px;
-      height: 3px;
-      background: var(--orange);
-      border-radius: 2px;
-    }
+.beta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--orange);
+  background: var(--orange-dim);
+  border: 1px solid rgba(249,115,22,0.25);
+  padding: 4px 10px;
+  border-radius: 100px;
+  margin-bottom: 16px;
+}
 
-    /* ── Section label ── */
-    .section-label {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.10em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin-bottom: 20px;
-    }
+.beta-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--orange);
+  animation: pulse 2s ease-in-out infinite;
+}
 
-    /* ── Level cards ── */
-    .levels {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      margin-bottom: 64px;
-    }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
 
-    .level-card {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 12px;
-      padding: 24px 28px;
-      transition: border-color 0.18s, box-shadow 0.18s;
-    }
+.academy-title {
+  font-family: var(--font-display);
+  font-size: clamp(36px, 5vw, 56px);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  margin-bottom: 12px;
+}
 
-    .level-card:hover {
-      border-color: var(--orange);
-      box-shadow: 0 2px 16px rgba(224,100,24,0.07);
-    }
+.academy-title em {
+  font-style: normal;
+  color: var(--orange);
+}
 
-    .level-top {
-      display: flex;
-      align-items: flex-start;
-      gap: 16px;
-      margin-bottom: 14px;
-    }
+.academy-sub {
+  font-size: 16px;
+  color: var(--text-2);
+  font-weight: 400;
+  max-width: 420px;
+}
 
-    .level-badge {
-      flex-shrink: 0;
-      width: 36px;
-      height: 36px;
-      background: var(--orange);
-      color: #fff;
-      border-radius: 50%;
-      font-size: 15px;
-      font-weight: 700;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-top: 2px;
-    }
+.track-counter {
+  flex-shrink: 0;
+  text-align: right;
+}
 
-    .level-meta {
-      flex: 1;
-    }
+.counter-num {
+  font-family: var(--font-display);
+  font-size: 52px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--orange);
+  letter-spacing: -0.04em;
+}
 
-    .level-tag {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--orange);
-      margin-bottom: 2px;
-    }
+.counter-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-top: 4px;
+}
 
-    .level-title {
-      font-size: 19px;
-      font-weight: 700;
-      color: var(--text);
-      line-height: 1.2;
-    }
+/* Section label */
+.section-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
 
-    .level-desc {
-      font-size: 14px;
-      color: var(--subtext);
-      margin-bottom: 18px;
-      padding-left: 52px;
-    }
+.s-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
 
-    .level-links {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      padding-left: 52px;
-    }
+.s-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
 
-    .link-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 13px;
-      background: var(--bg);
-      border: 1px solid var(--card-border);
-      border-radius: 6px;
-      text-decoration: none;
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text);
-      transition: border-color 0.15s, color 0.15s, background 0.15s;
-    }
+/* ─── HERO TRACK CARD ────────────────────── */
+.hero-track {
+  position: relative;
+  background: var(--surface);
+  border-radius: 20px;
+  overflow: hidden;
+  cursor: pointer;
+  margin-bottom: 48px;
+  border: 1px solid rgba(249,115,22,0.2);
+  animation: heroEntrance 0.6s ease forwards;
+  animation-delay: 0.15s;
+  opacity: 0;
+}
 
-    .link-chip:hover {
-      border-color: var(--orange);
-      color: var(--orange);
-      background: #fff;
-    }
+@keyframes heroEntrance {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
-    .link-chip.ref {
-      border-style: dashed;
-    }
+.hero-track::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(249,115,22,0.07) 0%, transparent 60%);
+  pointer-events: none;
+}
 
-    .chip-icon {
-      opacity: 0.40;
-      flex-shrink: 0;
-    }
+.hero-glow {
+  position: absolute;
+  top: -60px;
+  right: -60px;
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(249,115,22,0.18) 0%, transparent 70%);
+  pointer-events: none;
+  animation: glowPulse 3s ease-in-out infinite;
+}
 
-    .link-chip:hover .chip-icon {
-      opacity: 0.85;
-    }
+@keyframes glowPulse {
+  0%, 100% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
 
-    /* ── Templates ── */
-    .templates-section {
-      margin-bottom: 64px;
-    }
+.hero-inner {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 32px;
+  padding: 40px 44px;
+  position: relative;
+  z-index: 1;
+}
 
-    .templates-intro {
-      font-size: 14px;
-      color: var(--subtext);
-      margin-bottom: 24px;
-    }
+@media (max-width: 600px) {
+  .hero-inner { grid-template-columns: 1fr; padding: 28px 24px; }
+}
 
-    .tmpl-code {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-      background: var(--code-bg);
-      padding: 2px 7px;
-      border-radius: 3px;
-      color: var(--code-text);
-    }
+.hero-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
 
-    .template-block {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 12px;
-      overflow: hidden;
-      margin-bottom: 16px;
-    }
+.unlocked-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--green);
+  background: rgba(74,222,128,0.1);
+  border: 1px solid rgba(74,222,128,0.25);
+  padding: 4px 10px;
+  border-radius: 100px;
+}
 
-    .template-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 13px 20px;
-      border-bottom: 1px solid var(--card-border);
-      background: #F5F4F1;
-    }
+.unlocked-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--green);
+}
 
-    .template-label {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text);
-    }
+.track-num-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  letter-spacing: 0.08em;
+}
 
-    .copy-btn {
-      font-family: 'Inter', sans-serif;
-      font-size: 12px;
-      font-weight: 500;
-      padding: 5px 12px;
-      background: transparent;
-      border: 1px solid var(--card-border);
-      border-radius: 5px;
-      cursor: pointer;
-      color: var(--subtext);
-      transition: border-color 0.15s, color 0.15s, background 0.15s;
-    }
+.hero-name {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin-bottom: 10px;
+  line-height: 1.2;
+}
 
-    .copy-btn:hover {
-      border-color: var(--orange);
-      color: var(--orange);
-      background: rgba(224,100,24,0.04);
-    }
+.hero-desc {
+  font-size: 15px;
+  color: var(--text-2);
+  line-height: 1.65;
+  max-width: 480px;
+  margin-bottom: 24px;
+}
 
-    .copy-btn.copied {
-      border-color: #2E7D32;
-      color: #2E7D32;
-      background: rgba(46,125,50,0.05);
-    }
+.hero-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 28px;
+}
 
-    .template-pre {
-      background: var(--code-bg);
-      color: var(--code-text);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-      line-height: 1.65;
-      padding: 20px 24px;
-      overflow-x: auto;
-      white-space: pre;
-      max-height: 400px;
-      overflow-y: auto;
-    }
+.hero-pill {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 4px 12px;
+  border-radius: 100px;
+  letter-spacing: 0.04em;
+}
 
-    .template-pre::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
-    }
+.hero-progress-wrap {
+  margin-bottom: 28px;
+}
 
-    .template-pre::-webkit-scrollbar-track {
-      background: #252219;
-    }
+.progress-bar-bg {
+  height: 3px;
+  background: var(--surface-2);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
 
-    .template-pre::-webkit-scrollbar-thumb {
-      background: #4A4640;
-      border-radius: 3px;
-    }
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--orange), #FBBF24);
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.8s ease;
+}
 
-    /* ── Footer ── */
-    .footer {
-      border-top: 1px solid var(--divider);
-      padding: 28px 0 44px;
-      text-align: center;
-      font-size: 13px;
-      color: var(--muted);
-    }
+.progress-text {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  letter-spacing: 0.06em;
+}
 
-    /* ── Responsive ── */
-    @media (max-width: 580px) {
-      .header-title { font-size: 30px; }
-      .level-card { padding: 20px 16px; }
-      .level-desc, .level-links { padding-left: 0; }
-      .template-pre { font-size: 11px; padding: 14px 16px; }
-    }
-  </style>
+.enter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--orange);
+  color: #0A0A0E;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 12px 24px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  letter-spacing: -0.01em;
+  transition: all 0.2s ease;
+}
+
+.enter-btn:hover {
+  background: #FB923C;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(249,115,22,0.35);
+}
+
+.hero-right {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero-icon-wrap {
+  width: 120px;
+  height: 120px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--orange);
+}
+
+/* ─── LOCKED GRID ────────────────────────── */
+.locked-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 700px) { .locked-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 420px) { .locked-grid { grid-template-columns: 1fr; } }
+
+.locked-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px 20px;
+  cursor: pointer;
+  overflow: hidden;
+  opacity: 0;
+  animation: cardEntrance 0.5s ease forwards;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.locked-card:hover {
+  border-color: rgba(249,115,22,0.2);
+  transform: translateY(-2px);
+}
+
+.locked-card:nth-child(1) { animation-delay: 0.3s; }
+.locked-card:nth-child(2) { animation-delay: 0.38s; }
+.locked-card:nth-child(3) { animation-delay: 0.46s; }
+.locked-card:nth-child(4) { animation-delay: 0.54s; }
+.locked-card:nth-child(5) { animation-delay: 0.62s; }
+.locked-card:nth-child(6) { animation-delay: 0.70s; }
+
+@keyframes cardEntrance {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.locked-num {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-3);
+  letter-spacing: 0.1em;
+  margin-bottom: 14px;
+}
+
+.locked-icon {
+  width: 36px;
+  height: 36px;
+  background: var(--surface-2);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  margin-bottom: 14px;
+  filter: saturate(0.3);
+  transition: filter 0.2s;
+}
+
+.locked-card:hover .locked-icon { filter: saturate(0.6); }
+
+.locked-name {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-2);
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.locked-desc {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.locked-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 3px 8px;
+  border-radius: 100px;
+}
+
+.lock-ico {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  color: var(--text-3);
+  opacity: 0.6;
+}
+
+.academy-footer {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  text-align: center;
+  padding-top: 48px;
+  letter-spacing: 0.06em;
+}
+
+/* ─── TRACK VIEW ─────────────────────────── */
+#track-view {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.track-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(9,9,14,0.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 32px;
+}
+
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--text-2);
+  background: none;
+  border: 1px solid var(--border);
+  padding: 7px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.back-btn:hover {
+  color: var(--text);
+  border-color: rgba(249,115,22,0.3);
+}
+
+.nav-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+}
+
+.nav-track-name {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.nav-track-num {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--orange);
+  margin-right: 8px;
+}
+
+.track-content {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 48px 24px 80px;
+}
+
+/* Course header */
+.course-header {
+  margin-bottom: 48px;
+}
+
+.course-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--orange);
+  margin-bottom: 12px;
+}
+
+.course-title {
+  font-family: var(--font-display);
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  line-height: 1.1;
+  margin-bottom: 10px;
+}
+
+.course-sub {
+  font-size: 16px;
+  color: var(--text-2);
+  max-width: 500px;
+}
+
+.course-divider {
+  width: 40px;
+  height: 2px;
+  background: var(--orange);
+  border-radius: 2px;
+  margin-top: 24px;
+}
+
+/* Track section label */
+.track-section-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 20px;
+}
+
+/* ─── LEVEL CARDS ────────────────────────── */
+.levels {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 60px;
+}
+
+.level-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px 28px 24px;
+  transition: border-color 0.2s;
+}
+
+.level-card:hover { border-color: rgba(249,115,22,0.2); }
+
+.level-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.level-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--orange-dim);
+  border: 1px solid rgba(249,115,22,0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--orange);
+  flex-shrink: 0;
+}
+
+.level-meta { flex: 1; }
+
+.level-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--orange);
+  margin-bottom: 4px;
+}
+
+.level-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.level-desc {
+  font-size: 14px;
+  color: var(--text-2);
+  line-height: 1.6;
+  margin-bottom: 18px;
+  max-width: 540px;
+}
+
+.level-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.link-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 7px 14px;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: all 0.2s;
+  font-family: var(--font-body);
+}
+
+.link-chip:hover {
+  border-color: rgba(249,115,22,0.3);
+  color: var(--text);
+  background: rgba(249,115,22,0.06);
+}
+
+.link-chip.ref { border-color: rgba(255,255,255,0.1); }
+.link-chip.ref:hover { border-color: rgba(249,115,22,0.3); }
+
+.chip-icon { opacity: 0.6; flex-shrink: 0; }
+
+/* ─── TEMPLATES SECTION ──────────────────── */
+.templates-section { margin-top: 8px; }
+
+.tmpl-intro {
+  font-size: 14px;
+  color: var(--text-2);
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+.tmpl-code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--orange);
+  background: var(--orange-dim);
+  padding: 2px 7px;
+  border-radius: 5px;
+}
+
+.template-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+
+.template-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.template-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: 0.04em;
+}
+
+.tmpl-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.copy-btn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--orange);
+  background: var(--orange-dim);
+  border: 1px solid rgba(249,115,22,0.25);
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.copy-btn:hover { background: rgba(249,115,22,0.2); }
+
+.expand-btn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  background: none;
+  border: 1px solid var(--border);
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.expand-btn:hover { color: var(--text-2); border-color: rgba(255,255,255,0.15); }
+
+.template-body {
+  position: relative;
+  max-height: 220px;
+  overflow: hidden;
+}
+
+.template-body.expanded { max-height: none; }
+
+.template-body::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 70px;
+  background: linear-gradient(transparent, var(--surface));
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+.template-body.expanded::after { opacity: 0; pointer-events: none; }
+
+.template-pre {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.85;
+  color: rgba(240,234,224,0.75);
+  padding: 18px 18px;
+  overflow-x: auto;
+  white-space: pre;
+  tab-size: 2;
+  background: transparent;
+}
+</style>
 </head>
 <body>
-  <div class="top-bar"></div>
 
-  <div class="container">
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- ACADEMY VIEW                                        -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div id="academy-view">
+  <div class="dot-grid"></div>
+
+  <div class="academy-wrap">
 
     <!-- Header -->
-    <header class="header">
-      <div class="header-label">The Claude Code System</div>
-      <h1 class="header-title">Your Dashboard</h1>
-      <p class="header-subtitle">Four levels. Start at 1. Come back to the rest.</p>
-      <div class="header-divider"></div>
+    <header class="academy-header">
+      <div>
+        <div class="beta-pill"><span class="beta-dot"></span>Early Access</div>
+        <h1 class="academy-title">The AI Builder<br><em>Academy</em></h1>
+        <p class="academy-sub">The fastest path from idea to shipped product using AI tools that matter.</p>
+      </div>
+      <div class="track-counter">
+        <div class="counter-num">1<span style="font-size:28px;color:var(--text-3)">/7</span></div>
+        <div class="counter-sub">tracks<br>unlocked</div>
+      </div>
     </header>
 
-    <!-- Course Levels -->
-    <section>
-      <div class="section-label">Course Levels</div>
-      <div class="levels">
+    <!-- Unlocked Track -->
+    <div class="section-row" style="margin-bottom:20px">
+      <div class="s-label">Your Track</div>
+      <div class="s-line"></div>
+    </div>
 
-        <!-- Level 1 -->
-        <div class="level-card">
-          <div class="level-top">
-            <div class="level-badge">1</div>
-            <div class="level-meta">
-              <div class="level-tag">Beginner</div>
-              <div class="level-title">Your First Session</div>
-            </div>
+    <div class="hero-track" onclick="enterTrack()">
+      <div class="hero-glow"></div>
+      <div class="hero-inner">
+        <div>
+          <div class="hero-top">
+            <div class="unlocked-badge"><span class="unlocked-dot"></span>Unlocked</div>
+            <div class="track-num-badge">Track 01</div>
           </div>
-          <p class="level-desc">Get a clean session under your belt. Understand CLAUDE.md and learn the 5 prompts.</p>
-          <div class="level-links">
-            <a href="slides/01-the-claude-md-system.html" class="link-chip">
-              <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-              The CLAUDE.md System
-            </a>
-            <a href="slides/02-prompting-claude-code.html" class="link-chip">
-              <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-              Prompting Claude Code
-            </a>
+          <h2 class="hero-name">Claude Code System</h2>
+          <p class="hero-desc">Master Claude Code from your first session to advanced systems. Stop wrestling with the tool. Start shipping with it.</p>
+          <div class="hero-pills">
+            <span class="hero-pill">4 Levels</span>
+            <span class="hero-pill">6 Lessons</span>
+            <span class="hero-pill">4 Templates</span>
+            <span class="hero-pill">5 Master Prompts</span>
+          </div>
+          <div class="hero-progress-wrap">
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill" id="hero-fill"></div>
+            </div>
+            <div class="progress-text" id="hero-prog-text">Not started — Level 1 of 4</div>
+          </div>
+          <button class="enter-btn">
+            Enter Track
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M2.5 7h9M8 3.5L11.5 7 8 10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="hero-right">
+          <div class="hero-icon-wrap">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+              <rect x="4" y="8" width="40" height="32" rx="6" stroke="currentColor" stroke-width="1.5" opacity="0.4"/>
+              <rect x="4" y="8" width="40" height="10" rx="6" stroke="currentColor" stroke-width="1.5" opacity="0.4"/>
+              <circle cx="12" cy="13" r="2" fill="currentColor" opacity="0.6"/>
+              <circle cx="18" cy="13" r="2" fill="currentColor" opacity="0.4"/>
+              <circle cx="24" cy="13" r="2" fill="currentColor" opacity="0.25"/>
+              <path d="M12 26l6 4-6 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M22 34h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
           </div>
         </div>
-
-        <!-- Level 2 -->
-        <div class="level-card">
-          <div class="level-top">
-            <div class="level-badge">2</div>
-            <div class="level-meta">
-              <div class="level-tag">Builder</div>
-              <div class="level-title">Consistent Output</div>
-            </div>
-          </div>
-          <p class="level-desc">Stop sessions from drifting. Master the planning system and debug workflow.</p>
-          <div class="level-links">
-            <a href="slides/02-prompting-claude-code.html" class="link-chip">
-              <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-              Prompting Claude Code
-            </a>
-            <a href="slides/03-the-gsd-system.html" class="link-chip">
-              <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-              The GSD System
-            </a>
-            <a href="reference/prompt-cheat-sheet.html" class="link-chip ref">
-              <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M4 2h6l4 4v8a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5"/><path d="M10 2v4h4" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
-              Prompt Cheat Sheet
-            </a>
-            <a href="reference/session-checklist.html" class="link-chip ref">
-              <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M4 2h6l4 4v8a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5"/><path d="M10 2v4h4" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
-              Session Checklist
-            </a>
-          </div>
-        </div>
-
-        <!-- Level 3 -->
-        <div class="level-card">
-          <div class="level-top">
-            <div class="level-badge">3</div>
-            <div class="level-meta">
-              <div class="level-tag">Shipper</div>
-              <div class="level-title">From Feature to Product</div>
-            </div>
-          </div>
-          <p class="level-desc">Full checklist, multi-week structure, shipping something real.</p>
-          <div class="level-links">
-            <a href="slides/04-debugging-with-claude-code.html" class="link-chip">
-              <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-              Debugging with Claude Code
-            </a>
-            <a href="slides/05-shipping-a-real-product.html" class="link-chip">
-              <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-              Shipping a Real Product
-            </a>
-          </div>
-        </div>
-
-        <!-- Level 4 -->
-        <div class="level-card">
-          <div class="level-top">
-            <div class="level-badge">4</div>
-            <div class="level-meta">
-              <div class="level-tag">Advanced</div>
-              <div class="level-title">Systems and Speed</div>
-            </div>
-          </div>
-          <p class="level-desc">Reusable templates, compound workflows, recovering a broken session in under 10 minutes.</p>
-          <div class="level-links">
-            <a href="slides/06-advanced-building-systems.html" class="link-chip">
-              <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-              Advanced: Building Systems
-            </a>
-          </div>
-        </div>
-
       </div>
-    </section>
+    </div>
 
-    <!-- Templates Section -->
-    <section class="templates-section">
-      <div class="section-label">CLAUDE.md Templates</div>
-      <p class="templates-intro">Copy one of these into your project root as <span class="tmpl-code">CLAUDE.md</span> and fill in the placeholders.</p>
+    <!-- Locked Tracks -->
+    <div class="section-row" style="margin-bottom:20px">
+      <div class="s-label">Coming Soon</div>
+      <div class="s-line"></div>
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-3);letter-spacing:0.08em;white-space:nowrap">New tracks ship regularly</div>
+    </div>
 
-      <!-- Template 1: Starter -->
+    <div class="locked-grid">
+
+      <!-- 02: Cursor -->
+      <div class="locked-card" onclick="lockedToast('Cursor & Windsurf')">
+        <svg class="lock-ico" width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <rect x="2" y="6" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M4.5 6V4.5a2.5 2.5 0 015 0V6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        <div class="locked-num">02</div>
+        <div class="locked-icon">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M9 2L2 5.5v7L9 16l7-3.5v-7L9 2Z" stroke="currentColor" stroke-width="1.3"/>
+            <path d="M9 2v14M2 5.5l7 4 7-4" stroke="currentColor" stroke-width="1.3"/>
+          </svg>
+        </div>
+        <div class="locked-name">Cursor &amp; Windsurf</div>
+        <p class="locked-desc">AI-native editors. Build faster without ever leaving your codebase.</p>
+        <div class="locked-tag">Coming Soon</div>
+      </div>
+
+      <!-- 03: Prompt Engineering -->
+      <div class="locked-card" onclick="lockedToast('Prompt Engineering')">
+        <svg class="lock-ico" width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <rect x="2" y="6" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M4.5 6V4.5a2.5 2.5 0 015 0V6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        <div class="locked-num">03</div>
+        <div class="locked-icon">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M9 2C5.13 2 2 5.13 2 9c0 2.1.86 4 2.25 5.38L3 16l2-.5A6.95 6.95 0 009 16c3.87 0 7-3.13 7-7s-3.13-7-7-7Z" stroke="currentColor" stroke-width="1.3"/>
+            <path d="M6 9h2M9 9h3M9 6.5v1M9 11.5v-1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="locked-name">Prompt Engineering</div>
+        <p class="locked-desc">Communicate with any AI model like an expert. Works on every tool.</p>
+        <div class="locked-tag">Coming Soon</div>
+      </div>
+
+      <!-- 04: AI Automation -->
+      <div class="locked-card" onclick="lockedToast('AI Automation')">
+        <svg class="lock-ico" width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <rect x="2" y="6" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M4.5 6V4.5a2.5 2.5 0 015 0V6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        <div class="locked-num">04</div>
+        <div class="locked-icon">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <circle cx="3.5" cy="9" r="1.5" stroke="currentColor" stroke-width="1.3"/>
+            <circle cx="14.5" cy="4" r="1.5" stroke="currentColor" stroke-width="1.3"/>
+            <circle cx="14.5" cy="14" r="1.5" stroke="currentColor" stroke-width="1.3"/>
+            <path d="M5 9h3l1.5-3H13M5 9l2 3h2l1.5-2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="locked-name">AI Automation</div>
+        <p class="locked-desc">n8n, Make, and Zapier workflows that run your business while you sleep.</p>
+        <div class="locked-tag">Coming Soon</div>
+      </div>
+
+      <!-- 05: v0 & Lovable -->
+      <div class="locked-card" onclick="lockedToast('v0 & Lovable')">
+        <svg class="lock-ico" width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <rect x="2" y="6" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M4.5 6V4.5a2.5 2.5 0 015 0V6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        <div class="locked-num">05</div>
+        <div class="locked-icon">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M9 2l1.5 4.5H15l-3.75 2.7 1.5 4.5L9 11.1l-3.75 2.6 1.5-4.5L3 6.5h4.5L9 2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="locked-name">v0 &amp; Lovable</div>
+        <p class="locked-desc">Ship full UIs and apps from a prompt. No CSS required.</p>
+        <div class="locked-tag">Coming Soon</div>
+      </div>
+
+      <!-- 06: AI for Content -->
+      <div class="locked-card" onclick="lockedToast('AI for Content')">
+        <svg class="lock-ico" width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <rect x="2" y="6" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M4.5 6V4.5a2.5 2.5 0 015 0V6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        <div class="locked-num">06</div>
+        <div class="locked-icon">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M3 14l2.5-1 7.5-7.5a2.12 2.12 0 00-3-3L2.5 11 3 14Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+            <path d="M10 4.5l3 3" stroke="currentColor" stroke-width="1.3"/>
+          </svg>
+        </div>
+        <div class="locked-name">AI for Content</div>
+        <p class="locked-desc">Write, edit, and distribute content at 10x speed using the right AI stack.</p>
+        <div class="locked-tag">Coming Soon</div>
+      </div>
+
+      <!-- 07: Claude API -->
+      <div class="locked-card" onclick="lockedToast('Claude API')">
+        <svg class="lock-ico" width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <rect x="2" y="6" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M4.5 6V4.5a2.5 2.5 0 015 0V6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        <div class="locked-num">07</div>
+        <div class="locked-icon">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <rect x="2" y="2" width="14" height="14" rx="3" stroke="currentColor" stroke-width="1.3"/>
+            <path d="M6 7l-2 2 2 2M12 7l2 2-2 2M10 5.5l-2 7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="locked-name">Claude API</div>
+        <p class="locked-desc">Build products that think. Integrate Claude directly into your stack.</p>
+        <div class="locked-tag">Coming Soon</div>
+      </div>
+
+    </div><!-- /locked-grid -->
+
+    <div class="academy-footer">The AI Builder Academy &nbsp;·&nbsp; aibuilderacademy.com</div>
+
+  </div><!-- /academy-wrap -->
+</div><!-- /academy-view -->
+
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- TRACK VIEW — Claude Code System                     -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div id="track-view">
+
+  <nav class="track-nav">
+    <button class="back-btn" onclick="backToAcademy()">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <path d="M11.5 7H2.5M6 3.5L2.5 7 6 10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Academy
+    </button>
+    <div class="nav-divider"></div>
+    <div class="nav-track-name"><span class="nav-track-num">01 —</span> Claude Code System</div>
+  </nav>
+
+  <div class="track-content">
+
+    <div class="course-header">
+      <div class="course-label">Track 01 · Claude Code System</div>
+      <h1 class="course-title">Your Dashboard</h1>
+      <p class="course-sub">Four levels. Start at 1. Come back to the rest.</p>
+      <div class="course-divider"></div>
+    </div>
+
+    <!-- Course Levels -->
+    <div class="track-section-label">Course Levels</div>
+    <div class="levels">
+
+      <div class="level-card">
+        <div class="level-top">
+          <div class="level-badge">1</div>
+          <div class="level-meta">
+            <div class="level-tag">Beginner</div>
+            <div class="level-title">Your First Session</div>
+          </div>
+        </div>
+        <p class="level-desc">Get a clean session under your belt. Understand CLAUDE.md and learn the 5 prompts that every session needs.</p>
+        <div class="level-links">
+          <a href="slides/01-the-claude-md-system.html" class="link-chip">
+            <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            The CLAUDE.md System
+          </a>
+          <a href="slides/02-prompting-claude-code.html" class="link-chip">
+            <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            Prompting Claude Code
+          </a>
+        </div>
+      </div>
+
+      <div class="level-card">
+        <div class="level-top">
+          <div class="level-badge">2</div>
+          <div class="level-meta">
+            <div class="level-tag">Builder</div>
+            <div class="level-title">Consistent Output</div>
+          </div>
+        </div>
+        <p class="level-desc">Stop sessions from drifting. Master the planning system, learn the debug workflow, and keep every session clean.</p>
+        <div class="level-links">
+          <a href="slides/02-prompting-claude-code.html" class="link-chip">
+            <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            Prompting Claude Code
+          </a>
+          <a href="slides/03-the-gsd-system.html" class="link-chip">
+            <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            The GSD System
+          </a>
+          <a href="reference/prompt-cheat-sheet.html" class="link-chip ref">
+            <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M4 2h6l4 4v8a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5"/><path d="M10 2v4h4" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+            Prompt Cheat Sheet
+          </a>
+          <a href="reference/session-checklist.html" class="link-chip ref">
+            <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M4 2h6l4 4v8a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5"/><path d="M10 2v4h4" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+            Session Checklist
+          </a>
+        </div>
+      </div>
+
+      <div class="level-card">
+        <div class="level-top">
+          <div class="level-badge">3</div>
+          <div class="level-meta">
+            <div class="level-tag">Shipper</div>
+            <div class="level-title">From Feature to Product</div>
+          </div>
+        </div>
+        <p class="level-desc">Full checklist, multi-week structure, shipping something real end-to-end.</p>
+        <div class="level-links">
+          <a href="slides/04-debugging-with-claude-code.html" class="link-chip">
+            <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            Debugging with Claude Code
+          </a>
+          <a href="slides/05-shipping-a-real-product.html" class="link-chip">
+            <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            Shipping a Real Product
+          </a>
+        </div>
+      </div>
+
+      <div class="level-card">
+        <div class="level-top">
+          <div class="level-badge">4</div>
+          <div class="level-meta">
+            <div class="level-tag">Advanced</div>
+            <div class="level-title">Systems and Speed</div>
+          </div>
+        </div>
+        <p class="level-desc">Reusable templates, compound workflows, and recovering a broken session in under 10 minutes.</p>
+        <div class="level-links">
+          <a href="slides/06-advanced-building-systems.html" class="link-chip">
+            <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            Advanced Building Systems
+          </a>
+        </div>
+      </div>
+
+    </div><!-- /levels -->
+
+    <!-- Templates -->
+    <div class="templates-section">
+      <div class="track-section-label">CLAUDE.md Templates</div>
+      <p class="tmpl-intro">Copy one into your project root as <span class="tmpl-code">CLAUDE.md</span> and fill in the placeholders. The more specific you are, the better Claude Code performs.</p>
+
       <div class="template-block">
         <div class="template-header">
-          <span class="template-label">Starter</span>
-          <button class="copy-btn" data-target="tpl-1">Copy</button>
+          <span class="template-label">Starter — any project</span>
+          <div class="tmpl-actions">
+            <button class="expand-btn" onclick="toggleTemplate(this)">Show full</button>
+            <button class="copy-btn" onclick="copyTemplate(this)">Copy</button>
+          </div>
         </div>
-        <pre class="template-pre" id="tpl-1"># CLAUDE.md Starter Template
+        <div class="template-body">
+          <pre class="template-pre" id="tpl-1"># CLAUDE.md Starter Template
 #
 # HOW TO USE THIS FILE:
 # 1. Copy this file to the root of your project and rename it CLAUDE.md
@@ -715,15 +1454,19 @@ Claude must not do any of the following without explicit permission in the curre
 - **Access external APIs with real credentials** — use sandbox/test keys unless told otherwise
 - **Refactor while building features** — keep concerns separate across PRs
 - **Merge or resolve conflicts autonomously** — always surface conflicts for human resolution</pre>
+        </div>
       </div>
 
-      <!-- Template 2: SaaS -->
       <div class="template-block">
         <div class="template-header">
           <span class="template-label">SaaS — Next.js + Stripe + Clerk</span>
-          <button class="copy-btn" data-target="tpl-2">Copy</button>
+          <div class="tmpl-actions">
+            <button class="expand-btn" onclick="toggleTemplate(this)">Show full</button>
+            <button class="copy-btn" onclick="copyTemplate(this)">Copy</button>
+          </div>
         </div>
-        <pre class="template-pre" id="tpl-2"># CLAUDE.md — SaaS Project Guide
+        <div class="template-body">
+          <pre class="template-pre" id="tpl-2"># CLAUDE.md — SaaS Project Guide
 
 ## Product Description
 
@@ -918,15 +1661,19 @@ Before writing any code:
 ---
 
 *Stack version: Next.js 14, Prisma 5, Clerk 5, Stripe API 2024-06-20*</pre>
+        </div>
       </div>
 
-      <!-- Template 3: Creator -->
       <div class="template-block">
         <div class="template-header">
-          <span class="template-label">Creator — Beehiiv + Typefully</span>
-          <button class="copy-btn" data-target="tpl-3">Copy</button>
+          <span class="template-label">Creator — Beehiiv + Typefully + Gumroad</span>
+          <div class="tmpl-actions">
+            <button class="expand-btn" onclick="toggleTemplate(this)">Show full</button>
+            <button class="copy-btn" onclick="copyTemplate(this)">Copy</button>
+          </div>
         </div>
-        <pre class="template-pre" id="tpl-3"># CLAUDE.md — Creator Tool / Automation Project
+        <div class="template-body">
+          <pre class="template-pre" id="tpl-3"># CLAUDE.md — Creator Tool / Automation Project
 
 ## Project Type
 
@@ -1117,15 +1864,19 @@ Before writing code, confirm you understand what the automation should do and as
 ---
 
 *CLAUDE.md last updated: [DATE] | Project: [PROJECT NAME]*</pre>
+        </div>
       </div>
 
-      <!-- Template 4: API Integration -->
       <div class="template-block">
         <div class="template-header">
           <span class="template-label">API Integration</span>
-          <button class="copy-btn" data-target="tpl-4">Copy</button>
+          <div class="tmpl-actions">
+            <button class="expand-btn" onclick="toggleTemplate(this)">Show full</button>
+            <button class="copy-btn" onclick="copyTemplate(this)">Copy</button>
+          </div>
         </div>
-        <pre class="template-pre" id="tpl-4"># CLAUDE.md — API Integration Template
+        <div class="template-body">
+          <pre class="template-pre" id="tpl-4"># CLAUDE.md — API Integration Template
 
 # [Project Name] — API Integration
 
@@ -1361,58 +2112,77 @@ Relevant files to check first:
 3. Trigger secret refresh or redeploy.
 4. Monitor error rate for 5 minutes.
 5. Revoke old key.</pre>
+        </div>
       </div>
 
-    </section>
+    </div><!-- /templates -->
 
-    <!-- Footer -->
-    <footer class="footer">
-      The Claude Code System &mdash; claudecodeplaybook.com
-    </footer>
+  </div><!-- /track-content -->
+</div><!-- /track-view -->
 
-  </div>
 
-  <script>
-    document.querySelectorAll('.copy-btn').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        var targetId = btn.getAttribute('data-target');
-        var pre = document.getElementById(targetId);
-        if (!pre) return;
-        var text = pre.textContent;
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(text).then(function() {
-            showCopied(btn);
-          }).catch(function() {
-            fallbackCopy(text, btn);
-          });
-        } else {
-          fallbackCopy(text, btn);
-        }
-      });
+<script>
+// ─── View switching ───────────────────────
+function enterTrack() {
+  const av = document.getElementById('academy-view');
+  const tv = document.getElementById('track-view');
+  av.classList.add('hidden');
+  tv.style.display = 'block';
+  tv.style.opacity = '0';
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      tv.style.opacity = '1';
+      window.scrollTo(0, 0);
     });
+  });
+  setTimeout(() => { av.style.display = 'none'; }, 400);
+}
 
-    function fallbackCopy(text, btn) {
-      var ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.top = '-9999px';
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      try { document.execCommand('copy'); } catch(e) {}
-      document.body.removeChild(ta);
-      showCopied(btn);
-    }
+function backToAcademy() {
+  const av = document.getElementById('academy-view');
+  const tv = document.getElementById('track-view');
+  av.style.display = 'block';
+  av.style.opacity = '0';
+  tv.style.opacity = '0';
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      av.classList.remove('hidden');
+      av.style.opacity = '1';
+      window.scrollTo(0, 0);
+    });
+  });
+  setTimeout(() => { tv.style.display = 'none'; tv.style.opacity = '1'; }, 400);
+}
 
-    function showCopied(btn) {
-      var orig = btn.textContent;
-      btn.textContent = 'Copied!';
-      btn.classList.add('copied');
-      setTimeout(function() {
-        btn.textContent = orig;
-        btn.classList.remove('copied');
-      }, 2000);
-    }
-  </script>
+// ─── Locked track toast ───────────────────
+function lockedToast(name) {
+  showToast(name + ' — coming soon. Follow along for the launch.');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+// ─── Template expand/collapse ─────────────
+function toggleTemplate(btn) {
+  const body = btn.closest('.template-block').querySelector('.template-body');
+  const expanded = body.classList.toggle('expanded');
+  btn.textContent = expanded ? 'Collapse' : 'Show full';
+}
+
+// ─── Copy template ────────────────────────
+function copyTemplate(btn) {
+  const pre = btn.closest('.template-block').querySelector('.template-pre');
+  navigator.clipboard.writeText(pre.textContent).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    btn.style.color = 'var(--green)';
+    setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1800);
+  }).catch(() => showToast('Copy failed — select text manually'));
+}
+</script>
 </body>
 </html>
