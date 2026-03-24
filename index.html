@@ -541,17 +541,26 @@ html, body {
 
 .template-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   padding: 13px 20px;
   border-bottom: 1px solid var(--card-border);
   background: var(--section-bg);
+  gap: 16px;
 }
 
 .template-label {
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
+  margin-bottom: 2px;
+}
+
+.template-desc {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 400;
+  margin-top: 1px;
 }
 
 .tpl-actions {
@@ -863,7 +872,10 @@ html, body {
 
       <div class="template-block">
         <div class="template-header">
-          <span class="template-label">Starter</span>
+          <div>
+            <div class="template-label">Starter</div>
+            <div class="template-desc">Blank slate for any project. All sections pre-structured — fill in your stack, commands, conventions, and current focus.</div>
+          </div>
           <div class="tpl-actions">
             <button class="expand-btn" onclick="toggleTemplate('tpl-1', this)">Expand</button>
             <button class="copy-btn" onclick="copyTemplate('tpl-1', this)">Copy</button>
@@ -1145,7 +1157,10 @@ Claude must not do any of the following without explicit permission in the curre
 
       <div class="template-block">
         <div class="template-header">
-          <span class="template-label">SaaS — Next.js + Stripe + Clerk</span>
+          <div>
+            <div class="template-label">SaaS — Next.js + Stripe + Clerk</div>
+            <div class="template-desc">Pre-filled for Next.js 14 (App Router) + tRPC + Prisma + Supabase + Clerk + Stripe. Covers multi-tenancy, webhook handling, and security rules.</div>
+          </div>
           <div class="tpl-actions">
             <button class="expand-btn" onclick="toggleTemplate('tpl-2', this)">Expand</button>
             <button class="copy-btn" onclick="copyTemplate('tpl-2', this)">Copy</button>
@@ -1353,7 +1368,10 @@ Before writing any code:
 
       <div class="template-block">
         <div class="template-header">
-          <span class="template-label">Creator — Beehiiv + Typefully</span>
+          <div>
+            <div class="template-label">Creator — Beehiiv + Typefully</div>
+            <div class="template-desc">For newsletters, automations, and publishing pipelines. Covers Beehiiv, ConvertKit, Twitter/X, Typefully, and Gumroad integrations with dry-run defaults and brand voice rules.</div>
+          </div>
           <div class="tpl-actions">
             <button class="expand-btn" onclick="toggleTemplate('tpl-3', this)">Expand</button>
             <button class="copy-btn" onclick="copyTemplate('tpl-3', this)">Copy</button>
@@ -1557,7 +1575,10 @@ Before writing code, confirm you understand what the automation should do and as
 
       <div class="template-block">
         <div class="template-header">
-          <span class="template-label">API Integration</span>
+          <div>
+            <div class="template-label">API Integration</div>
+            <div class="template-desc">For projects wrapping external APIs. Covers auth patterns, rate limits with exponential backoff, error classification by HTTP status, webhook deduplication, and circuit breaker patterns.</div>
+          </div>
           <div class="tpl-actions">
             <button class="expand-btn" onclick="toggleTemplate('tpl-4', this)">Expand</button>
             <button class="copy-btn" onclick="copyTemplate('tpl-4', this)">Copy</button>
