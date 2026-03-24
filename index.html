@@ -1,441 +1,1418 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Welcome — The Claude Code Playbook</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Claude Code System — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
     :root {
       --bg: #FAFAF8;
       --orange: #E06418;
-      --orange-light: #F07835;
-      --orange-dim: rgba(224,100,24,0.08);
-      --orange-border: rgba(224,100,24,0.22);
       --text: #1A1916;
-      --text-2: #4A4640;
-      --text-3: #9A9288;
+      --subtext: #4A4640;
+      --muted: #9A9288;
       --card-bg: #FFFFFF;
       --card-border: rgba(0,0,0,0.08);
-    }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'Inter', sans-serif;
-      font-size: 16px;
-      line-height: 1.6;
+      --code-bg: #1A1916;
+      --code-text: #EDE8DF;
+      --divider: rgba(0,0,0,0.10);
     }
 
-    /* Orange progress line at top */
-    .progress-line {
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    .top-bar {
       position: fixed;
       top: 0;
       left: 0;
-      width: 100%;
-      height: 3px;
-      background: linear-gradient(90deg, var(--orange), var(--orange-light));
+      right: 0;
+      height: 4px;
+      background: var(--orange);
       z-index: 100;
     }
 
-    .page {
+    .container {
       max-width: 860px;
       margin: 0 auto;
-      padding: 72px 32px 80px;
+      padding: 0 24px;
     }
 
-    /* Header */
-    .label {
+    /* ── Header ── */
+    .header {
+      padding-top: 68px;
+      padding-bottom: 48px;
+    }
+
+    .header-label {
       font-size: 11px;
       font-weight: 600;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
       color: var(--orange);
-      margin-bottom: 20px;
+      margin-bottom: 10px;
     }
 
-    .hero-title {
-      font-size: clamp(36px, 5vw, 56px);
+    .header-title {
+      font-size: 42px;
       font-weight: 700;
-      line-height: 1.1;
-      letter-spacing: -0.02em;
       color: var(--text);
-      margin-bottom: 16px;
+      line-height: 1.15;
+      margin-bottom: 10px;
     }
 
-    .hero-subtitle {
-      font-size: clamp(16px, 2vw, 20px);
-      color: var(--text-2);
+    .header-subtitle {
+      font-size: 17px;
+      color: var(--subtext);
       font-weight: 400;
-      line-height: 1.5;
-      max-width: 600px;
-      margin-bottom: 32px;
+      margin-bottom: 28px;
     }
 
-    .gold-line {
-      width: 56px;
+    .header-divider {
+      width: 48px;
       height: 3px;
-      background: linear-gradient(90deg, var(--orange), var(--orange-light));
+      background: var(--orange);
       border-radius: 2px;
-      margin-bottom: 56px;
     }
 
-    /* Sections */
-    section {
-      margin-bottom: 56px;
-    }
-
-    .section-heading {
+    /* ── Section label ── */
+    .section-label {
       font-size: 11px;
       font-weight: 600;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.10em;
       text-transform: uppercase;
-      color: var(--text-3);
+      color: var(--muted);
       margin-bottom: 20px;
     }
 
-    /* Deliverables grid */
-    .grid-2 {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
+    /* ── Level cards ── */
+    .levels {
+      display: flex;
+      flex-direction: column;
       gap: 16px;
+      margin-bottom: 64px;
     }
 
-    @media (max-width: 600px) {
-      .grid-2 { grid-template-columns: 1fr; }
-      .links-grid { grid-template-columns: 1fr !important; }
-    }
-
-    .card {
+    .level-card {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
       border-radius: 12px;
-      padding: 24px;
-      transition: border-color 0.2s;
+      padding: 24px 28px;
+      transition: border-color 0.18s, box-shadow 0.18s;
     }
 
-    .card:hover {
-      border-color: rgba(224,100,24,0.25);
+    .level-card:hover {
+      border-color: var(--orange);
+      box-shadow: 0 2px 16px rgba(224,100,24,0.07);
     }
 
-    .card-title {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--text);
-      margin-bottom: 6px;
-    }
-
-    .card-desc {
-      font-size: 14px;
-      color: var(--text-2);
-      line-height: 1.5;
-    }
-
-    .card-icon {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--orange);
-      margin-bottom: 10px;
-      letter-spacing: 0.04em;
-    }
-
-    /* Steps */
-    .steps {
+    .level-top {
       display: flex;
-      flex-direction: column;
-      gap: 0;
-    }
-
-    .step {
-      display: grid;
-      grid-template-columns: 40px 1fr;
-      gap: 20px;
       align-items: flex-start;
-      padding-bottom: 24px;
-      position: relative;
+      gap: 16px;
+      margin-bottom: 14px;
     }
 
-    .step:not(:last-child)::after {
-      content: '';
-      position: absolute;
-      left: 19px;
-      top: 40px;
-      bottom: 0;
-      width: 1px;
-      background: rgba(224,100,24,0.2);
-    }
-
-    .step-num {
-      width: 40px;
-      height: 40px;
+    .level-badge {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      background: var(--orange);
+      color: #fff;
       border-radius: 50%;
-      background: rgba(224,100,24,0.08);
-      border: 1px solid rgba(224,100,24,0.3);
+      font-size: 15px;
+      font-weight: 700;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 14px;
+      margin-top: 2px;
+    }
+
+    .level-meta {
+      flex: 1;
+    }
+
+    .level-tag {
+      font-size: 11px;
       font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
       color: var(--orange);
+      margin-bottom: 2px;
+    }
+
+    .level-title {
+      font-size: 19px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.2;
+    }
+
+    .level-desc {
+      font-size: 14px;
+      color: var(--subtext);
+      margin-bottom: 18px;
+      padding-left: 52px;
+    }
+
+    .level-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding-left: 52px;
+    }
+
+    .link-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 13px;
+      background: var(--bg);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+
+    .link-chip:hover {
+      border-color: var(--orange);
+      color: var(--orange);
+      background: #fff;
+    }
+
+    .link-chip.ref {
+      border-style: dashed;
+    }
+
+    .chip-icon {
+      opacity: 0.40;
       flex-shrink: 0;
     }
 
-    .step-content h4 {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--text);
-      margin-bottom: 4px;
+    .link-chip:hover .chip-icon {
+      opacity: 0.85;
     }
 
-    .step-content p {
+    /* ── Templates ── */
+    .templates-section {
+      margin-bottom: 64px;
+    }
+
+    .templates-intro {
       font-size: 14px;
-      color: var(--text-2);
-      line-height: 1.6;
+      color: var(--subtext);
+      margin-bottom: 24px;
     }
 
-    .step-file {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--orange);
-      font-family: monospace;
+    .tmpl-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      background: var(--code-bg);
+      padding: 2px 7px;
+      border-radius: 3px;
+      color: var(--code-text);
     }
 
-    /* First win card */
-    .win-card {
+    .template-block {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
-      border-left: 4px solid var(--orange);
       border-radius: 12px;
-      padding: 28px 32px;
-    }
-
-    .win-card-title {
-      font-size: 16px;
-      font-weight: 600;
-      color: var(--text);
+      overflow: hidden;
       margin-bottom: 16px;
     }
 
-    .win-list {
-      list-style: none;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-bottom: 20px;
-    }
-
-    .win-list li {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      font-size: 15px;
-      color: var(--text-2);
-      line-height: 1.5;
-    }
-
-    .win-list li::before {
-      content: '';
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--orange);
-      flex-shrink: 0;
-      margin-top: 8px;
-    }
-
-    .win-closer {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--text);
-      padding-top: 16px;
-      border-top: 1px solid rgba(0,0,0,0.08);
-    }
-
-    /* Links grid */
-    .links-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 12px;
-    }
-
-    .link-card {
+    .template-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 10px;
-      padding: 16px 20px;
-      text-decoration: none;
-      color: var(--text);
-      font-size: 14px;
-      font-weight: 500;
-      transition: border-color 0.2s, background 0.2s;
+      padding: 13px 20px;
+      border-bottom: 1px solid var(--card-border);
+      background: #F5F4F1;
     }
 
-    .link-card:hover {
-      border-color: rgba(224,100,24,0.4);
-      background: rgba(224,100,24,0.03);
-    }
-
-    .link-card-arrow {
-      color: var(--orange);
-      font-size: 16px;
-      flex-shrink: 0;
-    }
-
-    /* Footer */
-    footer {
-      margin-top: 64px;
-      padding-top: 24px;
-      border-top: 1px solid rgba(0,0,0,0.08);
+    .template-label {
       font-size: 13px;
-      color: var(--text-3);
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .copy-btn {
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 5px 12px;
+      background: transparent;
+      border: 1px solid var(--card-border);
+      border-radius: 5px;
+      cursor: pointer;
+      color: var(--subtext);
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+
+    .copy-btn:hover {
+      border-color: var(--orange);
+      color: var(--orange);
+      background: rgba(224,100,24,0.04);
+    }
+
+    .copy-btn.copied {
+      border-color: #2E7D32;
+      color: #2E7D32;
+      background: rgba(46,125,50,0.05);
+    }
+
+    .template-pre {
+      background: var(--code-bg);
+      color: var(--code-text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.65;
+      padding: 20px 24px;
+      overflow-x: auto;
+      white-space: pre;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .template-pre::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    .template-pre::-webkit-scrollbar-track {
+      background: #252219;
+    }
+
+    .template-pre::-webkit-scrollbar-thumb {
+      background: #4A4640;
+      border-radius: 3px;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      border-top: 1px solid var(--divider);
+      padding: 28px 0 44px;
       text-align: center;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 580px) {
+      .header-title { font-size: 30px; }
+      .level-card { padding: 20px 16px; }
+      .level-desc, .level-links { padding-left: 0; }
+      .template-pre { font-size: 11px; padding: 14px 16px; }
     }
   </style>
 </head>
 <body>
+  <div class="top-bar"></div>
 
-  <div class="progress-line"></div>
-
-  <div class="page">
+  <div class="container">
 
     <!-- Header -->
-    <div class="label">THE CLAUDE CODE PLAYBOOK</div>
-    <h1 class="hero-title">Welcome. Let's build something.</h1>
-    <p class="hero-subtitle">You have everything you need to ship real software with Claude Code. Here's where to start.</p>
-    <div class="gold-line"></div>
+    <header class="header">
+      <div class="header-label">The Claude Code System</div>
+      <h1 class="header-title">Your Dashboard</h1>
+      <p class="header-subtitle">Four levels. Start at 1. Come back to the rest.</p>
+      <div class="header-divider"></div>
+    </header>
 
-    <!-- Section 1: What's in the box -->
+    <!-- Course Levels -->
     <section>
-      <div class="section-heading">What's in the box</div>
-      <div class="grid-2">
-        <div class="card">
-          <div class="card-icon">6 SLIDE DECKS (HTML)</div>
-          <div class="card-title">The Complete Curriculum</div>
-          <div class="card-desc">The complete Claude Code curriculum. Open in Chrome, navigate with arrow keys.</div>
+      <div class="section-label">Course Levels</div>
+      <div class="levels">
+
+        <!-- Level 1 -->
+        <div class="level-card">
+          <div class="level-top">
+            <div class="level-badge">1</div>
+            <div class="level-meta">
+              <div class="level-tag">Beginner</div>
+              <div class="level-title">Your First Session</div>
+            </div>
+          </div>
+          <p class="level-desc">Get a clean session under your belt. Understand CLAUDE.md and learn the 5 prompts.</p>
+          <div class="level-links">
+            <a href="slides/01-the-claude-md-system.html" class="link-chip">
+              <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              The CLAUDE.md System
+            </a>
+            <a href="slides/02-prompting-claude-code.html" class="link-chip">
+              <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              Prompting Claude Code
+            </a>
+          </div>
         </div>
-        <div class="card">
-          <div class="card-icon">4 CLAUDE.MD TEMPLATES</div>
-          <div class="card-title">Ready-to-Drop Templates</div>
-          <div class="card-desc">Drop into any project. Instant context for Claude Code.</div>
+
+        <!-- Level 2 -->
+        <div class="level-card">
+          <div class="level-top">
+            <div class="level-badge">2</div>
+            <div class="level-meta">
+              <div class="level-tag">Builder</div>
+              <div class="level-title">Consistent Output</div>
+            </div>
+          </div>
+          <p class="level-desc">Stop sessions from drifting. Master the planning system and debug workflow.</p>
+          <div class="level-links">
+            <a href="slides/02-prompting-claude-code.html" class="link-chip">
+              <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              Prompting Claude Code
+            </a>
+            <a href="slides/03-the-gsd-system.html" class="link-chip">
+              <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              The GSD System
+            </a>
+            <a href="reference/prompt-cheat-sheet.html" class="link-chip ref">
+              <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M4 2h6l4 4v8a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5"/><path d="M10 2v4h4" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+              Prompt Cheat Sheet
+            </a>
+            <a href="reference/session-checklist.html" class="link-chip ref">
+              <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M4 2h6l4 4v8a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5"/><path d="M10 2v4h4" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+              Session Checklist
+            </a>
+          </div>
         </div>
-        <div class="card">
-          <div class="card-icon">PROMPT CHEAT SHEET</div>
-          <div class="card-title">5 Master Prompts</div>
-          <div class="card-desc">5 master prompts. Print it. Keep it at your desk.</div>
+
+        <!-- Level 3 -->
+        <div class="level-card">
+          <div class="level-top">
+            <div class="level-badge">3</div>
+            <div class="level-meta">
+              <div class="level-tag">Shipper</div>
+              <div class="level-title">From Feature to Product</div>
+            </div>
+          </div>
+          <p class="level-desc">Full checklist, multi-week structure, shipping something real.</p>
+          <div class="level-links">
+            <a href="slides/04-debugging-with-claude-code.html" class="link-chip">
+              <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              Debugging with Claude Code
+            </a>
+            <a href="slides/05-shipping-a-real-product.html" class="link-chip">
+              <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              Shipping a Real Product
+            </a>
+          </div>
         </div>
-        <div class="card">
-          <div class="card-icon">SESSION CHECKLIST</div>
-          <div class="card-title">Your Session Workflow</div>
-          <div class="card-desc">Run before, during, and after every session.</div>
+
+        <!-- Level 4 -->
+        <div class="level-card">
+          <div class="level-top">
+            <div class="level-badge">4</div>
+            <div class="level-meta">
+              <div class="level-tag">Advanced</div>
+              <div class="level-title">Systems and Speed</div>
+            </div>
+          </div>
+          <p class="level-desc">Reusable templates, compound workflows, recovering a broken session in under 10 minutes.</p>
+          <div class="level-links">
+            <a href="slides/06-advanced-building-systems.html" class="link-chip">
+              <svg class="chip-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6M5 5.5h6M5 10.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              Advanced: Building Systems
+            </a>
+          </div>
         </div>
+
       </div>
     </section>
 
-    <!-- Section 2: Recommended order -->
-    <section>
-      <div class="section-heading">Start here — recommended order</div>
-      <div class="steps">
-        <div class="step">
-          <div class="step-num">1</div>
-          <div class="step-content">
-            <h4><span class="step-file">01-the-claude-md-system.html</span></h4>
-            <p>Understand what CLAUDE.md is and why it changes everything</p>
-          </div>
+    <!-- Templates Section -->
+    <section class="templates-section">
+      <div class="section-label">CLAUDE.md Templates</div>
+      <p class="templates-intro">Copy one of these into your project root as <span class="tmpl-code">CLAUDE.md</span> and fill in the placeholders.</p>
+
+      <!-- Template 1: Starter -->
+      <div class="template-block">
+        <div class="template-header">
+          <span class="template-label">Starter</span>
+          <button class="copy-btn" data-target="tpl-1">Copy</button>
         </div>
-        <div class="step">
-          <div class="step-num">2</div>
-          <div class="step-content">
-            <h4><span class="step-file">02-prompting-claude-code.html</span></h4>
-            <p>Learn the 5 prompts you'll use every single session</p>
-          </div>
-        </div>
-        <div class="step">
-          <div class="step-num">3</div>
-          <div class="step-content">
-            <h4>Pick a CLAUDE.md template</h4>
-            <p>Drop the right one into your current project</p>
-          </div>
-        </div>
-        <div class="step">
-          <div class="step-num">4</div>
-          <div class="step-content">
-            <h4>Bookmark the prompt cheat sheet</h4>
-            <p>Keep it open while you work</p>
-          </div>
-        </div>
-        <div class="step">
-          <div class="step-num">5</div>
-          <div class="step-content">
-            <h4>Open 03 through 06</h4>
-            <p>Go deeper on GSD, debugging, shipping, and advanced systems</p>
-          </div>
-        </div>
+        <pre class="template-pre" id="tpl-1"># CLAUDE.md Starter Template
+#
+# HOW TO USE THIS FILE:
+# 1. Copy this file to the root of your project and rename it CLAUDE.md
+# 2. Fill in every section marked with [PLACEHOLDER] or [TODO]
+# 3. Delete these instruction comments before committing
+# 4. The more specific you are, the better Claude Code will perform
+#
+# WHY THIS MATTERS:
+# Claude Code reads CLAUDE.md at the start of every session. It is your
+# standing instruction set — your contract with the AI. A great CLAUDE.md
+# eliminates repetitive corrections, enforces your standards automatically,
+# and gives Claude the context it needs to make good decisions without asking.
+#
+# Keep it honest. If the project is a mess, say so. If there are landmines,
+# document them. Claude works best with accurate context, not aspirational docs.
+
+---
+
+# [PROJECT NAME]
+
+[TODO: e.g., "A B2B SaaS dashboard that helps logistics teams track shipment KPIs in real time."]
+
+## Project Overview
+
+**What it does:** [TODO]
+
+**Current state:** [TODO — e.g., "Early-stage MVP. Core features are working but tests are sparse."]
+
+**Users:** [TODO — e.g., "Internal ops team, ~20 people. Not public-facing yet."]
+
+**Critical constraints:** [TODO — e.g., "Must support IE11. PII must never be logged. Free tier of Render — no background workers."]
+
+---
+
+## Tech Stack
+
+| Layer        | Technology                        |
+|--------------|-----------------------------------|
+| Language     | [e.g., TypeScript 5.4]            |
+| Framework    | [e.g., Next.js 14 (App Router)]   |
+| Styling      | [e.g., Tailwind CSS 3.4]          |
+| Database     | [e.g., PostgreSQL 15 via Supabase]|
+| ORM          | [e.g., Prisma 5]                  |
+| Auth         | [e.g., Clerk]                     |
+| Testing      | [e.g., Vitest + Playwright]       |
+| Deployment   | [e.g., Vercel (prod), Render (staging)] |
+| Package Mgr  | [e.g., pnpm]                      |
+
+**Avoid introducing:** [TODO — e.g., "No new UI libraries. We use shadcn/ui exclusively."]
+
+---
+
+## Key Files
+
+Read these before making any changes:
+
+1. `README.md` — project setup and local dev instructions
+2. `[src/lib/db.ts]` — database client and connection config
+3. `[src/types/index.ts]` — shared TypeScript types
+4. `[src/lib/auth.ts]` — authentication helpers and session logic
+5. `[prisma/schema.prisma]` — full data model
+6. `[.env.example]` — all required environment variables
+
+**Landmines / gotchas:** [TODO — e.g., "The `users` table has a soft-delete pattern. Never use hard deletes. Always filter by `deleted_at IS NULL`."]
+
+---
+
+## Coding Standards
+
+### Style
+
+- **Indentation:** [e.g., 2 spaces, no tabs]
+- **Semicolons:** [e.g., yes / no]
+- **Quotes:** [e.g., single quotes in JS/TS, double in JSX attributes]
+- **Line length:** [e.g., 100 chars max]
+- **Formatter:** [e.g., Prettier with config in `.prettierrc`]
+- **Linter:** [e.g., ESLint with config in `.eslintrc.json`]
+
+### Naming Conventions
+
+- **Files/Folders:** [e.g., `kebab-case` for files, `PascalCase` for React components]
+- **Variables/Functions:** [e.g., `camelCase`]
+- **Types/Interfaces:** [e.g., `PascalCase`]
+- **Constants:** [e.g., `SCREAMING_SNAKE_CASE`]
+- **Database columns:** [e.g., `snake_case`]
+
+### Patterns to Follow
+
+- [e.g., Use server actions for all mutations, never client-side fetch to API routes]
+- [e.g., All errors must be caught and surfaced to the user with a toast — never swallowed silently]
+- [e.g., Every new component gets a co-located `.test.tsx` file]
+- [e.g., Use `zod` for all input validation — no manual type guards]
+
+### Patterns to Avoid
+
+- [e.g., No `any` types. Use `unknown` and narrow properly.]
+- [e.g., No inline styles. Tailwind or nothing.]
+- [e.g., No `console.log` in committed code. Use the project logger at `src/lib/logger.ts`.]
+
+---
+
+## Workflow
+
+For every task, follow this sequence. Do not skip steps.
+
+### 1. Read First
+Before writing any code, read the relevant files. Look for:
+- Existing utilities that solve the problem
+- Patterns used elsewhere in the codebase
+- Potential conflicts or dependencies
+
+### 2. State Your Plan
+Before writing code, write a brief plan in plain English:
+- What you're going to build or change
+- Which files will be created or modified
+- Any tradeoffs or risks
+
+Wait for confirmation before proceeding if the change is large or destructive.
+
+### 3. Build Incrementally
+- Make the smallest change that delivers value
+- One concern per commit
+- Don't refactor while adding a feature (separate PRs)
+
+### 4. Verify
+- Run the relevant tests after every change
+- If tests don't exist, write them
+- Check for TypeScript errors before calling a task done
+
+### 5. Report Back
+When done, summarize:
+- What was built
+- What files were changed
+- Any known limitations or follow-up tasks
+
+---
+
+## Common Commands
+
+```bash
+# Install dependencies
+[e.g., pnpm install]
+
+# Run development server
+[e.g., pnpm dev]
+
+# Run tests
+[e.g., pnpm test]
+
+# Type check
+[e.g., pnpm typecheck]
+
+# Lint
+[e.g., pnpm lint]
+
+# Build for production
+[e.g., pnpm build]
+
+# Run database migrations
+[e.g., pnpm prisma migrate dev]
+
+# Deploy (production)
+[e.g., pnpm deploy:prod]
+```
+
+---
+
+## Session Kickoff Prompt
+
+```
+Read CLAUDE.md and then read the key files listed in the Key Files section.
+
+Once you've done that, here's what I need today:
+
+[DESCRIBE YOUR TASK]
+
+Before writing any code, confirm:
+1. Which files you plan to touch
+2. Your approach at a high level
+3. Any questions you have before starting
+
+Then wait for my go-ahead.
+```
+
+---
+
+## The 5-Prompt Methodology
+
+### 1. Kickoff Prompt
+```
+Read CLAUDE.md and [relevant files].
+
+I need to build [FEATURE]. Here's the spec:
+[SPEC OR USER STORY]
+
+Before writing code, give me your implementation plan: what you'll build,
+which files you'll touch, and any concerns. Wait for approval before starting.
+```
+
+### 2. Debug Prompt
+```
+Something is broken. Here's what's happening:
+
+**Expected behavior:** [WHAT SHOULD HAPPEN]
+**Actual behavior:** [WHAT IS HAPPENING]
+**Error message:** [PASTE FULL ERROR]
+**Steps to reproduce:** [HOW TO TRIGGER IT]
+
+Read the relevant files and diagnose the root cause before proposing a fix.
+Don't guess — explain your reasoning.
+```
+
+### 3. Code Review Prompt
+```
+Review this code before I merge it. Look for:
+- Logic errors or edge cases I missed
+- Security issues (injection, auth bypass, data exposure)
+- Performance problems
+- Violations of the coding standards in CLAUDE.md
+- Missing error handling
+
+[PASTE CODE OR REFERENCE FILE]
+
+Be direct. If something is wrong, say so and explain why.
+```
+
+### 4. Refactor Prompt
+```
+Refactor [FILE/FUNCTION] to improve [readability / performance / maintainability].
+
+Constraints:
+- Do not change the external interface or behavior
+- Do not add new features
+- Follow the patterns in CLAUDE.md
+
+Show me a diff of what you'd change and explain each change before applying it.
+```
+
+### 5. Feature from Spec Prompt
+```
+Build this feature from the spec below.
+
+[PASTE SPEC]
+
+Before building:
+1. Flag any ambiguities in the spec
+2. List the files you'll create or modify
+3. Confirm the approach matches our tech stack and coding standards
+
+Only start building after I confirm.
+```
+
+---
+
+## Out of Scope
+
+Claude must not do any of the following without explicit permission in the current session:
+
+- **Delete data** — no `DROP TABLE`, `DELETE FROM`, or destructive migrations
+- **Push to production** — no `git push origin main` or deployment commands
+- **Modify authentication logic** — auth changes require human review
+- **Change environment variables or secrets** — never edit `.env` files in production
+- **Install new dependencies** — all new packages require team approval
+- **Modify billing or payment code** — any Stripe or payment logic is off-limits without explicit sign-off
+- **Send emails or notifications** — do not trigger real sends in development; use test mode
+- **Access external APIs with real credentials** — use sandbox/test keys unless told otherwise
+- **Refactor while building features** — keep concerns separate across PRs
+- **Merge or resolve conflicts autonomously** — always surface conflicts for human resolution</pre>
       </div>
+
+      <!-- Template 2: SaaS -->
+      <div class="template-block">
+        <div class="template-header">
+          <span class="template-label">SaaS — Next.js + Stripe + Clerk</span>
+          <button class="copy-btn" data-target="tpl-2">Copy</button>
+        </div>
+        <pre class="template-pre" id="tpl-2"># CLAUDE.md — SaaS Project Guide
+
+## Product Description
+
+**Product:** [Your SaaS Name]
+**What it does:** [One sentence: e.g., "Automated invoice reconciliation for e-commerce brands."]
+**Who it's for:** [Target user: e.g., "Finance teams at DTC brands doing $1M–$50M ARR."]
+**Core value prop:** [What pain does it solve]
+**Pricing model:** [e.g., Flat $99/mo, usage-based, per-seat]
+**Current stage:** [e.g., Private beta, 12 paying customers]
+
+---
+
+## Tech Stack
+
+| Layer | Technology | Notes |
+|---|---|---|
+| Frontend | Next.js 14 (App Router) | TypeScript, Tailwind CSS |
+| UI Components | shadcn/ui | Do not install competing component libraries |
+| Backend | Next.js API Routes + tRPC | Type-safe end-to-end |
+| Database | PostgreSQL via Supabase | Row-level security enabled |
+| ORM | Prisma | Schema-first, migrations required |
+| Auth | Clerk | JWT-based, middleware handles protection |
+| Payments | Stripe | Subscriptions + webhooks |
+| Email | Resend | Transactional only |
+| File Storage | Supabase Storage | Signed URLs for private assets |
+| Background Jobs | [Inngest / Trigger.dev / cron] | Async processing |
+| Hosting | Vercel | Preview deployments per PR |
+| Monitoring | [Sentry / Axiom / Datadog] | Error tracking + logs |
+
+**Never introduce a new dependency without flagging it.** Ask before adding any package not already in `package.json`.
+
+---
+
+## Key Files
+
+```
+/
+├── CLAUDE.md
+├── prisma/
+│   └── schema.prisma                # Source of truth for data model — read this first
+├── src/
+│   ├── middleware.ts                 # Clerk auth — protects all /app/* routes
+│   ├── app/
+│   │   ├── (marketing)/             # Public pages (no auth)
+│   │   ├── (app)/                   # Authenticated app shell
+│   │   └── api/
+│   │       └── webhooks/
+│   │           └── stripe/          # Stripe webhook handler — DO NOT MODIFY without testing
+│   ├── server/
+│   │   ├── db.ts
+│   │   ├── auth.ts
+│   │   └── routers/
+│   ├── lib/
+│   │   ├── stripe.ts
+│   │   └── utils.ts
+│   └── components/
+│       └── ui/                      # shadcn/ui components — do not edit directly
+└── .env.local                       # Never commit.
+```
+
+---
+
+## Architecture
+
+**Request flow:**
+1. Browser → Next.js middleware (Clerk auth check)
+2. Server component fetches data via tRPC server caller (no HTTP round-trip)
+3. Client components call tRPC procedures via React Query hooks
+4. tRPC procedures call Prisma → Postgres
+
+**Multi-tenancy model:**
+- Every resource belongs to an `Organization` (Clerk org)
+- Every DB query MUST filter by `organizationId`
+- Always derive `organizationId` from Clerk session, never from request body
+
+**Stripe integration:**
+- The webhook handler at `/api/webhooks/stripe` is the ONLY place that updates subscription status
+- Feature gates check `organization.subscriptionStatus === 'active'`
+
+---
+
+## Feature Development Workflow
+
+1. **Read the schema** — Open `prisma/schema.prisma` before touching any data-related code.
+2. **Check existing patterns** — Find a similar feature already built. Match its file structure exactly.
+3. **Plan before coding** — Write out: DB changes, tRPC procedures, components, edge cases.
+4. **Confirm the plan** — State the plan and wait for approval before writing code.
+5. **Build in order:** DB migration → tRPC router → Server component → Client components → States
+6. **Test before declaring done.**
+
+---
+
+## API Conventions
+
+**tRPC conventions:**
+- One router file per domain: `users.ts`, `invoices.ts`, `billing.ts`
+- All procedures that read or write org data: `const { organizationId } = await requireOrg(ctx)`
+- Use `protectedProcedure` for anything requiring auth
+- Zod schemas for all inputs
+
+**Auth middleware pattern:**
+```typescript
+const { userId, organizationId } = await requireOrg(ctx);
+const item = await db.item.findUniqueOrThrow({ where: { id: input.id, organizationId } });
+```
+
+---
+
+## Database Conventions
+
+- Every schema change requires a Prisma migration
+- Tables: plural snake_case. Columns: camelCase in Prisma (maps to snake_case via `@map`)
+- Soft deletes: use `deletedAt DateTime?` — do NOT use hard deletes for user data
+- Always index foreign keys and columns used in WHERE clauses
+
+---
+
+## Testing Requirements
+
+**Auth flows:**
+- [ ] Unauthenticated user is redirected to login
+- [ ] Authenticated user cannot access another org's data
+- [ ] Org member with wrong role cannot perform restricted actions
+
+**Payment flows:**
+- [ ] New subscription activates features immediately after webhook
+- [ ] Cancelled subscription revokes access after `currentPeriodEnd`
+- [ ] Stripe webhook rejects invalid signatures
+- [ ] Duplicate webhook events are idempotent
+
+**Run before committing:**
+```bash
+npx tsc --noEmit
+npx eslint src/
+npx jest --passWithNoTests
+```
+
+---
+
+## Deployment Notes
+
+**Required environment variables:**
+```bash
+DATABASE_URL=
+DIRECT_URL=
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
+CLERK_SECRET_KEY=
+CLERK_WEBHOOK_SECRET=
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
+RESEND_API_KEY=
+NEXT_PUBLIC_APP_URL=
+```
+
+---
+
+## Security Rules
+
+1. Never log secrets.
+2. Never skip auth checks. Every tRPC procedure that touches data uses `requireOrg()`.
+3. Never trust user input for organizationId. Always derive from Clerk session.
+4. Never expose internal errors to clients.
+5. Never hard-delete billing records.
+6. Never commit secrets.
+7. Always verify Stripe webhook signatures.
+8. Never expose Stripe secret key to the client.
+9. Always scope database queries to the current org.
+10. Never modify shadcn/ui files in `src/components/ui/`.
+
+---
+
+## Session Kickoff Prompt
+
+```
+Read CLAUDE.md fully before we start.
+
+Today I'm working on: [feature name or bug description]
+
+Context:
+- [Any relevant recent changes or decisions]
+- [Which part of the codebase this touches]
+- [Any constraints I'm working within]
+
+Before writing any code:
+1. Read prisma/schema.prisma
+2. Find the most similar existing feature and read those files
+3. Propose a plan with the specific files you'll create or modify
+4. Wait for my approval
+```
+
+---
+
+*Stack version: Next.js 14, Prisma 5, Clerk 5, Stripe API 2024-06-20*</pre>
+      </div>
+
+      <!-- Template 3: Creator -->
+      <div class="template-block">
+        <div class="template-header">
+          <span class="template-label">Creator — Beehiiv + Typefully</span>
+          <button class="copy-btn" data-target="tpl-3">Copy</button>
+        </div>
+        <pre class="template-pre" id="tpl-3"># CLAUDE.md — Creator Tool / Automation Project
+
+## Project Type
+
+- [ ] Newsletter automation (drafting, scheduling, analytics)
+- [ ] Social media scheduler / repurposing engine
+- [ ] AI writing assistant / content generator
+- [ ] Course or digital product platform
+- [ ] Lead magnet / opt-in tool
+- [ ] YouTube workflow tool (scripts, thumbnails, descriptions)
+- [ ] Podcast production assistant
+- [ ] Creator CRM / audience management
+- [ ] Revenue / analytics dashboard
+- [ ] Zapier/Make replacement — custom automation scripts
+- [ ] Other: ___________________________
+
+**One-line description of what this project does:**
+> Example: "Pulls my tweet drafts from Notion, runs them through GPT-4 for a polish pass, then schedules them via Typefully."
+
+---
+
+## Creator Context
+
+**Platform(s) I create for:**
+- Primary: (e.g., Newsletter via Beehiiv, Twitter/X, YouTube)
+- Secondary: (e.g., LinkedIn repurposing, Gumroad products)
+
+**Audience:**
+- Who they are: (e.g., indie founders, solopreneur designers, early-career marketers)
+- Approx size: (e.g., 4,200 newsletter subscribers, 11k Twitter followers)
+- What they pay for: (e.g., weekly deep dives, templates, cohort courses)
+
+**Content goals:**
+- (e.g., publish 3x/week on Twitter, send newsletter every Tuesday, launch one product per quarter)
+
+**Monetization model:**
+- [ ] Paid newsletter (Substack / Beehiiv premium)
+- [ ] Digital products (Gumroad, Lemon Squeezy, Payhip)
+- [ ] Sponsorships / brand deals
+- [ ] Cohort courses / live workshops
+- [ ] Consulting / services
+- [ ] Affiliate revenue
+
+---
+
+## Tech Stack
+
+**Language(s):** (e.g., Python 3.11, Node 20, plain shell scripts)
+
+**Key dependencies / libraries:**
+```
+openai==1.x         # LLM calls
+tweepy==4.x         # Twitter API
+httpx               # API requests
+python-dotenv       # env management
+schedule            # cron-style scheduling in Python
+```
+
+**Where things run:**
+- [ ] Local machine (cron job / launchd)
+- [ ] VPS / Droplet (systemd service)
+- [ ] Railway / Render / Fly.io
+- [ ] GitHub Actions
+
+**Environment variables file:** `.env` (never commit — add to `.gitignore`)
+
+---
+
+## Key Files
+
+| File / Path | What it does |
+|---|---|
+| `main.py` / `index.js` | Entry point — run this to trigger the automation |
+| `.env` | API keys and secrets — DO NOT EDIT live without backup |
+| `config.yaml` | Tweakable settings (schedule, tone, word count, etc.) |
+| `prompts/` | All LLM system prompts and templates live here |
+| `content/drafts/` | Raw content before processing |
+| `content/published/` | Archive of what has gone out |
+| `logs/run.log` | Execution log — check here first when something breaks |
+
+---
+
+## Content Automation Patterns
+
+**How content flows through this system:**
+```
+[Source] → [Draft] → [Enrich/Polish] → [Review Gate] → [Publish] → [Archive]
+
+Example:
+Notion DB → GPT-4 rewrite → manual Slack review → Typefully schedule → Google Sheet log
+```
+
+**Generation approach:**
+- LLM model used: (e.g., gpt-4o, claude-3-5-sonnet, gemini-flash)
+- System prompt location: `prompts/system.md`
+- Temperature setting: (e.g., 0.7 for varied output, 0.3 for consistent formatting)
+
+**Human review gate:**
+- [ ] No review — fully automated
+- [ ] Review via Slack message with approve/reject
+- [ ] Drafts posted to Notion for review before publish
+- [ ] Manual file review before running publish step
+
+---
+
+## API Integrations
+
+| Service | Purpose | Auth method | Env var |
+|---|---|---|---|
+| OpenAI | Content generation | API key | `OPENAI_API_KEY` |
+| Beehiiv | Newsletter publish/analytics | API key | `BEEHIIV_API_KEY` |
+| ConvertKit | Subscriber management | API key + secret | `CK_API_KEY` |
+| Twitter/X | Post scheduling, DM automation | OAuth 2.0 | `TWITTER_BEARER_TOKEN` |
+| YouTube Data API | Upload descriptions, analytics pull | OAuth + service account | `YOUTUBE_API_KEY` |
+| Typefully | Tweet thread scheduling | API key | `TYPEFULLY_API_KEY` |
+| Gumroad | Product / sales data | API key | `GUMROAD_TOKEN` |
+| Notion | Content database / CRM | Integration token | `NOTION_TOKEN` |
+| Airtable | Scheduling calendar | API key | `AIRTABLE_API_KEY` |
+| Slack | Review notifications | Webhook URL | `SLACK_WEBHOOK_URL` |
+
+**Rate limit notes:**
+- Twitter free tier: 1,500 tweets/month — do NOT bulk post
+- YouTube Data API: 10,000 units/day — avoid polling in tight loops
+- OpenAI: respect token limits per model; log usage to catch runaway loops
+
+---
+
+## Workflow
+
+When I ask you to build or modify something, follow this order:
+
+1. **Understand the content goal first** — ask what the output should look like before writing any code
+2. **Check existing patterns** — look at `prompts/`, `config.yaml`, and existing scripts before building from scratch
+3. **Reuse API clients already in the project** — don't add a new library if one already handles it
+4. **Keep scripts single-purpose** — one script, one job
+5. **Always add logging** — every automation should write to `logs/run.log` with timestamps
+6. **Make it reversible** — add a `--dry-run` flag that previews output without firing
+7. **Secrets stay in `.env`** — never hardcode keys; always use `os.getenv()` or `dotenv`
+8. **Document the trigger** — add a comment at the top explaining how/when to run it
+
+**Default to dry-run mode until I explicitly say to run live.**
+
+---
+
+## Output Standards
+
+**Brand voice:**
+- Tone: (e.g., direct and slightly irreverent, like a smart friend who's been around the block)
+- Reading level: (e.g., 8th grade — clear, no jargon unless the audience expects it)
+- Sentence style: (e.g., short punchy sentences. Vary length. Never academic.)
+- Vocabulary to avoid: (e.g., "leverage", "synergy", "dive deep", "unlock your potential")
+
+**Format defaults:**
+- Newsletter: No more than 600 words. Use H2s sparingly. End with a single CTA.
+- Twitter threads: 8–12 tweets. Hook in tweet 1. Each tweet standalone-readable.
+- LinkedIn: One idea per post. 3-5 short paragraphs.
+- YouTube descriptions: First 2 lines must be hook. Timestamps required if > 10 min.
+
+---
+
+## Do Not Touch
+
+- `scripts/newsletter_send.py` — live Beehiiv sender, runs every Tuesday
+- `scripts/tweet_scheduler.py` — connected to Typefully, schedule is active
+- `.env` production values — never overwrite
+- `content/published/` — archive, read-only
+- Any cron job or systemd service currently running on the server
+
+If you think one of these needs to change, tell me why and what you'd do — don't just make the change.
+
+---
+
+## Session Kickoff Prompt
+
+```
+We're working on my creator automation project. Read CLAUDE.md before doing anything.
+
+Here's what I want to accomplish this session:
+[describe your goal — be specific about inputs, outputs, and what "done" looks like]
+
+Current status:
+- Last thing that worked: [e.g., "tweet scheduler runs clean"]
+- What's broken or missing: [e.g., "newsletter draft step pulls wrong Notion DB"]
+- Any new APIs or tools I'm adding: [e.g., "want to add Beehiiv analytics pull"]
+
+Before writing code, confirm you understand what the automation should do and ask me anything that's unclear. Default to dry-run mode unless I say otherwise.
+```
+
+---
+
+*CLAUDE.md last updated: [DATE] | Project: [PROJECT NAME]*</pre>
+      </div>
+
+      <!-- Template 4: API Integration -->
+      <div class="template-block">
+        <div class="template-header">
+          <span class="template-label">API Integration</span>
+          <button class="copy-btn" data-target="tpl-4">Copy</button>
+        </div>
+        <pre class="template-pre" id="tpl-4"># CLAUDE.md — API Integration Template
+
+# [Project Name] — API Integration
+
+## Project Purpose
+
+Example: "This service wraps the Stripe and Plaid APIs to provide a unified billing and bank-account-verification layer for our mobile app. It normalizes response shapes, handles retries, and exposes a single internal REST API to the frontend."
+
+---
+
+## API Overview
+
+| API | Purpose | Version | Docs |
+|-----|---------|---------|------|
+| [API Name] | [What it does] | v2 | [https://docs.example.com] |
+| [API Name] | [What it does] | v1 | [https://docs.example.com] |
+
+**Integration approach:** [SDK / raw HTTP / GraphQL client / gRPC]
+**Rate-limit tier:** [Free / Growth / Enterprise]
+
+---
+
+## Authentication
+
+**Method:** [API Key / OAuth 2.0 / JWT / mTLS / HMAC signature]
+
+### API Key Auth
+- Keys are stored in: [`.env.local` / AWS Secrets Manager / Vault path]
+- Key format: `sk_live_...` (production), `sk_test_...` (test)
+- Header name: `Authorization: Bearer <key>` or `X-API-Key: <key>`
+- **Never** interpolate keys into URLs (they appear in server logs).
+
+### OAuth 2.0 (if applicable)
+- Flow: [Authorization Code / Client Credentials / PKCE]
+- Token endpoint: `POST https://api.example.com/oauth/token`
+- Scopes required: `read:users write:transactions`
+- Refresh strategy: refresh 60 seconds before expiry; use a mutex to prevent thundering herd.
+
+### Key Rotation
+1. Generate new key in vendor dashboard.
+2. Update secret in Secrets Manager / Vault.
+3. Deploy — the app picks up the new value on next cold start.
+4. Revoke old key after confirming zero errors for 10 minutes.
+
+---
+
+## Key Endpoints
+
+### `GET /v2/users/{id}`
+**Purpose:** Fetch a single user record by vendor ID.
+**Auth:** Bearer token in header.
+**Known quirks:** `created_at` is UTC but lacks timezone suffix in some older records.
+
+### `POST /v2/charges`
+**Purpose:** Create a payment charge.
+**Idempotency:** Send `Idempotency-Key` header (UUID v4 per logical operation, not per retry).
+**Async:** Status is `pending` immediately; final state delivered via webhook.
+
+---
+
+## Rate Limits
+
+| Endpoint / Scope | Limit | Window | Notes |
+|-----------------|-------|--------|-------|
+| Global | 1,000 req | per minute | Shared across all API keys in org |
+| `POST /charges` | 100 req | per minute | Per customer |
+| `GET /reports/*` | 10 req | per minute | Cache aggressively |
+
+### Handling 429s
+- The API returns `Retry-After: <seconds>` on 429 — always respect it.
+- Retry strategy: exponential backoff with jitter.
+  - Base delay: 1s, max delay: 32s, max attempts: 5.
+  - Jitter: `delay = base * 2^attempt + random(0, 1000ms)`.
+- Never retry non-idempotent requests without a stable `Idempotency-Key`.
+
+---
+
+## Error Handling Conventions
+
+| HTTP Status | Meaning | Action |
+|-------------|---------|--------|
+| 400 | Bad request (our bug) | Log full request, alert dev team, do NOT retry |
+| 401 | Auth failure | Check/rotate credentials, alert ops |
+| 403 | Permission denied | Check OAuth scopes, do NOT retry |
+| 404 | Resource not found | Return `null` to caller, not an exception |
+| 409 | Conflict / duplicate | Check idempotency key logic |
+| 422 | Validation error | Surface `error.message` to the user |
+| 429 | Rate limited | Retry with backoff |
+| 5xx | Vendor outage | Retry with backoff; open circuit after 5 consecutive failures |
+
+**Application-Level Conventions:**
+- Catch API errors at the integration layer.
+- Transform to internal error types: `ApiAuthError`, `ApiRateLimitError`, `ApiValidationError`, `ApiServerError`.
+- Log with structured fields: `{ vendor, endpoint, status, error_code, request_id, duration_ms }`.
+- Never log request bodies that may contain PII or payment data.
+
+---
+
+## Data Transformation
+
+Raw API responses are transformed into internal domain models at a single boundary. Do not scatter transformation logic across the codebase.
+
+**Rules:**
+- All date strings are parsed and stored as UTC datetimes.
+- Monetary amounts are in **cents (integer)** — format at the presentation layer.
+- Unknown/null fields are mapped to `null` in the internal model, not omitted.
+
+---
+
+## Caching Strategy
+
+| Data | TTL | Invalidation Trigger |
+|------|-----|---------------------|
+| User profile | 5 min | Webhook `user.updated` event |
+| Product catalog | 1 hour | Manual flush or deploy |
+| Exchange rates | 10 min | Time-based only |
+| Auth tokens | `expires_in - 60s` | Token refresh |
+
+**What NOT to cache:**
+- Payment/transaction status (always fetch fresh)
+- Any response with `Cache-Control: no-store`
+
+**Implementation:**
+- Cache key pattern: `{service}:{resource}:{id}` e.g., `stripe:customer:cus_abc`
+- On cache error: log and fall through to API — never fail because the cache is down.
+
+---
+
+## Testing Approach
+
+**Rule: No test should ever hit a live production API.**
+
+1. **Vendor sandbox / test environment** — use for integration tests.
+2. **Recorded fixtures** — record real API responses once, replay in tests.
+3. **Mocks** — mock the HTTP client for unit tests.
+
+**Fixture Management:**
+- Fixtures live in `tests/fixtures/api/{vendor}/{endpoint}/`.
+- File naming: `{scenario}.json` e.g., `charge_success.json`.
+- Fixtures must never contain real API keys, PII, or production IDs.
+
+---
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `STRIPE_SECRET_KEY` | Yes | Stripe secret key (`sk_live_` in prod, `sk_test_` in dev) |
+| `STRIPE_WEBHOOK_SECRET` | Yes | Webhook endpoint signing secret |
+| `PLAID_CLIENT_ID` | Yes | Plaid client ID |
+| `PLAID_SECRET` | Yes | Plaid secret key |
+| `PLAID_ENV` | Yes | `sandbox` / `development` / `production` |
+| `REDIS_URL` | Yes | Redis connection string |
+
+---
+
+## Security Rules
+
+1. Never log API keys or secrets.
+2. Never expose vendor API keys to the frontend.
+3. Webhook signature verification is mandatory — always verify before processing.
+4. Treat webhook payloads as untrusted — validate all fields.
+5. Rotate keys on any suspected exposure immediately.
+6. Use least-privilege OAuth scopes.
+7. Rate limit inbound requests to prevent abuse of endpoints that trigger vendor calls.
+8. Store secrets in a secrets manager — never in committed files.
+9. Audit log all mutating operations.
+
+---
+
+## Common Patterns
+
+### Pagination
+```
+GET /v2/charges?limit=100&starting_after=ch_lastId
+```
+- Loop until `has_more: false`, processing page-by-page.
+- Never assume a stable sort order across pages.
+
+### Webhooks
+- Endpoint must return `200` within 5 seconds — enqueue heavy processing.
+- Deduplicate by event ID.
+- Replay failed webhooks: keep a log of processed event IDs.
+
+### Circuit Breaker
+- After 5 consecutive failures, open the circuit.
+- After 30s in open state, allow one probe request.
+- If probe succeeds, close the circuit. If it fails, re-open.
+
+---
+
+## Session Kickoff Prompt
+
+```
+I'm working on [project name], which integrates [API names].
+
+Current task: [describe the specific endpoint, feature, or bug you're working on]
+
+Key constraints:
+- All vendor calls go through the adapter layer in [src/adapters/]
+- Never call vendor APIs directly from controllers or business logic
+- Errors must be caught and transformed into internal error types
+- Tests use fixtures — don't write tests that hit live APIs
+- Idempotency keys are required for all POST/mutation requests
+
+What I need help with: [specific question or task]
+
+Relevant files to check first:
+- [src/adapters/vendor_name.ts]
+- [src/models/]
+- [tests/fixtures/vendor_name/]
+```
+
+---
+
+## Runbook
+
+### Debugging a failed API call
+1. Find the `request_id` in logs.
+2. Check vendor status page.
+3. Reproduce in sandbox.
+4. Check if the issue is auth (401), bad payload (400/422), or vendor-side (5xx).
+
+### Adding a new endpoint
+1. Add the raw HTTP call in the adapter layer.
+2. Add the response type and transformation function.
+3. Record a fixture.
+4. Write tests covering success, 4xx, and 5xx cases.
+5. Add new env vars to this file and deployment config.
+
+### Rotating an API key
+1. Generate new key in vendor dashboard.
+2. Update in Secrets Manager / Vault.
+3. Trigger secret refresh or redeploy.
+4. Monitor error rate for 5 minutes.
+5. Revoke old key.</pre>
+      </div>
+
     </section>
 
-    <!-- Section 3: First win -->
-    <section>
-      <div class="section-heading">Your first win (10 minutes)</div>
-      <div class="win-card">
-        <div class="win-card-title">Before you go further, do this right now:</div>
-        <ul class="win-list">
-          <li>Open Claude Code</li>
-          <li>Pick the Starter CLAUDE.md template</li>
-          <li>Fill in your project name and stack</li>
-          <li>Drop it in your project root</li>
-          <li>Run the Session Kickoff prompt from the cheat sheet</li>
-        </ul>
-        <div class="win-closer">That's it. You're already ahead of 90% of people using Claude Code.</div>
-      </div>
-    </section>
-
-    <!-- Section 4: Quick links -->
-    <section>
-      <div class="section-heading">Quick access</div>
-      <div class="links-grid">
-        <a class="link-card" href="slides/01-the-claude-md-system.html">
-          <span>01 The CLAUDE.md System</span>
-          <span class="link-card-arrow">→</span>
-        </a>
-        <a class="link-card" href="slides/02-prompting-claude-code.html">
-          <span>02 Prompting Claude Code</span>
-          <span class="link-card-arrow">→</span>
-        </a>
-        <a class="link-card" href="slides/03-the-gsd-system.html">
-          <span>03 The GSD System</span>
-          <span class="link-card-arrow">→</span>
-        </a>
-        <a class="link-card" href="slides/04-debugging-with-claude-code.html">
-          <span>04 Debugging with Claude Code</span>
-          <span class="link-card-arrow">→</span>
-        </a>
-        <a class="link-card" href="slides/05-shipping-a-real-product.html">
-          <span>05 Shipping a Real Product</span>
-          <span class="link-card-arrow">→</span>
-        </a>
-        <a class="link-card" href="slides/06-advanced-building-systems.html">
-          <span>06 Advanced Building Systems</span>
-          <span class="link-card-arrow">→</span>
-        </a>
-        <a class="link-card" href="reference/prompt-cheat-sheet.html">
-          <span>Prompt Cheat Sheet</span>
-          <span class="link-card-arrow">→</span>
-        </a>
-        <a class="link-card" href="reference/session-checklist.html">
-          <span>Session Checklist</span>
-          <span class="link-card-arrow">→</span>
-        </a>
-      </div>
-    </section>
-
-    <footer>
-      The Claude Code Playbook — Questions? Reach out on X/Twitter.
+    <!-- Footer -->
+    <footer class="footer">
+      The Claude Code System &mdash; claudecodeplaybook.com
     </footer>
 
   </div>
 
+  <script>
+    document.querySelectorAll('.copy-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var targetId = btn.getAttribute('data-target');
+        var pre = document.getElementById(targetId);
+        if (!pre) return;
+        var text = pre.textContent;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function() {
+            showCopied(btn);
+          }).catch(function() {
+            fallbackCopy(text, btn);
+          });
+        } else {
+          fallbackCopy(text, btn);
+        }
+      });
+    });
+
+    function fallbackCopy(text, btn) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.top = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try { document.execCommand('copy'); } catch(e) {}
+      document.body.removeChild(ta);
+      showCopied(btn);
+    }
+
+    function showCopied(btn) {
+      var orig = btn.textContent;
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(function() {
+        btn.textContent = orig;
+        btn.classList.remove('copied');
+      }, 2000);
+    }
+  </script>
 </body>
 </html>
