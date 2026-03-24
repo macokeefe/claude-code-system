@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The CLAUDE.md System</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#FAFAF8;--bg-2:#F4F1EB;--bg-3:#EDE8DF;--orange:#E06418;--orange-light:#F07835;--orange-dim:rgba(224,100,24,0.08);--orange-border:rgba(224,100,24,0.22);--text:#1A1916;--text-2:#4A4640;--text-3:#9A9288;--code-bg:#EDE8DF;--code-border:rgba(0,0,0,0.08);--green:#2D7A52;--red:#C43B3B;--blue:#2B5FA0}
+    *{margin:0;padding:0;box-sizing:border-box}
+    html,body{width:100%;height:100%;overflow:hidden;background:#FAFAF8;color:#1A1916;font-family:'Inter',sans-serif}
+    .deck{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+    .slide{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:64px 80px;opacity:0;visibility:hidden;transition:opacity 0.35s ease;background:#FAFAF8}
+    .slide.active{opacity:1;visibility:visible}
+    .slide-inner{width:100%;max-width:1100px;display:flex;flex-direction:column;gap:32px}
+    .progress{position:fixed;top:0;left:0;height:2px;background:#E06418;transition:width 0.3s ease;z-index:100}
+    .nav{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:20px;z-index:100}
+    .nav button{background:rgba(0,0,0,0.05);border:1px solid rgba(0,0,0,0.12);color:#1A1916;width:38px;height:38px;border-radius:50%;cursor:pointer;font-size:16px;transition:background 0.2s}
+    .nav button:hover{background:rgba(224,100,24,0.1);border-color:rgba(224,100,24,0.4)}
+    .nav span{color:#9A9288;font-size:13px;font-variant-numeric:tabular-nums}
+    .title{font-size:clamp(36px,5.5vw,68px);font-weight:700;line-height:1.1;letter-spacing:-0.02em;background:linear-gradient(135deg,#E06418,#F07835);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .subtitle{font-size:clamp(16px,2vw,22px);color:#4A4640;font-weight:400;line-height:1.5}
+    .label{font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#E06418}
+    .heading{font-size:clamp(24px,3.5vw,42px);font-weight:700;line-height:1.2;letter-spacing:-0.01em;color:#1A1916}
+    .body{font-size:clamp(14px,1.6vw,18px);line-height:1.7;color:#4A4640}
+    .small{font-size:clamp(12px,1.2vw,14px);color:#9A9288;line-height:1.5}
+    .split{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;width:100%}
+    .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;width:100%}
+    .grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;width:100%}
+    .stack{display:flex;flex-direction:column;gap:16px;width:100%}
+    .card{background:#FFFFFF;border:1px solid rgba(0,0,0,0.08);border-radius:12px;padding:24px;transition:border-color 0.2s}
+    .card:hover{border-color:rgba(224,100,24,0.25)}
+    .card-orange{border-top:2px solid #E06418}
+    .card-stat{text-align:center;padding:32px 20px;background:#FFFFFF}
+    .stat-num{font-size:clamp(40px,6vw,72px);font-weight:700;font-variant-numeric:tabular-nums;background:linear-gradient(135deg,#E06418,#F07835);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1}
+    .stat-label{font-size:13px;color:#9A9288;margin-top:8px;text-transform:uppercase;letter-spacing:0.06em}
+    .code-block{background:#EDE8DF;border:1px solid rgba(0,0,0,0.08);border-radius:10px;padding:20px 24px;font-family:'JetBrains Mono',monospace;font-size:clamp(11px,1.2vw,14px);line-height:1.8;color:#1A1916;overflow:auto;max-height:320px;white-space:pre}
+    .code-comment{color:#9A9288}
+    .code-key{color:#E06418}
+    .code-val{color:#2D7A52}
+    .code-str{color:#2B5FA0}
+    .code-cmd{color:#C43B3B}
+    .badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:500}
+    .badge-orange{background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.25);color:#E06418}
+    .badge-green{background:rgba(45,122,82,0.08);border:1px solid rgba(45,122,82,0.25);color:#2D7A52}
+    .badge-red{background:rgba(196,59,59,0.08);border:1px solid rgba(196,59,59,0.25);color:#C43B3B}
+    .badge-blue{background:rgba(43,95,160,0.08);border:1px solid rgba(43,95,160,0.25);color:#2B5FA0}
+    .divider{width:48px;height:2px;background:linear-gradient(90deg,#E06418,transparent);border-radius:2px;margin:4px 0}
+    .steps{display:flex;flex-direction:column;gap:0;width:100%}
+    .step{display:grid;grid-template-columns:40px 1fr;gap:20px;align-items:flex-start;padding-bottom:24px;position:relative}
+    .step:not(:last-child)::after{content:'';position:absolute;left:19px;top:40px;bottom:0;width:1px;background:rgba(224,100,24,0.2)}
+    .step-num{width:40px;height:40px;border-radius:50%;background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.3);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:#E06418;flex-shrink:0}
+    .step-content h4{font-size:16px;font-weight:600;color:#1A1916;margin-bottom:4px}
+    .step-content p{font-size:14px;color:#4A4640;line-height:1.6}
+    .gold-line{width:56px;height:3px;background:linear-gradient(90deg,#E06418,#F07835);border-radius:2px}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes scaleIn{from{opacity:0;transform:scale(0.96)}to{opacity:1;transform:scale(1)}}
+    .fade-up{opacity:0;animation:fadeUp 0.5s ease-out forwards}
+    .scale-in{opacity:0;animation:scaleIn 0.4s ease-out forwards}
+    .stagger>*{opacity:0;animation:fadeUp 0.5s ease-out forwards}
+    .stagger>*:nth-child(1){animation-delay:0.08s}
+    .stagger>*:nth-child(2){animation-delay:0.18s}
+    .stagger>*:nth-child(3){animation-delay:0.28s}
+    .stagger>*:nth-child(4){animation-delay:0.38s}
+    .stagger>*:nth-child(5){animation-delay:0.48s}
+    .stagger>*:nth-child(6){animation-delay:0.58s}
+
+    /* Slide-specific overrides */
+    .cover-slide{align-items:flex-start;justify-content:center;padding-left:96px}
+    .cover-accent{position:absolute;left:80px;top:20%;bottom:20%;width:2px;background:linear-gradient(180deg,transparent,#E06418 40%,#E06418 60%,transparent)}
+    .card-red-tint{border-top:2px solid #C43B3B;background:rgba(196,59,59,0.04)}
+    .card-green-tint{border-top:2px solid #2D7A52;background:rgba(45,122,82,0.05)}
+    .card-orange-tint{border-top:2px solid #E06418;background:rgba(224,100,24,0.04)}
+    .list-item{display:flex;align-items:flex-start;gap:10px;padding:8px 0;font-size:clamp(13px,1.4vw,16px);color:#4A4640;line-height:1.5}
+    .list-item-dot{width:6px;height:6px;border-radius:50%;background:#E06418;flex-shrink:0;margin-top:7px}
+    .cta-card{background:#FFFFFF;border:1px solid rgba(224,100,24,0.3);border-radius:16px;padding:40px 48px;width:100%}
+    .anatomy-tag{color:#E06418;background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.2)}
+    .anatomy-desc{color:#4A4640}
+    .anatomy-row{border-bottom:1px solid rgba(0,0,0,0.06)}
+    .insight{color:#9A9288;border-top:1px solid rgba(0,0,0,0.08)}
+  </style>
+</head>
+<body>
+  <div class="progress" id="progress"></div>
+  <div class="deck" id="deck">
+
+    <!-- SLIDE 1: COVER -->
+    <div class="slide cover-slide">
+      <div class="cover-accent"></div>
+      <div class="fade-up" style="animation-delay:0.1s">
+        <span class="label">Level 2 — Builder</span>
+      </div>
+      <div style="height:20px"></div>
+      <h1 class="title fade-up" style="animation-delay:0.2s;max-width:640px">The CLAUDE.md System</h1>
+      <div class="gold-line fade-up" style="animation-delay:0.35s;margin:20px 0"></div>
+      <p class="subtitle fade-up" style="animation-delay:0.45s;max-width:520px">How to give Claude Code a persistent memory</p>
+      <div style="height:28px"></div>
+      <span class="badge badge-orange fade-up" style="animation-delay:0.55s">LEVEL 2 — BUILDER</span>
+    </div>
+
+    <!-- SLIDE 2: WHAT IT IS -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="label fade-up">What it is</div>
+        <div class="split stagger">
+          <div class="stack">
+            <h2 class="heading">A plain text file Claude reads at the start of every session</h2>
+            <div class="divider"></div>
+            <p class="body">You put it in the root of your project. Claude picks it up automatically. It tells Claude who you are, what you're building, and how you work — so you don't have to repeat yourself every session.</p>
+            <p class="body" style="color:#9A9288">No plugins. No config. Just a markdown file named <span style="font-family:'JetBrains Mono',monospace;color:#E06418;font-size:0.9em">CLAUDE.md</span>.</p>
+          </div>
+          <div class="code-block"><span class="code-comment"># CLAUDE.md</span>
+
+<span class="code-key">## Project</span>
+<span class="code-val">eMotus — science learning app</span>
+
+<span class="code-key">## Stack</span>
+<span class="code-val">Expo 54, React Native, TypeScript</span>
+
+<span class="code-key">## Commands</span>
+<span class="code-cmd">npx expo start</span>
+<span class="code-cmd">npm run build</span>
+
+<span class="code-key">## Current Focus</span>
+<span class="code-val">Building the lesson card component</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 3: WHY IT MATTERS -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="label fade-up">Why it matters</div>
+        <h2 class="heading fade-up">Same Claude. Very different sessions.</h2>
+        <div class="split stagger" style="margin-top:8px">
+          <div class="card card-red-tint">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+              <span class="badge badge-red">Cold Session</span>
+            </div>
+            <p class="body" style="margin-bottom:12px;font-size:15px">Claude knows nothing about your project.</p>
+            <div class="stack" style="gap:8px">
+              <div class="list-item"><div class="list-item-dot" style="background:#C43B3B"></div>Asks what framework you're using</div>
+              <div class="list-item"><div class="list-item-dot" style="background:#C43B3B"></div>Guesses at your file structure</div>
+              <div class="list-item"><div class="list-item-dot" style="background:#C43B3B"></div>Suggests wrong commands</div>
+              <div class="list-item"><div class="list-item-dot" style="background:#C43B3B"></div>Ignores your naming conventions</div>
+            </div>
+          </div>
+          <div class="card card-green-tint">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+              <span class="badge badge-green">With CLAUDE.md</span>
+            </div>
+            <p class="body" style="margin-bottom:12px;font-size:15px">Claude walks in already briefed.</p>
+            <div class="stack" style="gap:8px">
+              <div class="list-item"><div class="list-item-dot" style="background:#2D7A52"></div>Knows your stack and dependencies</div>
+              <div class="list-item"><div class="list-item-dot" style="background:#2D7A52"></div>Follows your naming conventions</div>
+              <div class="list-item"><div class="list-item-dot" style="background:#2D7A52"></div>Runs the right dev commands</div>
+              <div class="list-item"><div class="list-item-dot" style="background:#2D7A52"></div>Knows exactly what you're building now</div>
+            </div>
+          </div>
+        </div>
+        <p class="small fade-up" style="text-align:center;margin-top:4px">The file does nothing fancy — it just removes the warm-up tax from every session.</p>
+      </div>
+    </div>
+
+    <!-- SLIDE 4: WHAT GOES IN IT -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="label fade-up">Contents</div>
+        <h2 class="heading fade-up">Six sections. That's all you need.</h2>
+        <div class="grid-3 stagger" style="margin-top:8px">
+          <div class="card card-orange">
+            <div class="label" style="margin-bottom:8px">Project</div>
+            <p class="body" style="font-size:14px;color:#1A1916;font-weight:500;margin-bottom:6px">What you're building</p>
+            <p class="small">One sentence. Name, purpose, stage.</p>
+          </div>
+          <div class="card card-orange">
+            <div class="label" style="margin-bottom:8px">Stack</div>
+            <p class="body" style="font-size:14px;color:#1A1916;font-weight:500;margin-bottom:6px">Language, framework, key deps</p>
+            <p class="small">Only what Claude needs to know to write correct code.</p>
+          </div>
+          <div class="card card-orange">
+            <div class="label" style="margin-bottom:8px">Commands</div>
+            <p class="body" style="font-size:14px;color:#1A1916;font-weight:500;margin-bottom:6px">Dev, build, test scripts</p>
+            <p class="small">The exact commands Claude should run — no guessing.</p>
+          </div>
+          <div class="card card-orange">
+            <div class="label" style="margin-bottom:8px">Conventions</div>
+            <p class="body" style="font-size:14px;color:#1A1916;font-weight:500;margin-bottom:6px">Naming, structure, patterns</p>
+            <p class="small">How files are named, how components are structured, what patterns you follow.</p>
+          </div>
+          <div class="card card-orange">
+            <div class="label" style="margin-bottom:8px">Don'ts</div>
+            <p class="body" style="font-size:14px;color:#1A1916;font-weight:500;margin-bottom:6px">What Claude should never do</p>
+            <p class="small">Hard rules. Never change this file. Always ask before deleting.</p>
+          </div>
+          <div class="card card-orange">
+            <div class="label" style="margin-bottom:8px">Current Focus</div>
+            <p class="body" style="font-size:14px;color:#1A1916;font-weight:500;margin-bottom:6px">What you're building right now</p>
+            <p class="small">One sentence that anchors every session to your actual goal today.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 5: WHAT NOT TO PUT IN -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="label fade-up">Scope</div>
+        <h2 class="heading fade-up">Keep it lean. It's a briefing, not a wiki.</h2>
+        <div class="split stagger" style="margin-top:8px">
+          <div class="card">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px">
+              <span class="badge badge-green">Put In</span>
+            </div>
+            <div class="stack" style="gap:12px">
+              <div class="list-item"><div class="list-item-dot" style="background:#2D7A52"></div>Project name and one-line description</div>
+              <div class="list-item"><div class="list-item-dot" style="background:#2D7A52"></div>Tech stack and key dependencies</div>
+              <div class="list-item"><div class="list-item-dot" style="background:#2D7A52"></div>Dev, build, and test commands</div>
+              <div class="list-item"><div class="list-item-dot" style="background:#2D7A52"></div>File naming and code conventions</div>
+              <div class="list-item"><div class="list-item-dot" style="background:#2D7A52"></div>Hard constraints and don'ts</div>
+              <div class="list-item"><div class="list-item-dot" style="background:#2D7A52"></div>Current active task (1 sentence)</div>
+            </div>
+          </div>
+          <div class="card">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px">
+              <span class="badge badge-red">Leave Out</span>
+            </div>
+            <div class="stack" style="gap:12px">
+              <div class="list-item"><div class="list-item-dot" style="background:#C43B3B"></div>Full feature specs or PRDs</div>
+              <div class="list-item"><div class="list-item-dot" style="background:#C43B3B"></div>Detailed business logic</div>
+              <div class="list-item"><div class="list-item-dot" style="background:#C43B3B"></div>API docs and schema definitions</div>
+              <div class="list-item"><div class="list-item-dot" style="background:#C43B3B"></div>Meeting notes or decisions log</div>
+              <div class="list-item"><div class="list-item-dot" style="background:#C43B3B"></div>Historical context / "how we got here"</div>
+              <div class="list-item"><div class="list-item-dot" style="background:#C43B3B"></div>Anything longer than 2–3 lines per section</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 6: UNIVERSAL TEMPLATE -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
+          <div>
+            <div class="label fade-up">Template</div>
+            <h2 class="heading fade-up">Universal Template</h2>
+          </div>
+          <span class="badge badge-orange fade-up">COPY-PASTE READY</span>
+        </div>
+        <div class="code-block scale-in" style="max-height:400px;font-size:clamp(11px,1.1vw,13px)"><span class="code-comment"># CLAUDE.md</span>
+
+<span class="code-key">## Project</span>
+<span class="code-val">[App name] — [one sentence: what it does and who it's for]</span>
+
+<span class="code-key">## Stack</span>
+<span class="code-val">- Language: [TypeScript / Python / etc]</span>
+<span class="code-val">- Framework: [React / Next.js / FastAPI / etc]</span>
+<span class="code-val">- Key deps: [list only the important ones]</span>
+
+<span class="code-key">## Commands</span>
+<span class="code-cmd">- Dev: npm run dev</span>
+<span class="code-cmd">- Build: npm run build</span>
+<span class="code-cmd">- Test: npm test</span>
+
+<span class="code-key">## Conventions</span>
+<span class="code-val">- Components: PascalCase, one file per component</span>
+<span class="code-val">- Styles: [CSS modules / Tailwind / styled-components]</span>
+<span class="code-val">- [Any other important patterns]</span>
+
+<span class="code-key">## Don'ts</span>
+<span class="code-val">- Never modify [critical file]</span>
+<span class="code-val">- Never use [pattern you hate]</span>
+<span class="code-val">- Always ask before deleting files</span>
+
+<span class="code-key">## Current Focus</span>
+<span class="code-val">[One sentence: exactly what you're building in this session]</span></div>
+      </div>
+    </div>
+
+    <!-- SLIDE 7: REACT NATIVE VARIANT -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="label fade-up">Variant</div>
+        <h2 class="heading fade-up">React Native / Expo</h2>
+        <div class="split stagger" style="margin-top:8px">
+          <div class="stack">
+            <p class="body">The universal template works. You just need a few RN-specific additions:</p>
+            <div class="stack" style="gap:10px;margin-top:8px">
+              <div class="list-item"><div class="list-item-dot"></div>Specify Expo version — it matters for API compatibility</div>
+              <div class="list-item"><div class="list-item-dot"></div>Name the navigation library (React Navigation vs Expo Router)</div>
+              <div class="list-item"><div class="list-item-dot"></div>Note iOS vs Android differences where relevant</div>
+              <div class="list-item"><div class="list-item-dot"></div>Add tunnel/device commands if you use them</div>
+            </div>
+          </div>
+          <div class="code-block"><span class="code-comment"># RN / Expo additions</span>
+
+<span class="code-key">## Stack</span>
+<span class="code-val">- Expo SDK 54</span>
+<span class="code-val">- React Native 0.76</span>
+<span class="code-val">- Navigation: Expo Router v4</span>
+<span class="code-val">- State: Zustand</span>
+
+<span class="code-key">## Commands</span>
+<span class="code-cmd">- Dev: npx expo start</span>
+<span class="code-cmd">- iOS sim: npx expo run:ios</span>
+<span class="code-cmd">- Tunnel: npx expo start --tunnel</span>
+
+<span class="code-key">## Conventions</span>
+<span class="code-val">- Routes in app/ folder (file-based)</span>
+<span class="code-val">- Shared components in components/</span>
+<span class="code-val">- iOS-first, Android parity second</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 8: WEB APP VARIANT -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="label fade-up">Variant</div>
+        <h2 class="heading fade-up">React / Vite / TypeScript</h2>
+        <div class="split stagger" style="margin-top:8px">
+          <div class="stack">
+            <p class="body">Web apps have a simpler setup but benefit from being explicit about CSS approach, routing, and state management.</p>
+            <div class="stack" style="gap:10px;margin-top:8px">
+              <div class="list-item"><div class="list-item-dot"></div>Specify CSS approach — Tailwind vs modules vs styled-components</div>
+              <div class="list-item"><div class="list-item-dot"></div>Name the router if you use one (React Router, TanStack Router)</div>
+              <div class="list-item"><div class="list-item-dot"></div>List env var names if Claude might need them</div>
+              <div class="list-item"><div class="list-item-dot"></div>Clarify TypeScript strictness level</div>
+            </div>
+          </div>
+          <div class="code-block"><span class="code-comment"># React + Vite additions</span>
+
+<span class="code-key">## Stack</span>
+<span class="code-val">- React 18 + TypeScript (strict)</span>
+<span class="code-val">- Vite 5 for bundling</span>
+<span class="code-val">- Tailwind CSS 3</span>
+<span class="code-val">- React Router v6</span>
+<span class="code-val">- Zustand for state</span>
+
+<span class="code-key">## Commands</span>
+<span class="code-cmd">- Dev: npm run dev (port 5173)</span>
+<span class="code-cmd">- Build: npm run build</span>
+<span class="code-cmd">- Preview: npm run preview</span>
+
+<span class="code-key">## Conventions</span>
+<span class="code-val">- Tailwind only — no custom CSS</span>
+<span class="code-val">- Named exports, no default exports</span>
+<span class="code-val">- Strict TS — no 'any'</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 9: COMMON MISTAKES -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="label fade-up">Mistakes</div>
+        <h2 class="heading fade-up">Four ways to write a CLAUDE.md that doesn't work</h2>
+        <div class="steps stagger" style="margin-top:8px">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-content">
+              <h4>Too vague — "Build a web app with React"</h4>
+              <p>Claude gets no signal about your actual project. It fills in the blanks with generic assumptions and ignores the file entirely within a few exchanges.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-content">
+              <h4>Too long — 300+ lines of documentation</h4>
+              <p>Long CLAUDE.md files burn context window space before you've typed a single prompt. Aim for under 60 lines total.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-content">
+              <h4>Stale content — never updated after week one</h4>
+              <p>Claude works off the wrong stack, wrong commands, wrong focus. An outdated file is worse than no file because it actively misleads.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div class="step-content">
+              <h4>Missing commands — no dev/build/test scripts listed</h4>
+              <p>Claude guesses. It might run <span style="font-family:'JetBrains Mono',monospace;color:#E06418;font-size:0.9em">yarn</span> when you use <span style="font-family:'JetBrains Mono',monospace;color:#E06418;font-size:0.9em">npm</span>, or miss your custom scripts entirely.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 10: KEEPING IT UPDATED -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="label fade-up">Maintenance</div>
+        <h2 class="heading fade-up">Update it when the project changes</h2>
+        <div class="grid-3 stagger" style="margin-top:8px">
+          <div class="card card-orange">
+            <div class="label" style="margin-bottom:12px">Trigger</div>
+            <p style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:8px">New dependency added</p>
+            <div class="divider"></div>
+            <p class="small" style="margin-top:12px;font-size:13px;color:#4A4640">Update the Stack section. Include the package name and version if it matters for API compatibility.</p>
+          </div>
+          <div class="card card-orange">
+            <div class="label" style="margin-bottom:12px">Trigger</div>
+            <p style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:8px">Convention changed</p>
+            <div class="divider"></div>
+            <p class="small" style="margin-top:12px;font-size:13px;color:#4A4640">Update Conventions immediately. Claude will keep using the old pattern if you don't — and it'll look consistent with your history, making it hard to catch.</p>
+          </div>
+          <div class="card card-orange">
+            <div class="label" style="margin-bottom:12px">Trigger</div>
+            <p style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:8px">Starting a new feature</p>
+            <div class="divider"></div>
+            <p class="small" style="margin-top:12px;font-size:13px;color:#4A4640">Update Current Focus before you start the session. This one field alone anchors everything Claude does in that session.</p>
+          </div>
+        </div>
+        <p class="small fade-up" style="text-align:center;color:#9A9288">Treat it like a README — a living doc, not a one-time setup</p>
+      </div>
+    </div>
+
+    <!-- SLIDE 11: PER-FOLDER CLAUDE.md -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="label fade-up">Advanced</div>
+        <h2 class="heading fade-up">Per-folder CLAUDE.md for monorepos</h2>
+        <div class="split stagger" style="margin-top:8px">
+          <div class="stack">
+            <p class="body">In a monorepo, a single root CLAUDE.md doesn't give Claude enough context to work confidently in each package. Add a CLAUDE.md inside each major folder.</p>
+            <p class="body" style="margin-top:4px">Claude reads both — the root for global context, the local one for the specific package. Inner files override outer ones when there's a conflict.</p>
+            <p class="body" style="color:#9A9288;margin-top:4px">Works great for: frontend + backend split, multiple apps sharing a design system, packages with different test setups.</p>
+          </div>
+          <div class="code-block"><span class="code-comment"># Monorepo structure</span>
+
+project-root/
+├── <span class="code-key">CLAUDE.md</span>          <span class="code-comment"># global</span>
+├── apps/
+│   ├── web/
+│   │   ├── <span class="code-key">CLAUDE.md</span>  <span class="code-comment"># web app</span>
+│   │   └── src/
+│   └── mobile/
+│       ├── <span class="code-key">CLAUDE.md</span>  <span class="code-comment"># RN app</span>
+│       └── src/
+└── packages/
+    └── ui/
+        ├── <span class="code-key">CLAUDE.md</span>  <span class="code-comment"># design sys</span>
+        └── src/
+
+<span class="code-comment"># Each inner file only covers
+# what's different from root</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 12: THE CURRENT FOCUS FIELD -->
+    <div class="slide">
+      <div class="slide-inner" style="align-items:center;text-align:center;gap:24px">
+        <div class="label fade-up">The One Field That Matters Most</div>
+        <h2 class="heading fade-up" style="font-size:clamp(28px,4vw,52px);background:linear-gradient(135deg,#E06418,#F07835);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;max-width:800px">Current Focus changes the entire session</h2>
+        <div class="divider fade-up" style="margin:0 auto"></div>
+        <p class="body fade-up" style="max-width:680px;font-size:clamp(15px,1.8vw,20px)">Every other section is static background. Current Focus is dynamic. It tells Claude what to optimize for, what to keep asking about, and what to ignore. Without it, Claude treats all context equally — which means it treats nothing as urgent.</p>
+        <p class="body fade-up" style="color:#9A9288;max-width:600px">One sentence. Updated before each session. That's it. It's the difference between Claude helping you build and Claude generating plausible-looking tangents.</p>
+      </div>
+    </div>
+
+    <!-- SLIDE 13: ACTION -->
+    <div class="slide">
+      <div class="slide-inner" style="align-items:center">
+        <div class="cta-card fade-up">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:28px">
+            <h2 class="heading">Write your CLAUDE.md now</h2>
+            <span class="badge badge-orange">5 MINUTES</span>
+          </div>
+          <div class="steps" style="margin-bottom:8px">
+            <div class="step">
+              <div class="step-num">1</div>
+              <div class="step-content">
+                <h4>Create the file</h4>
+                <p>Touch <span style="font-family:'JetBrains Mono',monospace;color:#E06418">CLAUDE.md</span> in your project root. Open it.</p>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num">2</div>
+              <div class="step-content">
+                <h4>Fill in the six sections</h4>
+                <p>Project, Stack, Commands, Conventions, Don'ts, Current Focus. No more than 2–3 lines each.</p>
+              </div>
+            </div>
+            <div class="step" style="padding-bottom:0">
+              <div class="step-num">3</div>
+              <div class="step-content">
+                <h4>Open a new Claude Code session and verify</h4>
+                <p>Ask Claude "what are you working on?" — it should answer correctly without any additional context from you.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <nav class="nav">
+    <button onclick="go(-1)">←</button>
+    <span><span id="cur">1</span> / <span id="tot">1</span></span>
+    <button onclick="go(1)">→</button>
+  </nav>
+
+  <script>
+    const slides=document.querySelectorAll('.slide');
+    let cur=0;
+    document.getElementById('tot').textContent=slides.length;
+    function show(n){
+      if(n<0||n>=slides.length)return;
+      slides[cur].classList.remove('active');
+      cur=n;
+      slides[cur].classList.add('active');
+      document.getElementById('cur').textContent=cur+1;
+      document.getElementById('progress').style.width=((cur+1)/slides.length*100)+'%';
+      slides[cur].querySelectorAll('.fade-up,.scale-in,.stagger>*').forEach(el=>{
+        el.style.animation='none';el.offsetHeight;el.style.animation='';
+      });
+    }
+    function go(d){show(cur+d)}
+    document.addEventListener('keydown',e=>{
+      if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();go(1)}
+      if(e.key==='ArrowLeft'){e.preventDefault();go(-1)}
+    });
+    show(0);
+  </script>
+</body>
+</html>

@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>05 — Shipping a Real Product</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#FAFAF8;color:#1A1916;font-family:'Inter',sans-serif}
+.deck{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+.slide{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:64px 80px;opacity:0;visibility:hidden;transition:opacity 0.35s ease;background:#FAFAF8}
+.slide.active{opacity:1;visibility:visible}
+.progress{position:fixed;top:0;left:0;height:2px;background:#E06418;transition:width 0.3s ease;z-index:100}
+.nav{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:20px;z-index:100}
+.nav button{background:rgba(0,0,0,0.05);border:1px solid rgba(0,0,0,0.12);color:#1A1916;width:38px;height:38px;border-radius:50%;cursor:pointer;font-size:16px;transition:all 0.2s}
+.nav button:hover{background:rgba(224,100,24,0.1);border-color:rgba(224,100,24,0.4)}
+.nav span{color:#9A9288;font-size:13px}
+.title{font-size:clamp(36px,5.5vw,68px);font-weight:700;line-height:1.1;letter-spacing:-0.02em;background:linear-gradient(135deg,#E06418,#F07835);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.subtitle{font-size:clamp(16px,2vw,22px);color:#4A4640;font-weight:400;line-height:1.5}
+.label{font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#E06418}
+.heading{font-size:clamp(24px,3.5vw,42px);font-weight:700;line-height:1.2;letter-spacing:-0.01em;color:#1A1916}
+.body{font-size:clamp(14px,1.6vw,18px);line-height:1.7;color:#4A4640}
+.small{color:#9A9288}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;width:100%}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;width:100%}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;width:100%}
+.card{background:#FFFFFF;border:1px solid rgba(0,0,0,0.08);border-radius:12px;padding:24px;transition:border-color 0.2s}
+.card:hover{border-color:rgba(224,100,24,0.25)}
+.card-orange{border-top:2px solid #E06418}
+.card-green{border-top:2px solid #2D7A52}
+.card-red{border-top:2px solid #C43B3B;background:rgba(196,59,59,0.04)}
+.stat-num{font-size:clamp(40px,6vw,72px);font-weight:700;background:linear-gradient(135deg,#E06418,#F07835);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1}
+.stat-label{font-size:13px;color:#9A9288;margin-top:8px;text-transform:uppercase;letter-spacing:0.06em}
+.code-block{background:#EDE8DF;border:1px solid rgba(0,0,0,0.08);border-radius:10px;padding:20px 24px;font-family:'JetBrains Mono',monospace;font-size:clamp(11px,1.2vw,13px);line-height:1.8;color:#1A1916;overflow:auto;max-height:340px;white-space:pre}
+.code-comment{color:#9A9288}
+.code-key{color:#E06418}
+.code-val{color:#2D7A52}
+.code-str{color:#2B5FA0}
+.code-cmd{color:#C43B3B}
+.badge{display:inline-flex;align-items:center;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:500}
+.badge-orange{background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.25);color:#E06418}
+.badge-green{background:rgba(45,122,82,0.08);border:1px solid rgba(45,122,82,0.25);color:#2D7A52}
+.badge-red{background:rgba(196,59,59,0.08);border:1px solid rgba(196,59,59,0.25);color:#C43B3B}
+.divider{width:48px;height:2px;background:linear-gradient(90deg,#E06418,transparent);border-radius:2px}
+.steps{display:flex;flex-direction:column;gap:0;width:100%}
+.step{display:grid;grid-template-columns:40px 1fr;gap:20px;padding-bottom:20px;position:relative}
+.step:not(:last-child)::after{content:'';position:absolute;left:19px;top:40px;bottom:0;width:1px;background:rgba(224,100,24,0.2)}
+.step-num{width:40px;height:40px;border-radius:50%;background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.3);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:#E06418;flex-shrink:0}
+.step-content h4{font-size:16px;font-weight:600;color:#1A1916;margin-bottom:4px}
+.step-content p{font-size:14px;color:#4A4640;line-height:1.6}
+.gold-line{width:56px;height:3px;background:linear-gradient(90deg,#E06418,#F07835);border-radius:2px}
+.chart-wrap{position:relative;width:100%;height:clamp(180px,28vh,280px)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+.fade-up{opacity:0;animation:fadeUp 0.5s ease-out forwards}
+.stagger>*{opacity:0;animation:fadeUp 0.5s ease-out forwards}
+.stagger>*:nth-child(1){animation-delay:0.08s}
+.stagger>*:nth-child(2){animation-delay:0.18s}
+.stagger>*:nth-child(3){animation-delay:0.28s}
+.stagger>*:nth-child(4){animation-delay:0.38s}
+.stagger>*:nth-child(5){animation-delay:0.48s}
+/* local utils */
+.check-list{list-style:none;display:flex;flex-direction:column;gap:9px}
+.check-list li{font-size:13px;color:#4A4640;line-height:1.5;padding-left:20px;position:relative}
+.check-list li::before{content:'✓';position:absolute;left:0;color:#2D7A52;font-weight:700}
+.cross-list{list-style:none;display:flex;flex-direction:column;gap:9px}
+.cross-list li{font-size:13px;color:#4A4640;line-height:1.5;padding-left:20px;position:relative}
+.cross-list li::before{content:'✗';position:absolute;left:0;color:#C43B3B;font-weight:700}
+.split-arrow{display:grid;grid-template-columns:1fr 44px 1fr;gap:20px;align-items:center;width:100%}
+.arrow-mid{display:flex;align-items:center;justify-content:center;font-size:28px;color:#E06418}
+.w-full{width:100%}
+.gap-stack{display:flex;flex-direction:column;gap:28px;width:100%}
+.gap-stack-sm{display:flex;flex-direction:column;gap:20px;width:100%}
+.cover-accent{background:linear-gradient(180deg,transparent,#E06418 40%,#E06418 60%,transparent)}
+.list-item{color:#4A4640}
+.list-item-dot{background:#E06418}
+.cta-card{background:#FFFFFF;border:1px solid rgba(224,100,24,0.3);border-radius:16px}
+.insight{color:#9A9288;border-top:1px solid rgba(0,0,0,0.08)}
+</style>
+</head>
+<body>
+<div class="progress" id="prog"></div>
+<div class="deck">
+
+  <!-- 1: Cover -->
+  <div class="slide active" id="s1">
+    <div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:22px;max-width:700px">
+      <span class="label fade-up" style="animation-delay:.08s">Module 05</span>
+      <h1 class="title fade-up" style="animation-delay:.18s">Shipping a Real Product</h1>
+      <div class="gold-line fade-up" style="animation-delay:.28s;margin:0 auto"></div>
+      <p class="subtitle fade-up" style="animation-delay:.38s">The checklist that actually matters.</p>
+    </div>
+  </div>
+
+  <!-- 2: The Gap -->
+  <div class="slide" id="s2">
+    <div class="gap-stack" style="max-width:900px">
+      <div>
+        <span class="label">The Gap</span>
+        <h2 class="heading" style="margin-top:8px">Works on my machine → People are paying for it</h2>
+      </div>
+      <div class="split-arrow stagger">
+        <div class="card card-red">
+          <span class="badge badge-red" style="margin-bottom:14px;display:inline-flex">BEFORE SHIP</span>
+          <h3 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:12px">"Works on my machine"</h3>
+          <ul class="cross-list">
+            <li>Hardcoded API keys in config</li>
+            <li>No error handling on edge cases</li>
+            <li>Debug logs still printing to console</li>
+            <li>Version is still "1.0.0-dev"</li>
+            <li>Only tested your own happy path</li>
+          </ul>
+        </div>
+        <div class="arrow-mid">→</div>
+        <div class="card card-green">
+          <span class="badge badge-green" style="margin-bottom:14px;display:inline-flex">AFTER SHIP</span>
+          <h3 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:12px">"People are paying for it"</h3>
+          <ul class="check-list">
+            <li>Credentials in env vars, not source code</li>
+            <li>Every error state has a user-facing message</li>
+            <li>Logs are production-safe</li>
+            <li>Version tagged, deploy config confirmed</li>
+            <li>Tested on real devices and slow connections</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3: Pre-ship code checklist -->
+  <div class="slide" id="s3">
+    <div class="gap-stack" style="max-width:900px">
+      <div>
+        <span class="label">Pre-Ship Code Checklist</span>
+        <h2 class="heading" style="margin-top:8px">Three things that always get missed</h2>
+      </div>
+      <div class="grid-3 stagger">
+        <div class="card card-orange">
+          <div style="font-size:28px;margin-bottom:12px">🔐</div>
+          <h3 style="font-size:16px;font-weight:600;color:#1A1916;margin-bottom:10px">Credentials Removed</h3>
+          <ul class="check-list">
+            <li>No hardcoded API keys in source</li>
+            <li>No test secrets committed to git</li>
+            <li>Env vars documented in README</li>
+            <li>.env in .gitignore confirmed</li>
+          </ul>
+        </div>
+        <div class="card card-orange">
+          <div style="font-size:28px;margin-bottom:12px">⚠️</div>
+          <h3 style="font-size:16px;font-weight:600;color:#1A1916;margin-bottom:10px">Error States Handled</h3>
+          <ul class="check-list">
+            <li>Network failures show a message</li>
+            <li>Empty states are designed</li>
+            <li>Form validation is complete</li>
+            <li>Auth errors don't crash the app</li>
+          </ul>
+        </div>
+        <div class="card card-orange">
+          <div style="font-size:28px;margin-bottom:12px">🚀</div>
+          <h3 style="font-size:16px;font-weight:600;color:#1A1916;margin-bottom:10px">Version + Deploy Config</h3>
+          <ul class="check-list">
+            <li>Version number updated</li>
+            <li>Production env vars set in host</li>
+            <li>Build runs clean locally</li>
+            <li>Deploy config reviewed</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4: Functional Testing -->
+  <div class="slide" id="s4">
+    <div class="gap-stack" style="max-width:720px">
+      <div>
+        <span class="label">Functional Testing</span>
+        <h2 class="heading" style="margin-top:8px">Four tests before every ship</h2>
+      </div>
+      <div class="steps stagger">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h4>Core User Path</h4>
+            <p>Walk the exact sequence a paying customer takes. Sign up → activate → get value. Every click, every screen, in order.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h4>Edge Cases</h4>
+            <p>Empty inputs, very long strings, special characters, duplicate accounts, expired sessions. Try to break it before someone else does.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h4>Error Recovery</h4>
+            <p>API down, payment fails, file upload times out. Can users recover gracefully, or are they stuck with a blank screen?</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <h4>Performance on Slow Connection</h4>
+            <p>Throttle to 3G in DevTools. Does it still work? Are there loading states? Does it timeout silently?</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5: React Native Checklist -->
+  <div class="slide" id="s5">
+    <div class="gap-stack" style="max-width:900px">
+      <div>
+        <span class="label">React Native Checklist</span>
+        <h2 class="heading" style="margin-top:8px">iOS and Android — each has its own gotchas</h2>
+      </div>
+      <div class="split stagger">
+        <div class="card card-orange">
+          <h3 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:16px">iOS</h3>
+          <ul class="check-list">
+            <li>Info.plist — all permissions declared</li>
+            <li>Bundle ID matches App Store Connect</li>
+            <li>EAS build config verified (eas.json)</li>
+            <li>TestFlight build uploaded and tested</li>
+            <li>App icons all sizes present</li>
+            <li>Privacy manifest if needed (iOS 17+)</li>
+          </ul>
+        </div>
+        <div class="card card-orange">
+          <h3 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:16px">Android</h3>
+          <ul class="check-list">
+            <li>Package name correct in app.json</li>
+            <li>Signing keystore configured in EAS</li>
+            <li>Play Console internal track uploaded</li>
+            <li>APK/AAB size checked (&lt; 150MB)</li>
+            <li>Adaptive icons configured</li>
+            <li>Target SDK version is current</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6: Web App Checklist -->
+  <div class="slide" id="s6">
+    <div class="gap-stack" style="max-width:900px">
+      <div>
+        <span class="label">Web App Checklist</span>
+        <h2 class="heading" style="margin-top:8px">Four things before you push to prod</h2>
+      </div>
+      <div class="grid-4 stagger">
+        <div class="card card-orange" style="text-align:center">
+          <div style="font-size:32px;margin-bottom:12px">📦</div>
+          <h3 style="font-size:14px;font-weight:600;color:#1A1916;margin-bottom:8px">Build Output</h3>
+          <p style="font-size:12px;color:#9A9288;line-height:1.5">npm run build completes without warnings. Bundle size checked.</p>
+          <div style="margin-top:14px"><span class="badge badge-green">✓ Verified</span></div>
+        </div>
+        <div class="card card-orange" style="text-align:center">
+          <div style="font-size:32px;margin-bottom:12px">🔑</div>
+          <h3 style="font-size:14px;font-weight:600;color:#1A1916;margin-bottom:8px">Env Vars</h3>
+          <p style="font-size:12px;color:#9A9288;line-height:1.5">All .env.local values set in hosting platform. No fallbacks to dev keys.</p>
+          <div style="margin-top:14px"><span class="badge badge-green">✓ Verified</span></div>
+        </div>
+        <div class="card card-orange" style="text-align:center">
+          <div style="font-size:32px;margin-bottom:12px">🔒</div>
+          <h3 style="font-size:14px;font-weight:600;color:#1A1916;margin-bottom:8px">CORS Headers</h3>
+          <p style="font-size:12px;color:#9A9288;line-height:1.5">API endpoints only accept your domain. Test with curl from a different origin.</p>
+          <div style="margin-top:14px"><span class="badge badge-green">✓ Verified</span></div>
+        </div>
+        <div class="card card-orange" style="text-align:center">
+          <div style="font-size:32px;margin-bottom:12px">🌐</div>
+          <h3 style="font-size:14px;font-weight:600;color:#1A1916;margin-bottom:8px">Domain + SSL</h3>
+          <p style="font-size:12px;color:#9A9288;line-height:1.5">Custom domain resolving. SSL cert valid. www redirect configured.</p>
+          <div style="margin-top:14px"><span class="badge badge-green">✓ Verified</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7: Gumroad Setup -->
+  <div class="slide" id="s7">
+    <div class="gap-stack" style="max-width:900px">
+      <div>
+        <span class="label">Gumroad Setup</span>
+        <h2 class="heading" style="margin-top:8px">Five fields that determine your revenue</h2>
+      </div>
+      <div class="split stagger">
+        <div class="card" style="background:#FFFFFF">
+          <h3 style="font-size:14px;font-weight:600;color:#E06418;margin-bottom:18px;letter-spacing:.05em;text-transform:uppercase">Critical Fields</h3>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div style="display:flex;gap:12px;align-items:flex-start">
+              <div style="min-width:26px;height:26px;border-radius:50%;background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#E06418">1</div>
+              <div><strong style="color:#1A1916;font-size:14px">Product Name</strong><p style="font-size:12px;color:#9A9288;margin-top:3px">Clear, benefit-driven. Searchable on Discover.</p></div>
+            </div>
+            <div style="display:flex;gap:12px;align-items:flex-start">
+              <div style="min-width:26px;height:26px;border-radius:50%;background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#E06418">2</div>
+              <div><strong style="color:#1A1916;font-size:14px">Description</strong><p style="font-size:12px;color:#9A9288;margin-top:3px">Who it's for + what they get + social proof.</p></div>
+            </div>
+            <div style="display:flex;gap:12px;align-items:flex-start">
+              <div style="min-width:26px;height:26px;border-radius:50%;background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#E06418">3</div>
+              <div><strong style="color:#1A1916;font-size:14px">Price</strong><p style="font-size:12px;color:#9A9288;margin-top:3px">Use $49 or under. Conversion cliff at $50.</p></div>
+            </div>
+            <div style="display:flex;gap:12px;align-items:flex-start">
+              <div style="min-width:26px;height:26px;border-radius:50%;background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#E06418">4</div>
+              <div><strong style="color:#1A1916;font-size:14px">Delivery Link</strong><p style="font-size:12px;color:#9A9288;margin-top:3px">Tested. Doesn't expire. Works on mobile.</p></div>
+            </div>
+            <div style="display:flex;gap:12px;align-items:flex-start">
+              <div style="min-width:26px;height:26px;border-radius:50%;background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#E06418">5</div>
+              <div><strong style="color:#1A1916;font-size:14px">Tags</strong><p style="font-size:12px;color:#9A9288;margin-top:3px">What someone would search. Enables Discover.</p></div>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="background:#FFFFFF;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:36px 24px">
+          <span class="label">Gumroad Discover</span>
+          <div class="stat-num">15–30%</div>
+          <div class="stat-label">of revenue once active</div>
+          <div style="width:80%;height:1px;background:rgba(0,0,0,0.08)"></div>
+          <p style="font-size:13px;color:#9A9288;line-height:1.6">Takes ~3 weeks to activate after your first sale. Free traffic you don't have to earn. Don't skip the tags field.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8: Pricing Chart -->
+  <div class="slide" id="s8">
+    <div class="gap-stack" style="max-width:760px">
+      <div>
+        <span class="label">Pricing Strategy</span>
+        <h2 class="heading" style="margin-top:8px">Conversion by Price Point</h2>
+      </div>
+      <div class="chart-wrap" style="height:clamp(200px,32vh,300px)">
+        <canvas id="pricingChart"></canvas>
+      </div>
+      <div class="card" style="background:rgba(224,100,24,0.05);border-color:rgba(224,100,24,0.2);padding:14px 20px">
+        <p style="font-size:14px;color:#4A4640;line-height:1.5"><strong style="color:#E06418">$49 is the sweet spot</strong> — stays above the $50 psychological cliff. Conversion drops nearly in half from $49 → $57.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 9: Launch Sequence -->
+  <div class="slide" id="s9">
+    <div class="gap-stack" style="max-width:720px">
+      <div>
+        <span class="label">Launch Sequence</span>
+        <h2 class="heading" style="margin-top:8px">The 7-day launch window</h2>
+      </div>
+      <div class="steps stagger">
+        <div class="step">
+          <div class="step-num" style="font-size:11px;font-weight:700">D-7</div>
+          <div class="step-content">
+            <h4>Teaser Post + Waitlist</h4>
+            <p>Drop a screenshot or demo. "Building X — drop your email for early access." Builds anticipation and gives you day-one buyers.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num" style="font-size:11px;font-weight:700">D0 AM</div>
+          <div class="step-content">
+            <h4>Gumroad Live + Reddit Posts</h4>
+            <p>Go live at 9am. Email your waitlist. Post in relevant subreddits. Show the thing, don't pitch it.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num" style="font-size:11px;font-weight:700">D0 PM</div>
+          <div class="step-content">
+            <h4>Twitter/X Thread</h4>
+            <p>The "I built this" thread. Problem → solution → demo → link. Tag relevant people. Real story, not promotion.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num" style="font-size:11px;font-weight:700">D+3</div>
+          <div class="step-content">
+            <h4>Testimonial / Proof Post</h4>
+            <p>Share an early buyer's result or direct feedback. Social proof closes fence-sitters. Even one real review counts.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num" style="font-size:11px;font-weight:700">D+7</div>
+          <div class="step-content">
+            <h4>Last-Chance Nudge</h4>
+            <p>"Price goes up at midnight" or "closing early access." Email + social. The simplest revenue spike in the playbook.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 10: Affiliate Stat -->
+  <div class="slide" id="s10">
+    <div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:24px;max-width:620px">
+      <span class="label fade-up" style="animation-delay:.05s">Affiliate Programs</span>
+      <div class="stat-num fade-up" style="font-size:clamp(72px,10vw,110px);animation-delay:.15s">3,247</div>
+      <p style="font-size:clamp(16px,2vw,21px);color:#4A4640;line-height:1.5" class="fade-up" style="animation-delay:.25s">
+        affiliates generated <strong style="color:#1A1916">$600,000</strong> for Justin Welsh
+      </p>
+      <p style="font-size:15px;color:#9A9288" class="fade-up" style="animation-delay:.3s">Standard commission: <strong style="color:#E06418">50%</strong></p>
+      <div class="gold-line fade-up" style="margin:0 auto;animation-delay:.35s"></div>
+      <span class="badge badge-orange fade-up" style="font-size:13px;padding:6px 18px;animation-delay:.42s">SET THIS UP ON DAY ONE</span>
+      <p style="font-size:14px;color:#9A9288;line-height:1.6;max-width:440px" class="fade-up" style="animation-delay:.5s">Every buyer is a potential affiliate. Enable it in Gumroad settings before you launch — not after.</p>
+    </div>
+  </div>
+
+  <!-- 11: Post-Ship Metrics -->
+  <div class="slide" id="s11">
+    <div class="gap-stack" style="max-width:960px">
+      <div>
+        <span class="label">Post-Ship Metrics</span>
+        <h2 class="heading" style="margin-top:8px">Know your benchmarks before you panic</h2>
+      </div>
+      <div class="grid-4 stagger">
+        <div class="card card-red" style="text-align:center;padding:22px 16px">
+          <div class="stat-num" style="font-size:clamp(28px,3.5vw,44px);background:none;-webkit-text-fill-color:#C43B3B;color:#C43B3B">55–65%</div>
+          <div class="stat-label">Cart Abandonment</div>
+          <p style="font-size:12px;color:#9A9288;margin-top:10px;line-height:1.5">Industry standard. Normal. The benchmark, not a failure signal.</p>
+        </div>
+        <div class="card card-orange" style="text-align:center;padding:22px 16px">
+          <div class="stat-num" style="font-size:clamp(28px,3.5vw,44px)">10–20%</div>
+          <div class="stat-label">Recovery Rate</div>
+          <p style="font-size:12px;color:#9A9288;margin-top:10px;line-height:1.5">Recoverable with a 2-email sequence. Gumroad sends one automatically.</p>
+        </div>
+        <div class="card card-orange" style="text-align:center;padding:22px 16px">
+          <div class="stat-num" style="font-size:clamp(28px,3.5vw,44px)">2–4%</div>
+          <div class="stat-label">Template Refund Rate</div>
+          <p style="font-size:12px;color:#9A9288;margin-top:10px;line-height:1.5">Healthy for templates/guides. Software: 5–10%. Above 10%? Fix the product.</p>
+        </div>
+        <div class="card card-orange" style="text-align:center;padding:22px 16px">
+          <div class="stat-num" style="font-size:clamp(28px,3.5vw,44px)">44%</div>
+          <div class="stat-label">Email Open Rate</div>
+          <p style="font-size:12px;color:#9A9288;margin-top:10px;line-height:1.5">Creator list benchmark. 4× the corporate average. Your list is your biggest asset.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 12: First 72 Hours -->
+  <div class="slide" id="s12">
+    <div class="gap-stack" style="max-width:720px">
+      <div>
+        <span class="label">First 72 Hours</span>
+        <h2 class="heading" style="margin-top:8px">What to watch and when to act</h2>
+      </div>
+      <div class="steps stagger">
+        <div class="step">
+          <div class="step-num" style="font-size:11px;font-weight:700">24h</div>
+          <div class="step-content">
+            <h4>Traffic vs Conversion Check</h4>
+            <p>Look at Gumroad views vs purchases. Good traffic, no purchases? Conversion problem — rewrite the page. No traffic at all? Distribution problem — get more posts out.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num" style="font-size:11px;font-weight:700">48h</div>
+          <div class="step-content">
+            <h4>Buyer Feedback Scan</h4>
+            <p>Email every buyer personally. "What nearly stopped you buying?" One email to 5–10 people surfaces every friction point. Fastest market research you'll ever do.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num" style="font-size:11px;font-weight:700">72h</div>
+          <div class="step-content">
+            <h4>The Decision Point</h4>
+            <p>0 sales: positioning or distribution? 1–5 sales: you have signal — double down on what drove them. 5+ sales: you have a product. Start affiliate outreach now.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 13: If Sales Are Slow -->
+  <div class="slide" id="s13">
+    <div class="gap-stack" style="max-width:900px">
+      <div>
+        <span class="label">Diagnosing Slow Sales</span>
+        <h2 class="heading" style="margin-top:8px">Three different problems, three different fixes</h2>
+      </div>
+      <div class="grid-3 stagger">
+        <div class="card card-orange">
+          <span class="badge badge-orange" style="margin-bottom:14px;display:inline-flex">DISTRIBUTION</span>
+          <h3 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:10px">Not Enough Eyes</h3>
+          <p style="font-size:13px;color:#4A4640;line-height:1.6;margin-bottom:12px">Your Gumroad page has very few views. This is not a conversion problem — it's a reach problem.</p>
+          <p style="font-size:13px;color:#9A9288;line-height:1.5"><strong style="color:#E06418">Fix:</strong> More posts, different channels, Reddit communities, DM partnerships.</p>
+        </div>
+        <div class="card card-orange">
+          <span class="badge badge-orange" style="margin-bottom:14px;display:inline-flex">CONVERSION</span>
+          <h3 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:10px">Page Isn't Convincing</h3>
+          <p style="font-size:13px;color:#4A4640;line-height:1.6;margin-bottom:12px">Traffic is coming in but not buying. High views, low purchases is the signal.</p>
+          <p style="font-size:13px;color:#9A9288;line-height:1.5"><strong style="color:#E06418">Fix:</strong> Rewrite the description, add social proof, clearer outcome statement.</p>
+        </div>
+        <div class="card card-orange">
+          <span class="badge badge-orange" style="margin-bottom:14px;display:inline-flex">PRODUCT</span>
+          <h3 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:10px">What Buyers Say</h3>
+          <p style="font-size:13px;color:#4A4640;line-height:1.6;margin-bottom:12px">Sales but then refunds. Buyers aren't getting the result the page promised them.</p>
+          <p style="font-size:13px;color:#9A9288;line-height:1.5"><strong style="color:#E06418">Fix:</strong> Read Discord + buyer replies. Ship a v2 built on exactly what they said.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 14: Action -->
+  <div class="slide" id="s14">
+    <div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:24px;max-width:560px">
+      <span class="label fade-up" style="animation-delay:.05s">This Week</span>
+      <h2 class="heading fade-up" style="animation-delay:.12s">Run through the pre-ship checklist.</h2>
+      <div class="gold-line fade-up" style="margin:0 auto;animation-delay:.2s"></div>
+      <div class="steps fade-up" style="text-align:left;animation-delay:.28s;width:100%">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h4>Credentials + error states + build config</h4>
+            <p>One hour of this prevents one public disaster.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h4>Set up Gumroad with all five fields</h4>
+            <p>Name, description, $49 or below, delivery link, tags.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h4>Enable affiliates before launch</h4>
+            <p>50% commission. Two minutes. Day one, not later.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <h4>Post the teaser today</h4>
+            <p>You don't need it finished. Ship the story before the product.</p>
+          </div>
+        </div>
+      </div>
+      <span class="badge badge-orange fade-up" style="font-size:13px;padding:6px 18px;animation-delay:.46s">SHIP THIS WEEK</span>
+    </div>
+  </div>
+
+</div>
+
+<div class="nav">
+  <button onclick="prev()">←</button>
+  <span id="ctr">1 / 14</span>
+  <button onclick="next()">→</button>
+</div>
+
+<script>
+const chartDefaults = {
+  responsive:true,maintainAspectRatio:false,
+  plugins:{legend:{display:false},tooltip:{backgroundColor:'#FFFFFF',borderColor:'rgba(224,100,24,0.3)',borderWidth:1,titleColor:'#E06418',bodyColor:'#4A4640',padding:12}},
+  scales:{x:{grid:{color:'rgba(0,0,0,0.06)'},ticks:{color:'#9A9288',font:{family:'Inter',size:12}}},y:{grid:{color:'rgba(0,0,0,0.06)'},ticks:{color:'#9A9288',font:{family:'Inter',size:12}}}}
+};
+
+let cur = 1;
+const total = 14;
+const done = {};
+
+function show(n) {
+  document.querySelectorAll('.slide').forEach(s => s.classList.remove('active'));
+  document.getElementById('s' + n).classList.add('active');
+  document.getElementById('ctr').textContent = n + ' / ' + total;
+  document.getElementById('prog').style.width = (n / total * 100) + '%';
+  if (n === 8 && !done[8]) { initPricing(); done[8] = true; }
+}
+function next() { if (cur < total) show(++cur); }
+function prev() { if (cur > 1) show(--cur); }
+document.addEventListener('keydown', e => {
+  if (['ArrowRight','ArrowDown',' '].includes(e.key)) next();
+  if (['ArrowLeft','ArrowUp'].includes(e.key)) prev();
+});
+
+function initPricing() {
+  const ctx = document.getElementById('pricingChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['$19', '$49', '$57', '$97', '$197'],
+      datasets: [{
+        data: [8.2, 7.8, 4.1, 3.2, 1.8],
+        backgroundColor: ['rgba(224,100,24,0.35)','rgba(224,100,24,0.92)','rgba(224,100,24,0.3)','rgba(224,100,24,0.22)','rgba(224,100,24,0.15)'],
+        borderColor: ['rgba(224,100,24,0.6)','#F07835','rgba(224,100,24,0.5)','rgba(224,100,24,0.4)','rgba(224,100,24,0.3)'],
+        borderWidth: 1,
+        borderRadius: 6
+      }]
+    },
+    options: {
+      ...chartDefaults,
+      plugins: {
+        ...chartDefaults.plugins,
+        tooltip: {
+          ...chartDefaults.plugins.tooltip,
+          callbacks: { label: ctx => ' ' + ctx.raw + '% conversion' }
+        }
+      },
+      scales: {
+        ...chartDefaults.scales,
+        y: {
+          ...chartDefaults.scales.y,
+          beginAtZero: true,
+          max: 10,
+          ticks: { ...chartDefaults.scales.y.ticks, callback: v => v + '%' }
+        }
+      }
+    }
+  });
+}
+
+show(1);
+</script>
+</body>
+</html>

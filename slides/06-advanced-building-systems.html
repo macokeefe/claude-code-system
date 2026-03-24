@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>06 — Building Systems</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#FAFAF8;color:#1A1916;font-family:'Inter',sans-serif}
+.deck{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+.slide{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:64px 80px;background:#FAFAF8;opacity:0;visibility:hidden;transition:opacity 0.35s ease}
+.slide.active{opacity:1;visibility:visible}
+.progress{position:fixed;top:0;left:0;height:2px;background:#E06418;transition:width 0.3s ease;z-index:100}
+.nav{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:20px;z-index:100}
+.nav button{background:rgba(0,0,0,0.05);border:1px solid rgba(0,0,0,0.12);color:#1A1916;width:38px;height:38px;border-radius:50%;cursor:pointer;font-size:16px;transition:all 0.2s}
+.nav button:hover{background:rgba(224,100,24,0.1);border-color:rgba(224,100,24,0.4)}
+.nav span{color:#9A9288;font-size:13px}
+.title{font-size:clamp(36px,5.5vw,68px);font-weight:700;line-height:1.1;letter-spacing:-0.02em;background:linear-gradient(135deg,#E06418,#F07835);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.subtitle{font-size:clamp(16px,2vw,22px);color:#4A4640;font-weight:400;line-height:1.5}
+.label{font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#E06418}
+.heading{font-size:clamp(24px,3.5vw,42px);font-weight:700;line-height:1.2;letter-spacing:-0.01em;color:#1A1916}
+.body{font-size:clamp(14px,1.6vw,18px);line-height:1.7;color:#4A4640}
+.small{color:#9A9288}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start;width:100%}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;width:100%}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;width:100%}
+.card{background:#FFFFFF;border:1px solid rgba(0,0,0,0.08);border-radius:12px;padding:24px;transition:border-color 0.2s}
+.card:hover{border-color:rgba(224,100,24,0.25)}
+.card-orange{border-top:2px solid #E06418}
+.card-green{border-top:2px solid #2D7A52}
+.card-red{border-top:2px solid #C43B3B;background:rgba(196,59,59,0.04)}
+.stat-num{font-size:clamp(40px,6vw,72px);font-weight:700;background:linear-gradient(135deg,#E06418,#F07835);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1}
+.stat-label{font-size:13px;color:#9A9288;margin-top:8px;text-transform:uppercase;letter-spacing:0.06em}
+.code-block{background:#EDE8DF;border:1px solid rgba(0,0,0,0.08);border-radius:10px;padding:20px 24px;font-family:'JetBrains Mono',monospace;font-size:clamp(11px,1.2vw,13px);line-height:1.8;color:#1A1916;overflow:auto;max-height:340px;white-space:pre}
+.code-comment{color:#9A9288}
+.code-key{color:#E06418}
+.code-val{color:#2D7A52}
+.code-str{color:#2B5FA0}
+.code-cmd{color:#C43B3B}
+.badge{display:inline-flex;align-items:center;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:500}
+.badge-orange{background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.25);color:#E06418}
+.badge-green{background:rgba(45,122,82,0.08);border:1px solid rgba(45,122,82,0.25);color:#2D7A52}
+.badge-red{background:rgba(196,59,59,0.08);border:1px solid rgba(196,59,59,0.25);color:#C43B3B}
+.divider{width:48px;height:2px;background:linear-gradient(90deg,#E06418,transparent);border-radius:2px}
+.steps{display:flex;flex-direction:column;gap:0;width:100%}
+.step{display:grid;grid-template-columns:40px 1fr;gap:20px;padding-bottom:20px;position:relative}
+.step:not(:last-child)::after{content:'';position:absolute;left:19px;top:40px;bottom:0;width:1px;background:rgba(224,100,24,0.2)}
+.step-num{width:40px;height:40px;border-radius:50%;background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.3);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:#E06418;flex-shrink:0}
+.step-content h4{font-size:16px;font-weight:600;color:#1A1916;margin-bottom:4px}
+.step-content p{font-size:14px;color:#4A4640;line-height:1.6}
+.gold-line{width:56px;height:3px;background:linear-gradient(90deg,#E06418,#F07835);border-radius:2px}
+.chart-wrap{position:relative;width:100%;height:clamp(180px,28vh,280px)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+.fade-up{opacity:0;animation:fadeUp 0.5s ease-out forwards}
+.stagger>*{opacity:0;animation:fadeUp 0.5s ease-out forwards}
+.stagger>*:nth-child(1){animation-delay:0.08s}
+.stagger>*:nth-child(2){animation-delay:0.18s}
+.stagger>*:nth-child(3){animation-delay:0.28s}
+.stagger>*:nth-child(4){animation-delay:0.38s}
+.stagger>*:nth-child(5){animation-delay:0.48s}
+/* local utils */
+.gap-stack{display:flex;flex-direction:column;gap:28px;width:100%}
+.check-list{list-style:none;display:flex;flex-direction:column;gap:9px}
+.check-list li{font-size:13px;color:#4A4640;padding-left:20px;position:relative;line-height:1.5}
+.check-list li::before{content:'✓';position:absolute;left:0;color:#2D7A52;font-weight:700}
+.dot-list{list-style:none;display:flex;flex-direction:column;gap:8px}
+.dot-list li{font-size:13px;color:#4A4640;padding-left:16px;position:relative;line-height:1.5}
+.dot-list li::before{content:'·';position:absolute;left:0;color:#E06418;font-weight:700;font-size:18px;line-height:1}
+/* Session timeline */
+.timeline-bar{display:flex;width:100%;height:64px;border-radius:10px;overflow:hidden;border:1px solid rgba(0,0,0,0.08)}
+.tl-seg{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 12px;position:relative;flex-shrink:0}
+.tl-seg:not(:last-child){border-right:1px solid rgba(0,0,0,0.08)}
+.tl-seg-label{font-size:11px;font-weight:600;color:#1A1916;text-align:center;line-height:1.2}
+.tl-seg-sub{font-size:10px;color:#9A9288;margin-top:3px;text-align:center}
+/* Compounding bars */
+.comp-bars{display:flex;align-items:flex-end;gap:32px;height:200px;padding-bottom:32px;position:relative}
+.comp-bar-wrap{display:flex;flex-direction:column;align-items:center;gap:10px}
+.comp-bar{border-radius:8px 8px 0 0;width:80px;background:rgba(224,100,24,0.15);border:1px solid rgba(224,100,24,0.3);border-bottom:none;position:relative;transition:all .3s}
+.comp-bar-num{position:absolute;top:-26px;left:50%;transform:translateX(-50%);font-size:11px;font-weight:600;color:#E06418;white-space:nowrap}
+.comp-bar-label{font-size:12px;color:#9A9288;text-align:center;line-height:1.4}
+/* Tuesday timeline grid */
+.day-grid{display:grid;grid-template-columns:100px 1fr;gap:0;width:100%;border:1px solid rgba(0,0,0,0.08);border-radius:10px;overflow:hidden}
+.day-time{background:#F4F1EB;padding:12px 16px;font-size:12px;font-weight:600;color:#E06418;border-bottom:1px solid rgba(0,0,0,0.06);display:flex;align-items:center}
+.day-event{background:#FFFFFF;padding:12px 16px;font-size:13px;color:#4A4640;border-bottom:1px solid rgba(0,0,0,0.06);display:flex;flex-direction:column;gap:3px}
+.day-event strong{color:#1A1916;font-size:13px;font-weight:600}
+.day-time:last-of-type,.day-event:last-of-type{border-bottom:none}
+/* prompt card grid */
+.grid-prompt{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto auto auto;gap:16px;width:100%}
+/* cover accent */
+.cover-accent{background:linear-gradient(180deg,transparent,#E06418 40%,#E06418 60%,transparent)}
+/* list items */
+.list-item{color:#4A4640}
+.list-item-dot{background:#E06418}
+/* cta card */
+.cta-card{background:#FFFFFF;border:1px solid rgba(224,100,24,0.3);border-radius:16px}
+/* insight */
+.insight{color:#9A9288;border-top:1px solid rgba(0,0,0,0.08)}
+</style>
+</head>
+<body>
+<div class="progress" id="prog"></div>
+<div class="deck">
+
+  <!-- 1: Cover -->
+  <div class="slide active" id="s1">
+    <div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:22px;max-width:720px">
+      <span class="label fade-up" style="animation-delay:.08s">Module 06</span>
+      <h1 class="title fade-up" style="animation-delay:.18s">Building Systems</h1>
+      <div class="gold-line fade-up" style="animation-delay:.28s;margin:0 auto"></div>
+      <p class="subtitle fade-up" style="animation-delay:.38s">The difference between using Claude Code and building fast with it.</p>
+    </div>
+  </div>
+
+  <!-- 2: System vs One-Off -->
+  <div class="slide" id="s2">
+    <div class="gap-stack" style="max-width:900px">
+      <div>
+        <span class="label">The Distinction</span>
+        <h2 class="heading" style="margin-top:8px">One-off workflow vs System</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:stretch" class="stagger">
+        <div class="card" style="background:#F4F1EB;border-color:rgba(0,0,0,0.06);opacity:.7">
+          <span class="badge" style="background:rgba(0,0,0,0.05);border:1px solid rgba(0,0,0,0.1);color:#9A9288;margin-bottom:16px;display:inline-flex">ONE-OFF</span>
+          <h3 style="font-size:15px;font-weight:600;color:#9A9288;margin-bottom:14px">Starts from scratch each time</h3>
+          <ul class="dot-list" style="color:#9A9288">
+            <li style="color:#9A9288">Re-explains the project every session</li>
+            <li style="color:#9A9288">Relies on memory for conventions</li>
+            <li style="color:#9A9288">Inconsistent code style between sessions</li>
+            <li style="color:#9A9288">First 20 minutes is always context-setting</li>
+            <li style="color:#9A9288">Scope creep goes untracked</li>
+          </ul>
+        </div>
+        <div class="card card-orange" style="border:1px solid rgba(224,100,24,0.2);border-top:2px solid #E06418;box-shadow:0 0 40px rgba(224,100,24,0.06)">
+          <span class="badge badge-orange" style="margin-bottom:16px;display:inline-flex">SYSTEM</span>
+          <h3 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:14px">Reusable, documented, faster each project</h3>
+          <ul class="dot-list">
+            <li>CLAUDE.md auto-loads project context</li>
+            <li>Prompt library means zero cold starts</li>
+            <li>Conventions enforced by the system</li>
+            <li>Every session starts executing immediately</li>
+            <li>Parking lot captures scope creep</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3: CLAUDE.md Template Library -->
+  <div class="slide" id="s3">
+    <div class="gap-stack" style="max-width:900px">
+      <div>
+        <span class="label">CLAUDE.md Template Library</span>
+        <h2 class="heading" style="margin-top:8px">One folder that makes every project faster</h2>
+      </div>
+      <div class="split stagger" style="align-items:start">
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <p style="font-size:15px;color:#4A4640;line-height:1.7">Every project type has different defaults. Instead of writing CLAUDE.md from scratch each time, keep a library of battle-tested templates.</p>
+          <ul class="dot-list" style="margin-top:4px">
+            <li>Copy → paste → fill in project specifics</li>
+            <li>Accumulates your learned conventions over time</li>
+            <li>Universal template handles 80% of projects</li>
+            <li>Stack-specific ones handle the last 20%</li>
+          </ul>
+          <div class="card" style="background:rgba(224,100,24,0.06);border-color:rgba(224,100,24,0.2);padding:14px 16px;margin-top:4px">
+            <p style="font-size:13px;color:#E06418;line-height:1.5">The best CLAUDE.md is one you write once and reuse ten times — updated as you learn what Claude needs to know.</p>
+          </div>
+        </div>
+        <div class="code-block"><span class="code-comment"># ~/templates/claude-md/</span>
+
+<span class="code-key">universal.md</span>          <span class="code-comment"># base template</span>
+<span class="code-key">react-native.md</span>       <span class="code-comment"># Expo + RN specifics</span>
+<span class="code-key">web-app.md</span>            <span class="code-comment"># Next.js / Vite / Vercel</span>
+<span class="code-key">api-backend.md</span>        <span class="code-comment"># Node + Express / Hono</span>
+
+<span class="code-comment">## universal.md structure:</span>
+
+<span class="code-cmd">## Project Overview</span>
+[one paragraph, what it does]
+
+<span class="code-cmd">## Current Focus</span>
+[what you're building RIGHT NOW]
+
+<span class="code-cmd">## Tech Stack</span>
+[language, framework, key deps]
+
+<span class="code-cmd">## Key Conventions</span>
+[naming, patterns, what to avoid]
+
+<span class="code-cmd">## Do Not Touch</span>
+[files / patterns off limits]</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4: Prompt Library -->
+  <div class="slide" id="s4">
+    <div class="gap-stack" style="max-width:900px">
+      <div>
+        <span class="label">Prompt Library</span>
+        <h2 class="heading" style="margin-top:8px">Five prompts that cover 90% of sessions</h2>
+      </div>
+      <div class="grid-prompt stagger">
+        <div class="card card-orange">
+          <span class="label" style="font-size:10px;margin-bottom:8px;display:block">KICKOFF</span>
+          <h3 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:6px">Session Start</h3>
+          <p style="font-size:13px;color:#9A9288;line-height:1.5">Reads CLAUDE.md, confirms current focus, lists the one thing to ship this session.</p>
+        </div>
+        <div class="card card-orange">
+          <span class="label" style="font-size:10px;margin-bottom:8px;display:block">DEBUG MODE</span>
+          <h3 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:6px">Error Investigation</h3>
+          <p style="font-size:13px;color:#9A9288;line-height:1.5">Structured error + expected vs actual behavior. No vague "it's broken" prompts.</p>
+        </div>
+        <div class="card card-orange">
+          <span class="label" style="font-size:10px;margin-bottom:8px;display:block">CODE REVIEW</span>
+          <h3 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:6px">Pre-Commit Check</h3>
+          <p style="font-size:13px;color:#9A9288;line-height:1.5">Review for bugs, edge cases, style violations, and security issues before committing.</p>
+        </div>
+        <div class="card card-orange">
+          <span class="label" style="font-size:10px;margin-bottom:8px;display:block">REFACTOR</span>
+          <h3 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:6px">Clean Up</h3>
+          <p style="font-size:13px;color:#9A9288;line-height:1.5">Specific file or function to clean. "Don't change behaviour, improve clarity and reduce duplication."</p>
+        </div>
+        <div class="card card-orange" style="grid-column:1 / -1">
+          <span class="label" style="font-size:10px;margin-bottom:8px;display:block">FEATURE FROM SPEC</span>
+          <h3 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:6px">Spec-Driven Build</h3>
+          <p style="font-size:13px;color:#9A9288;line-height:1.5">Paste the user story or spec, ask Claude to confirm understanding before writing a single line. Prevents building the wrong thing.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5: Session Structure -->
+  <div class="slide" id="s5">
+    <div class="gap-stack" style="max-width:860px">
+      <div>
+        <span class="label">Session Structure</span>
+        <h2 class="heading" style="margin-top:8px">The 50-minute block</h2>
+      </div>
+      <div class="timeline-bar stagger">
+        <div class="tl-seg" style="background:rgba(224,100,24,0.06);width:10%">
+          <div class="tl-seg-label">Kickoff</div>
+          <div class="tl-seg-sub">5 min</div>
+        </div>
+        <div class="tl-seg" style="background:rgba(224,100,24,0.12);flex:1">
+          <div class="tl-seg-label">Build</div>
+          <div class="tl-seg-sub">35 min</div>
+        </div>
+        <div class="tl-seg" style="background:rgba(224,100,24,0.07);width:14%">
+          <div class="tl-seg-label">Review</div>
+          <div class="tl-seg-sub">7 min</div>
+        </div>
+        <div class="tl-seg" style="background:rgba(224,100,24,0.04);width:6%">
+          <div class="tl-seg-label">Commit</div>
+          <div class="tl-seg-sub">3 min</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px" class="stagger">
+        <div>
+          <div style="font-size:12px;font-weight:600;color:#E06418;margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">Kickoff (5 min)</div>
+          <p style="font-size:13px;color:#9A9288;line-height:1.5">Read CLAUDE.md. Set the one goal. No scope creep — anything else goes to parking lot.</p>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:#E06418;margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">Build (35 min)</div>
+          <p style="font-size:13px;color:#9A9288;line-height:1.5">Execute the session goal. Don't get distracted by related improvements.</p>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:#E06418;margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">Review (7 min)</div>
+          <p style="font-size:13px;color:#9A9288;line-height:1.5">Run the code review prompt. Catch bugs and style issues before they're committed.</p>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:#E06418;margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">Commit (3 min)</div>
+          <p style="font-size:13px;color:#9A9288;line-height:1.5">Clean commit message. Update CLAUDE.md current focus. Done.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6: The Parking Lot -->
+  <div class="slide" id="s6">
+    <div class="gap-stack" style="max-width:900px">
+      <div>
+        <span class="label">The Parking Lot</span>
+        <h2 class="heading" style="margin-top:8px">How scope creep gets managed, not ignored</h2>
+      </div>
+      <div class="split stagger" style="align-items:start">
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <p style="font-size:15px;color:#4A4640;line-height:1.7">The biggest productivity killer in a Claude Code session is following interesting ideas mid-build. A parking lot captures them without breaking flow.</p>
+          <div class="card card-orange" style="padding:16px 20px">
+            <p style="font-size:13px;color:#4A4640;line-height:1.6"><strong style="color:#E06418">Rule:</strong> When a new idea comes up mid-session, add it to PARKING_LOT.md and keep going. Don't action it. Don't even think about it until the session is done.</p>
+          </div>
+          <ul class="dot-list" style="margin-top:4px">
+            <li>Protects the session goal</li>
+            <li>No good idea gets lost</li>
+            <li>Becomes your backlog naturally</li>
+            <li>Reviewed at start of next session</li>
+          </ul>
+        </div>
+        <div class="code-block"><span class="code-comment"># PARKING_LOT.md</span>
+<span class="code-comment"># Ideas captured mid-session — review next time</span>
+
+<span class="code-cmd">## 2026-03-24</span>
+<span class="code-key">- [ ]</span> <span class="code-val">Add dark mode toggle to settings</span>
+      <span class="code-comment"># came up while building auth flow</span>
+
+<span class="code-key">- [ ]</span> <span class="code-val">Cache API responses with React Query</span>
+      <span class="code-comment"># noticed repeated fetches in network tab</span>
+
+<span class="code-key">- [ ]</span> <span class="code-val">Refactor useAuth hook — it's getting long</span>
+      <span class="code-comment"># not urgent, works fine, just messy</span>
+
+<span class="code-key">- [ ]</span> <span class="code-val">Error boundary component — app crashes on null</span>
+      <span class="code-comment"># URGENT — do this next session</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7: Context Window Management -->
+  <div class="slide" id="s7">
+    <div class="gap-stack" style="max-width:900px">
+      <div>
+        <span class="label">Context Window Management</span>
+        <h2 class="heading" style="margin-top:8px">How to know when to reset — and how to do it</h2>
+      </div>
+      <div class="grid-3 stagger">
+        <div class="card card-orange">
+          <h3 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:12px">Signs You're Running Low</h3>
+          <ul class="dot-list">
+            <li>Vague, generic answers instead of specific ones</li>
+            <li>Claude starts repeating earlier suggestions</li>
+            <li>It ignores context you gave earlier</li>
+            <li>Code quality noticeably drops</li>
+            <li>Starts contradicting itself</li>
+          </ul>
+        </div>
+        <div class="card card-orange">
+          <h3 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:12px">How to Reset Without Losing Progress</h3>
+          <ul class="dot-list">
+            <li>Commit what you have first — always</li>
+            <li>Update CLAUDE.md current focus</li>
+            <li>Note key decisions made in the session</li>
+            <li>Start a fresh context window</li>
+            <li>New session reads CLAUDE.md — you're back</li>
+          </ul>
+        </div>
+        <div class="card card-orange">
+          <h3 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:12px">The Mid-Session Handoff Prompt</h3>
+          <div class="code-block" style="max-height:160px;font-size:11px;padding:12px 14px;margin-top:4px">"We're at about 70% context.
+Before we continue:
+
+1. Summarise what we've built
+   this session
+2. List any open decisions
+3. What's the next step?
+
+I'll start a fresh context with
+this summary."</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8: Multi-Project Workflow -->
+  <div class="slide" id="s8">
+    <div class="gap-stack" style="max-width:720px">
+      <div>
+        <span class="label">Multi-Project Workflow</span>
+        <h2 class="heading" style="margin-top:8px">How CLAUDE.md makes switching instant</h2>
+      </div>
+      <div class="steps stagger">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h4>Open Project Folder</h4>
+            <p>cd into the project. That's it. The system is already set up from last time.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h4>Claude Reads CLAUDE.md Automatically</h4>
+            <p>Full project context loaded — stack, conventions, what's off limits, current focus. Zero re-explaining.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h4>Resume Where You Left Off</h4>
+            <p>The "Current Focus" field in CLAUDE.md tells Claude exactly where you stopped. No memory required.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <h4>No Re-Explaining the Project</h4>
+            <p>Switch between three active projects in one day. Each one feels like you never left. That's the compounding value.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 9: Custom Skills -->
+  <div class="slide" id="s9">
+    <div class="gap-stack" style="max-width:900px">
+      <div>
+        <span class="label">Custom Skills</span>
+        <h2 class="heading" style="margin-top:8px">When writing a skill is worth the 20 minutes</h2>
+      </div>
+      <div class="grid-3 stagger">
+        <div class="card card-orange">
+          <div style="font-size:28px;margin-bottom:12px">🔄</div>
+          <h3 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:10px">Project-Specific Workflows</h3>
+          <p style="font-size:13px;color:#4A4640;line-height:1.6;margin-bottom:10px">You run the same sequence every time you work on a project — generate types, run migrations, sync env. Make it one command.</p>
+          <p style="font-size:12px;color:#9A9288"><strong style="color:#E06418">Signal:</strong> You've typed the same prompt three sessions in a row.</p>
+        </div>
+        <div class="card card-orange">
+          <div style="font-size:28px;margin-bottom:12px">📋</div>
+          <h3 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:10px">Repeated Multi-Step Processes</h3>
+          <p style="font-size:13px;color:#4A4640;line-height:1.6;margin-bottom:10px">Anything that takes 5+ back-and-forth exchanges to set up is a candidate. Create a component, add tests, update the index — that's one skill.</p>
+          <p style="font-size:12px;color:#9A9288"><strong style="color:#E06418">Signal:</strong> You wrote it in a doc or Notion page already.</p>
+        </div>
+        <div class="card card-orange">
+          <div style="font-size:28px;margin-bottom:12px">👥</div>
+          <h3 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:10px">Team Standardization</h3>
+          <p style="font-size:13px;color:#4A4640;line-height:1.6;margin-bottom:10px">If more than one person needs the same workflow, a skill is better than a Notion doc. Version controlled, always up to date, actually used.</p>
+          <p style="font-size:12px;color:#9A9288"><strong style="color:#E06418">Signal:</strong> Someone asked "how do you do X?" twice.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 10: NotebookLM Research Layer -->
+  <div class="slide" id="s10">
+    <div class="gap-stack" style="max-width:860px">
+      <div>
+        <span class="label">NotebookLM Research Layer</span>
+        <h2 class="heading" style="margin-top:8px">Research first, build on solid ground</h2>
+      </div>
+      <div class="split stagger" style="align-items:start">
+        <div class="steps">
+          <div class="step">
+            <div class="step-num" style="font-size:11px;font-weight:700">30m</div>
+            <div class="step-content">
+              <h4>Research Phase — Build the Notebook</h4>
+              <p>Create a NotebookLM notebook on the technical topic. Add docs, blog posts, papers. Let it synthesize.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num" style="font-size:11px;font-weight:700">15m</div>
+            <div class="step-content">
+              <h4>Query Phase — Ask Before Building</h4>
+              <p>"What are the gotchas with X?" "What does the community prefer for Y?" Get specific answers before writing code.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num" style="font-size:11px;font-weight:700">Build</div>
+            <div class="step-content">
+              <h4>Build Phase — Informed Decisions</h4>
+              <p>Fewer dead ends. Fewer wrong-architecture rebuilds. You know the landscape before you start.</p>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="card" style="background:rgba(224,100,24,0.06);border-color:rgba(224,100,24,0.2);text-align:center;padding:28px 24px">
+            <div class="stat-num" style="font-size:clamp(24px,3.5vw,40px)">30–60 min</div>
+            <div style="font-size:13px;color:#9A9288;margin-top:10px;line-height:1.5">of research up front can avoid <strong style="color:#E06418">1–2 days</strong> of rebuilding from wrong assumptions</div>
+          </div>
+          <div class="card" style="padding:16px 20px">
+            <h4 style="font-size:13px;font-weight:600;color:#1A1916;margin-bottom:8px">Good research questions:</h4>
+            <ul class="dot-list">
+              <li>"What are common mistakes with this approach?"</li>
+              <li>"What do teams regret at scale?"</li>
+              <li>"Is there a simpler way to achieve X?"</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 11: Building in Public Chart -->
+  <div class="slide" id="s11">
+    <div class="gap-stack" style="max-width:800px">
+      <div>
+        <span class="label">Building in Public</span>
+        <h2 class="heading" style="margin-top:8px">The compounding effect of building in public</h2>
+      </div>
+      <div class="chart-wrap" style="height:clamp(200px,30vh,280px)">
+        <canvas id="publicChart"></canvas>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="card" style="padding:14px 18px;display:flex;align-items:center;gap:12px">
+          <div style="width:12px;height:12px;border-radius:50%;background:#E06418;flex-shrink:0"></div>
+          <p style="font-size:13px;color:#4A4640;line-height:1.4">Builds in public — compound growth from audience, feedback loops, and distribution</p>
+        </div>
+        <div class="card" style="padding:14px 18px;display:flex;align-items:center;gap:12px">
+          <div style="width:12px;height:12px;border-radius:50%;background:#C8C0B8;flex-shrink:0"></div>
+          <p style="font-size:13px;color:#9A9288;line-height:1.4">Silent builder — ships without an audience. Has to start from zero every launch.</p>
+        </div>
+      </div>
+      <div class="card" style="background:rgba(224,100,24,0.05);border-color:rgba(224,100,24,0.2);padding:14px 20px">
+        <p style="font-size:14px;color:#4A4640">Creator email lists average <strong style="color:#E06418">44% open rates</strong> — 4× the corporate benchmark. Your audience is the compounding asset.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 12: Compounding Effect Bars -->
+  <div class="slide" id="s12">
+    <div class="gap-stack" style="max-width:760px;align-items:center">
+      <div style="text-align:center">
+        <span class="label">The Compounding Effect</span>
+        <h2 class="heading" style="margin-top:8px">Each system you build makes the next one faster</h2>
+      </div>
+      <div class="comp-bars stagger" style="justify-content:center;width:100%">
+        <div class="comp-bar-wrap">
+          <div class="comp-bar" style="height:70px">
+            <div class="comp-bar-num" style="color:#9A9288">3 weeks</div>
+          </div>
+          <div class="comp-bar-label" style="color:#9A9288">Project 1<br><span style="color:#B8B0A8;font-size:11px">Building the systems</span></div>
+        </div>
+        <div class="comp-bar-wrap">
+          <div class="comp-bar" style="height:120px;background:rgba(224,100,24,0.25);border-color:rgba(224,100,24,0.5)">
+            <div class="comp-bar-num">10 days</div>
+          </div>
+          <div class="comp-bar-label">Project 2<br><span style="color:#9A9288;font-size:11px">Reusing templates</span></div>
+        </div>
+        <div class="comp-bar-wrap">
+          <div class="comp-bar" style="height:180px;background:rgba(224,100,24,0.5);border-color:#E06418">
+            <div class="comp-bar-num" style="color:#E06418">4 days</div>
+          </div>
+          <div class="comp-bar-label">Project 3<br><span style="color:#9A9288;font-size:11px">Full system running</span></div>
+        </div>
+      </div>
+      <p style="font-size:14px;color:#9A9288;text-align:center;max-width:500px;line-height:1.7">The work isn't building faster on day one. It's building a system that compounds. By project three, you're shipping in days what took weeks before.</p>
+    </div>
+  </div>
+
+  <!-- 13: What Level 4 Looks Like -->
+  <div class="slide" id="s13">
+    <div class="gap-stack" style="max-width:820px">
+      <div>
+        <span class="label">What Level 4 Looks Like</span>
+        <h2 class="heading" style="margin-top:8px">A real Tuesday — full feature shipped in ~4 hours</h2>
+      </div>
+      <div class="day-grid stagger">
+        <div class="day-time">Morning</div>
+        <div class="day-event">
+          <strong>20 min research + planning</strong>
+          <span style="color:#9A9288;font-size:12px">NotebookLM query on the feature approach. CLAUDE.md updated with today's goal.</span>
+        </div>
+        <div class="day-time">Session 1</div>
+        <div class="day-event">
+          <strong>2 hrs — Execute Phase 1</strong>
+          <span style="color:#9A9288;font-size:12px">50-min block × 2. Core feature built and reviewed. Parking lot captures two ideas. Committed.</span>
+        </div>
+        <div class="day-time">Afternoon</div>
+        <div class="day-event">
+          <strong>Commit + Push</strong>
+          <span style="color:#9A9288;font-size:12px">Clean commit, PR open. 15-min break before session 2.</span>
+        </div>
+        <div class="day-time">Session 2</div>
+        <div class="day-event">
+          <strong>1 hr — Execute Phase 2</strong>
+          <span style="color:#9A9288;font-size:12px">Edge cases + error states + review prompt. Solid. Ready to ship.</span>
+        </div>
+        <div class="day-time">Evening</div>
+        <div class="day-event">
+          <strong>Ship update</strong>
+          <span style="color:#9A9288;font-size:12px">Deployed. Posted in Discord. Update thread on Twitter. CLAUDE.md updated for tomorrow.</span>
+        </div>
+      </div>
+      <div class="card" style="background:rgba(224,100,24,0.05);border-color:rgba(224,100,24,0.2);padding:14px 20px">
+        <p style="font-size:14px;color:#4A4640">Total active Claude Code time: <strong style="color:#E06418">~4 hours</strong>. Full feature shipped end-to-end. This is normal at Level 4.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 14: Action -->
+  <div class="slide" id="s14">
+    <div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:24px;max-width:580px">
+      <span class="label fade-up" style="animation-delay:.05s">This Week</span>
+      <h2 class="heading fade-up" style="animation-delay:.12s">Audit your current workflow.</h2>
+      <div class="gold-line fade-up" style="margin:0 auto;animation-delay:.2s"></div>
+      <div class="card fade-up" style="background:#FFFFFF;text-align:left;width:100%;animation-delay:.28s">
+        <h4 style="font-size:14px;font-weight:600;color:#E06418;margin-bottom:16px;letter-spacing:.06em;text-transform:uppercase">Three questions to ask yourself</h4>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;gap:14px;align-items:flex-start">
+            <div style="min-width:28px;height:28px;border-radius:50%;background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#E06418;flex-shrink:0">1</div>
+            <p style="font-size:14px;color:#4A4640;line-height:1.5">Do you have a CLAUDE.md in every active project? If not — that's your first 20 minutes today.</p>
+          </div>
+          <div style="display:flex;gap:14px;align-items:flex-start">
+            <div style="min-width:28px;height:28px;border-radius:50%;background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#E06418;flex-shrink:0">2</div>
+            <p style="font-size:14px;color:#4A4640;line-height:1.5">What prompt did you write three sessions in a row? That's your first custom skill.</p>
+          </div>
+          <div style="display:flex;gap:14px;align-items:flex-start">
+            <div style="min-width:28px;height:28px;border-radius:50%;background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#E06418;flex-shrink:0">3</div>
+            <p style="font-size:14px;color:#4A4640;line-height:1.5">Are you building in public? If not — what's the first post about your current project?</p>
+          </div>
+        </div>
+      </div>
+      <span class="badge badge-orange fade-up" style="font-size:13px;padding:6px 18px;animation-delay:.42s">THIS WEEK</span>
+    </div>
+  </div>
+
+</div>
+
+<div class="nav">
+  <button onclick="prev()">←</button>
+  <span id="ctr">1 / 14</span>
+  <button onclick="next()">→</button>
+</div>
+
+<script>
+const chartDefaults = {
+  responsive:true,maintainAspectRatio:false,
+  plugins:{legend:{display:false},tooltip:{backgroundColor:'#FFFFFF',borderColor:'rgba(224,100,24,0.3)',borderWidth:1,titleColor:'#1A1916',bodyColor:'#4A4640',padding:12}},
+  scales:{x:{grid:{color:'rgba(0,0,0,0.06)'},ticks:{color:'#9A9288',font:{family:'Inter',size:12}}},y:{grid:{color:'rgba(0,0,0,0.06)'},ticks:{color:'#9A9288',font:{family:'Inter',size:12}}}}
+};
+
+let cur = 1;
+const total = 14;
+const done = {};
+
+function show(n) {
+  document.querySelectorAll('.slide').forEach(s => s.classList.remove('active'));
+  document.getElementById('s' + n).classList.add('active');
+  document.getElementById('ctr').textContent = n + ' / ' + total;
+  document.getElementById('prog').style.width = (n / total * 100) + '%';
+  if (n === 11 && !done[11]) { initPublic(); done[11] = true; }
+}
+function next() { if (cur < total) show(++cur); }
+function prev() { if (cur > 1) show(--cur); }
+document.addEventListener('keydown', e => {
+  if (['ArrowRight','ArrowDown',' '].includes(e.key)) next();
+  if (['ArrowLeft','ArrowUp'].includes(e.key)) prev();
+});
+
+function initPublic() {
+  const ctx = document.getElementById('publicChart').getContext('2d');
+  const labels = ['Month 1','Month 2','Month 3','Month 4','Month 5','Month 6'];
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Builds in Public',
+          data: [120, 280, 520, 980, 1800, 3400],
+          borderColor: '#E06418',
+          backgroundColor: 'rgba(224,100,24,0.08)',
+          borderWidth: 2,
+          pointBackgroundColor: '#E06418',
+          pointRadius: 4,
+          fill: true,
+          tension: 0.4
+        },
+        {
+          label: 'Silent Builder',
+          data: [80, 110, 130, 155, 175, 200],
+          borderColor: '#C8C0B8',
+          backgroundColor: 'rgba(200,192,184,0.06)',
+          borderWidth: 1.5,
+          pointBackgroundColor: '#C8C0B8',
+          pointRadius: 3,
+          fill: true,
+          tension: 0.4,
+          borderDash: [4, 4]
+        }
+      ]
+    },
+    options: {
+      ...chartDefaults,
+      plugins: {
+        ...chartDefaults.plugins,
+        legend: { display: false },
+        tooltip: {
+          ...chartDefaults.plugins.tooltip,
+          callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + ctx.raw.toLocaleString() + ' followers' }
+        }
+      },
+      scales: {
+        ...chartDefaults.scales,
+        y: {
+          ...chartDefaults.scales.y,
+          beginAtZero: true,
+          ticks: { ...chartDefaults.scales.y.ticks, callback: v => v >= 1000 ? (v/1000).toFixed(1) + 'k' : v }
+        }
+      }
+    }
+  });
+}
+
+show(1);
+</script>
+</body>
+</html>

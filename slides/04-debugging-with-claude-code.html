@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Debugging with Claude Code</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#FAFAF8;--bg-2:#F4F1EB;--bg-3:#EDE8DF;
+  --orange:#E06418;--orange-light:#F07835;--orange-dim:rgba(224,100,24,0.08);--orange-border:rgba(224,100,24,0.22);
+  --text:#1A1916;--text-2:#4A4640;--text-3:#9A9288;
+  --code-bg:#EDE8DF;--code-border:rgba(0,0,0,0.08);--green:#2D7A52;--red:#C43B3B;--blue:#2B5FA0;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#FAFAF8;color:#1A1916;font-family:'Inter',sans-serif}
+.deck{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+.slide{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:64px 80px;opacity:0;visibility:hidden;transition:opacity 0.35s ease;background:#FAFAF8}
+.slide.active{opacity:1;visibility:visible}
+.progress{position:fixed;top:0;left:0;height:2px;background:#E06418;transition:width 0.3s ease;z-index:100}
+.nav{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:20px;z-index:100}
+.nav button{background:rgba(0,0,0,0.05);border:1px solid rgba(0,0,0,0.12);color:#1A1916;width:38px;height:38px;border-radius:50%;cursor:pointer;font-size:16px;transition:all 0.2s}
+.nav button:hover{background:rgba(224,100,24,0.1);border-color:rgba(224,100,24,0.4)}
+.nav span{color:#9A9288;font-size:13px}
+.title{font-size:clamp(36px,5.5vw,68px);font-weight:700;line-height:1.1;letter-spacing:-0.02em;background:linear-gradient(135deg,#E06418,#F07835);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.subtitle{font-size:clamp(16px,2vw,22px);color:#4A4640;font-weight:400;line-height:1.5}
+.label{font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#E06418}
+.heading{font-size:clamp(24px,3.5vw,42px);font-weight:700;line-height:1.2;letter-spacing:-0.01em;color:#1A1916}
+.body{font-size:clamp(14px,1.6vw,18px);line-height:1.7;color:#4A4640}
+.small{color:#9A9288}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;width:100%}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;width:100%}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;width:100%}
+.card{background:#FFFFFF;border:1px solid rgba(0,0,0,0.08);border-radius:12px;padding:24px;transition:border-color 0.2s}
+.card:hover{border-color:rgba(224,100,24,0.25)}
+.card-orange{border-top:2px solid #E06418}
+.card-green{border-top:2px solid #2D7A52}
+.card-red{border-top:2px solid #C43B3B;background:rgba(196,59,59,0.04)}
+.stat-num{font-size:clamp(40px,6vw,72px);font-weight:700;background:linear-gradient(135deg,#E06418,#F07835);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1}
+.stat-label{font-size:13px;color:#9A9288;margin-top:8px;text-transform:uppercase;letter-spacing:0.06em}
+.code-block{background:#EDE8DF;border:1px solid rgba(0,0,0,0.08);border-radius:10px;padding:20px 24px;font-family:'JetBrains Mono',monospace;font-size:clamp(11px,1.2vw,13px);line-height:1.8;color:#1A1916;overflow:auto;max-height:340px;white-space:pre}
+.code-comment{color:#9A9288}.code-key{color:#E06418}.code-val{color:#2D7A52}.code-str{color:#2B5FA0}.code-cmd{color:#C43B3B}
+.badge{display:inline-flex;align-items:center;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:500}
+.badge-orange{background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.25);color:#E06418}
+.badge-green{background:rgba(45,122,82,0.08);border:1px solid rgba(45,122,82,0.25);color:#2D7A52}
+.badge-red{background:rgba(196,59,59,0.08);border:1px solid rgba(196,59,59,0.25);color:#C43B3B}
+.divider{width:48px;height:2px;background:linear-gradient(90deg,#E06418,transparent);border-radius:2px}
+.steps{display:flex;flex-direction:column;gap:0;width:100%}
+.step{display:grid;grid-template-columns:40px 1fr;gap:20px;padding-bottom:20px;position:relative}
+.step:not(:last-child)::after{content:'';position:absolute;left:19px;top:40px;bottom:0;width:1px;background:rgba(224,100,24,0.2)}
+.step-num{width:40px;height:40px;border-radius:50%;background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.3);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:#E06418;flex-shrink:0}
+.step-content h4{font-size:16px;font-weight:600;color:#1A1916;margin-bottom:4px}
+.step-content p{font-size:14px;color:#4A4640;line-height:1.6}
+.gold-line{width:56px;height:3px;background:linear-gradient(90deg,#E06418,#F07835);border-radius:2px}
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+@keyframes scaleIn{from{opacity:0;transform:scale(0.96)}to{opacity:1;transform:scale(1)}}
+.fade-up{opacity:0;animation:fadeUp 0.5s ease-out forwards}
+.stagger>*{opacity:0;animation:fadeUp 0.5s ease-out forwards}
+.stagger>*:nth-child(1){animation-delay:0.08s}
+.stagger>*:nth-child(2){animation-delay:0.18s}
+.stagger>*:nth-child(3){animation-delay:0.28s}
+.stagger>*:nth-child(4){animation-delay:0.38s}
+.stagger>*:nth-child(5){animation-delay:0.48s}
+
+/* extras */
+.center-col{display:flex;flex-direction:column;align-items:center;text-align:center}
+.loop-container{display:flex;flex-direction:column;align-items:center;gap:0;width:100%;max-width:500px}
+.loop-node{background:rgba(196,59,59,0.06);border:1px solid rgba(196,59,59,0.22);border-radius:10px;padding:14px 24px;text-align:center;width:100%}
+.loop-node h4{font-size:15px;font-weight:600;color:#C43B3B}
+.loop-node p{font-size:12px;color:#4A4640;margin-top:2px}
+.loop-arrow{color:#C43B3B;font-size:16px;padding:4px 0;line-height:1}
+.cta-step{display:flex;align-items:flex-start;gap:16px;padding:10px 0}
+.cta-num{width:32px;height:32px;border-radius:50%;background:rgba(224,100,24,0.1);border:1px solid rgba(224,100,24,0.35);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#E06418;flex-shrink:0;margin-top:2px}
+.cta-text h4{font-size:16px;font-weight:600;color:#1A1916}
+.cta-text p{font-size:14px;color:#4A4640}
+.cta-card{background:#FFFFFF;border:1px solid rgba(224,100,24,0.3);border-radius:16px}
+.check-list{display:flex;flex-direction:column;gap:10px}
+.check-item{display:flex;align-items:flex-start;gap:10px;font-size:14px;color:#4A4640}
+.check-item.yes .check-icon{color:#2D7A52}
+.check-item.no .check-icon{color:#C43B3B}
+.check-icon{font-weight:700;flex-shrink:0;font-size:15px}
+.list-item{color:#4A4640}
+.list-item-dot{background:#E06418}
+.cover-accent{background:linear-gradient(180deg,transparent,#E06418 40%,#E06418 60%,transparent)}
+.insight{color:#9A9288;border-top:1px solid rgba(0,0,0,0.08)}
+</style>
+</head>
+<body>
+<div id="progress" class="progress"></div>
+
+<div class="deck">
+
+  <!-- SLIDE 1: Cover -->
+  <div class="slide active center-col">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:20px" class="stagger">
+      <h1 class="title">Debugging with Claude Code</h1>
+      <div class="gold-line"></div>
+      <p class="subtitle">Stop guessing. Start closing the loop.</p>
+    </div>
+  </div>
+
+  <!-- SLIDE 2: Why AI debugging fails -->
+  <div class="slide center-col">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:28px;width:100%">
+      <div class="fade-up" style="text-align:center">
+        <div class="label" style="margin-bottom:8px">The failure pattern</div>
+        <h2 class="heading">The loop that kills your momentum</h2>
+      </div>
+      <div class="loop-container stagger">
+        <div class="loop-node">
+          <h4>Claude guesses</h4>
+          <p>Generates a fix based on incomplete context</p>
+        </div>
+        <div class="loop-arrow">↓</div>
+        <div class="loop-node">
+          <h4>You apply it</h4>
+          <p>Copy-paste, run, test</p>
+        </div>
+        <div class="loop-arrow">↓</div>
+        <div class="loop-node">
+          <h4>Still broken</h4>
+          <p>Different error, or same error, or new error</p>
+        </div>
+        <div class="loop-arrow">↓</div>
+        <div class="loop-node">
+          <h4>Claude guesses again</h4>
+          <p>No new information. Another shot in the dark.</p>
+        </div>
+        <div class="loop-arrow" style="color:#E06418">↻ repeat</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 3: Core principle -->
+  <div class="slide center-col">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:24px;max-width:700px" class="stagger">
+      <div class="label">The core principle</div>
+      <h2 style="font-size:clamp(32px,5vw,60px);font-weight:700;line-height:1.1;letter-spacing:-0.02em;background:linear-gradient(135deg,#E06418,#F07835);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-align:center">Hypothesis before solution.</h2>
+      <div class="gold-line"></div>
+      <p class="body" style="text-align:center">Before Claude writes a single line of fix code, it should state what it thinks is wrong and why. A named hypothesis is testable. A guess is not.</p>
+      <p class="body" style="text-align:center">This one shift turns debugging from a slot machine into a process.</p>
+    </div>
+  </div>
+
+  <!-- SLIDE 4: The Debug Mode prompt -->
+  <div class="slide">
+    <div style="width:100%;display:flex;flex-direction:column;gap:24px">
+      <div class="fade-up" style="display:flex;align-items:center;gap:16px">
+        <span class="badge badge-orange">THE PROMPT</span>
+        <div class="label">Debug mode template</div>
+      </div>
+      <div class="code-block fade-up" style="max-height:420px"><span class="code-comment">Enter debug mode. Do NOT write any code yet.
+
+First, state your hypothesis:
+- What do you think is causing this bug?
+- Why do you think that?
+- What evidence supports it?
+
+Then propose ONE test to validate your hypothesis before we fix anything.
+
+---</span>
+
+<span class="code-key">BUG REPORT</span>
+
+<span class="code-cmd">Expected:</span> <span class="code-str">[EXPECTED BEHAVIOR]</span>
+<span class="code-cmd">Actual:</span>   <span class="code-str">[ACTUAL BEHAVIOR]</span>
+
+<span class="code-cmd">Error:</span>
+<span class="code-str">[PASTE ERROR MESSAGE / STACK TRACE HERE]</span>
+
+<span class="code-cmd">What I've tried:</span>
+<span class="code-str">[WHAT YOU ALREADY ATTEMPTED]</span>
+
+<span class="code-cmd">Context:</span>
+<span class="code-str">[RELEVANT FILE / FUNCTION / COMPONENT]</span></div>
+    </div>
+  </div>
+
+  <!-- SLIDE 5: Step 1 — Define the problem -->
+  <div class="slide">
+    <div style="width:100%;display:flex;flex-direction:column;gap:32px">
+      <div class="fade-up">
+        <div class="label" style="margin-bottom:8px">Step 1</div>
+        <h2 class="heading">Define the problem precisely</h2>
+      </div>
+      <div class="grid-4 stagger">
+        <div class="card card-orange">
+          <div style="font-size:11px;font-weight:600;color:#E06418;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px">01 — Expected</div>
+          <h4 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:8px">Expected behavior</h4>
+          <p style="font-size:13px;color:#4A4640;line-height:1.6">What should happen? Be specific. "The button submits the form and redirects to /dashboard" beats "it should work."</p>
+        </div>
+        <div class="card card-orange">
+          <div style="font-size:11px;font-weight:600;color:#E06418;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px">02 — Actual</div>
+          <h4 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:8px">Actual behavior</h4>
+          <p style="font-size:13px;color:#4A4640;line-height:1.6">What actually happens? Include the exact error message, not a paraphrase. Verbatim is better.</p>
+        </div>
+        <div class="card card-orange">
+          <div style="font-size:11px;font-weight:600;color:#E06418;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px">03 — Error</div>
+          <h4 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:8px">Error message</h4>
+          <p style="font-size:13px;color:#4A4640;line-height:1.6">Full stack trace if available. Include the first line AND the line that points to your code — both matter.</p>
+        </div>
+        <div class="card card-orange">
+          <div style="font-size:11px;font-weight:600;color:#E06418;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px">04 — Tried</div>
+          <h4 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:8px">What you've tried</h4>
+          <p style="font-size:13px;color:#4A4640;line-height:1.6">Eliminates dead ends. Stops Claude from suggesting the exact thing you already tried five minutes ago.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 6: Step 2 — Form a hypothesis -->
+  <div class="slide">
+    <div style="width:100%;display:flex;flex-direction:column;gap:32px">
+      <div class="fade-up">
+        <div class="label" style="margin-bottom:8px">Step 2</div>
+        <h2 class="heading">Form a hypothesis</h2>
+      </div>
+      <div class="split fade-up">
+        <div style="background:rgba(45,122,82,0.04);border:1px solid rgba(45,122,82,0.25);border-radius:12px;padding:28px">
+          <h4 style="font-size:15px;font-weight:600;color:#2D7A52;margin-bottom:16px">Good hypothesis</h4>
+          <p style="font-size:13px;color:#4A4640;line-height:1.6;margin-bottom:16px">Specific, testable, points to a mechanism. You can design one experiment to validate or refute it.</p>
+          <div style="background:rgba(45,122,82,0.08);border-radius:8px;padding:14px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#2D7A52;line-height:1.7">"The JWT token is expiring before the API call completes because the client clock is off by 5 minutes. Test: check token exp claim vs server time."</div>
+        </div>
+        <div style="background:rgba(196,59,59,0.04);border:1px solid rgba(196,59,59,0.25);border-radius:12px;padding:28px">
+          <h4 style="font-size:15px;font-weight:600;color:#C43B3B;margin-bottom:16px">Bad hypothesis</h4>
+          <p style="font-size:13px;color:#4A4640;line-height:1.6;margin-bottom:16px">Vague, untestable, or just restates the symptom. There's no experiment you could run to confirm it.</p>
+          <div style="background:rgba(196,59,59,0.08);border-radius:8px;padding:14px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#C43B3B;line-height:1.7">"Something is wrong with the auth. Maybe the token isn't working right or there's a network issue somewhere."</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 7: Step 3 — Test one thing -->
+  <div class="slide center-col">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:24px;max-width:640px" class="stagger">
+      <div class="label">Step 3</div>
+      <div class="stat-num" style="font-size:clamp(60px,10vw,120px)">One thing.</div>
+      <div class="gold-line"></div>
+      <p class="body" style="text-align:center">Every time you change multiple things at once, you break the feedback loop. If it works, you don't know why. If it doesn't, you don't know why either.</p>
+      <p class="body" style="text-align:center">Change one variable per test. Confirm or refute the hypothesis. Then move to the next candidate.</p>
+    </div>
+  </div>
+
+  <!-- SLIDE 8: Step 4 — Close the loop -->
+  <div class="slide">
+    <div style="width:100%;display:flex;flex-direction:column;gap:32px">
+      <div class="fade-up">
+        <div class="label" style="margin-bottom:8px">Step 4</div>
+        <h2 class="heading">Close the loop</h2>
+      </div>
+      <div class="split fade-up">
+        <div style="background:rgba(45,122,82,0.04);border:1px solid rgba(45,122,82,0.25);border-radius:12px;padding:28px">
+          <h4 style="font-size:15px;font-weight:600;color:#2D7A52;margin-bottom:16px">It works →</h4>
+          <div class="check-list">
+            <div class="check-item yes"><span class="check-icon">✓</span><p>Commit with a message explaining what was wrong, not just what changed</p></div>
+            <div class="check-item yes"><span class="check-icon">✓</span><p>Document the root cause in a comment near the fix</p></div>
+            <div class="check-item yes"><span class="check-icon">✓</span><p>Update CLAUDE.md if this reveals something about your stack's behavior</p></div>
+          </div>
+        </div>
+        <div style="background:rgba(196,59,59,0.04);border:1px solid rgba(196,59,59,0.25);border-radius:12px;padding:28px">
+          <h4 style="font-size:15px;font-weight:600;color:#C43B3B;margin-bottom:16px">It doesn't →</h4>
+          <div class="check-list">
+            <div class="check-item no"><span class="check-icon">→</span><p style="color:#4A4640">Refine the hypothesis with what the test result told you</p></div>
+            <div class="check-item no"><span class="check-icon">→</span><p style="color:#4A4640">Move to the next candidate in the hypothesis list</p></div>
+            <div class="check-item no"><span class="check-icon">→</span><p style="color:#4A4640">If three tests fail, consider resetting Claude's context entirely</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 9: When to reset -->
+  <div class="slide">
+    <div style="width:100%;display:flex;flex-direction:column;gap:32px">
+      <div class="fade-up">
+        <div class="label" style="margin-bottom:8px">Context rot</div>
+        <h2 class="heading">When to reset and start fresh</h2>
+      </div>
+      <div class="grid-3 stagger">
+        <div class="card card-red">
+          <h4 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:8px">Signal: circular suggestions</h4>
+          <p style="font-size:13px;color:#4A4640;line-height:1.6;margin-bottom:12px">Claude keeps recommending things it already suggested, or contradicting its own earlier advice.</p>
+          <div style="font-size:12px;color:#E06418;font-weight:500;margin-top:8px">Reset: start a new conversation, paste only the minimal bug report</div>
+        </div>
+        <div class="card card-red">
+          <h4 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:8px">Signal: hedging everything</h4>
+          <p style="font-size:13px;color:#4A4640;line-height:1.6;margin-bottom:12px">"It could be X, or maybe Y, or possibly Z" with no confidence ranking. Claude is guessing randomly.</p>
+          <div style="font-size:12px;color:#E06418;font-weight:500;margin-top:8px">Reset: fresh context, force hypothesis format from the start</div>
+        </div>
+        <div class="card card-red">
+          <h4 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:8px">Signal: 5+ failed fixes</h4>
+          <p style="font-size:13px;color:#4A4640;line-height:1.6;margin-bottom:12px">You've been in the same conversation for too long. Context is noisy and Claude is anchored to bad assumptions.</p>
+          <div style="font-size:12px;color:#E06418;font-weight:500;margin-top:8px">Reset: new session, bring only the relevant files + error</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 10: Regression bugs -->
+  <div class="slide">
+    <div class="split">
+      <div style="display:flex;flex-direction:column;gap:20px" class="fade-up">
+        <div class="label">Regression bugs</div>
+        <h2 class="heading">The hardest kind</h2>
+        <div class="gold-line"></div>
+        <p class="body">Regressions are bugs that didn't exist before. Something you changed broke something that worked. Claude needs to know the before-state to reason about the after-state.</p>
+        <p class="body">Always tell Claude what changed recently — a dependency bump, a refactor, a merge. The diff is the hypothesis seed.</p>
+      </div>
+      <div class="fade-up">
+        <div class="code-block"><span class="code-comment">This is a regression bug.</span>
+<span class="code-comment">It worked before, now it doesn't.</span>
+
+<span class="code-key">What changed recently:</span>
+<span class="code-str">- Upgraded react-navigation 6 → 7</span>
+<span class="code-str">- Merged the auth refactor PR</span>
+<span class="code-str">- Updated Node 18 → 22</span>
+
+<span class="code-key">Last known good state:</span>
+<span class="code-str">commit abc123 (2 days ago)</span>
+
+<span class="code-key">Error now:</span>
+<span class="code-str">TypeError: Cannot read property 'navigate'
+of undefined at HomeScreen.tsx:47</span>
+
+<span class="code-comment">Hypothesis before fix, please.</span>
+<span class="code-comment">Which change most likely caused this?</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 11: Performance debugging -->
+  <div class="slide">
+    <div class="split">
+      <div style="display:flex;flex-direction:column;gap:20px" class="fade-up">
+        <div class="label">Performance debugging</div>
+        <h2 class="heading">Measure before you fix</h2>
+        <div class="gold-line"></div>
+        <p class="body">Performance bugs need a different approach. You can't fix what you haven't measured. Claude needs numbers, not vibes — "feels slow" is not a bug report.</p>
+        <p class="body">Profile first, then bring Claude the data. A flame graph screenshot plus the specific bottleneck is 10x more useful than a description.</p>
+      </div>
+      <div class="fade-up">
+        <div class="code-block"><span class="code-comment">Performance issue — measure first mode.</span>
+<span class="code-comment">Do NOT suggest fixes yet.</span>
+
+<span class="code-key">Symptom:</span>
+<span class="code-str">FlatList scrolling drops to ~30fps
+with 200+ items</span>
+
+<span class="code-key">Measured:</span>
+<span class="code-str">- JS thread: 12ms avg frame time
+- Re-renders: 47 per scroll event
+- Memory: 280MB (up from 90MB)</span>
+
+<span class="code-key">Profile output:</span>
+<span class="code-str">[paste Flipper / Instruments output]</span>
+
+<span class="code-comment">What's causing the re-render spike?
+Where should I look first?</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 12: Build/config errors -->
+  <div class="slide">
+    <div style="width:100%;display:flex;flex-direction:column;gap:32px">
+      <div class="fade-up">
+        <div class="label" style="margin-bottom:8px">Build &amp; config errors</div>
+        <h2 class="heading">What to paste. What not to.</h2>
+      </div>
+      <div class="split fade-up">
+        <div>
+          <h4 style="font-size:14px;font-weight:600;color:#2D7A52;margin-bottom:16px;text-transform:uppercase;letter-spacing:0.06em">Paste this</h4>
+          <div class="check-list">
+            <div class="check-item yes"><span class="check-icon">✓</span><p>The exact error line from the terminal — not a screenshot</p></div>
+            <div class="check-item yes"><span class="check-icon">✓</span><p>The 5–10 lines of stack trace pointing to your code</p></div>
+            <div class="check-item yes"><span class="check-icon">✓</span><p>The relevant config section (package.json, tsconfig, build config)</p></div>
+            <div class="check-item yes"><span class="check-icon">✓</span><p>The command you ran to trigger the error</p></div>
+          </div>
+        </div>
+        <div>
+          <h4 style="font-size:14px;font-weight:600;color:#C43B3B;margin-bottom:16px;text-transform:uppercase;letter-spacing:0.06em">Don't paste this</h4>
+          <div class="check-list">
+            <div class="check-item no"><span class="check-icon">✗</span><p>The entire 400-line build log — Claude will anchor on the wrong part</p></div>
+            <div class="check-item no"><span class="check-icon">✗</span><p>Unrelated config files that aren't part of the error path</p></div>
+            <div class="check-item no"><span class="check-icon">✗</span><p>Files you didn't recently change — noise, not signal</p></div>
+            <div class="check-item no"><span class="check-icon">✗</span><p>A vague description instead of the actual error text</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 13: The debug log -->
+  <div class="slide">
+    <div class="split">
+      <div style="display:flex;flex-direction:column;gap:20px" class="fade-up">
+        <div class="label">The debug log</div>
+        <h2 class="heading">Write it down. Every time.</h2>
+        <div class="gold-line"></div>
+        <p class="body">A debug log is a running record of what you tried, what happened, and what you concluded. It's the single best tool for not repeating yourself — in this session and the next.</p>
+        <p class="body">Paste it into Claude at the start of a new session and you instantly have full context without reliving the whole conversation.</p>
+      </div>
+      <div class="fade-up">
+        <div class="code-block"><span class="code-comment">## Debug Log — 2026-03-24</span>
+<span class="code-comment">## Bug: JWT auth failing intermittently</span>
+
+<span class="code-key">10:15</span> — Started investigation
+  <span class="code-str">Error: 401 Unauthorized on /api/lessons</span>
+  <span class="code-str">Happens ~30% of requests, not all</span>
+
+<span class="code-key">10:32</span> — Hypothesis 1
+  <span class="code-str">Token expiry race condition?</span>
+  <span class="code-str">Test: log token exp before each request</span>
+  <span class="code-val">Result: tokens valid, not expired</span>
+  <span class="code-comment">  → Refuted</span>
+
+<span class="code-key">10:51</span> — Hypothesis 2
+  <span class="code-str">Clock skew between client and server?</span>
+  <span class="code-str">Test: compare Date.now() vs server time header</span>
+  <span class="code-val">Result: 4.3 second delta found</span>
+  <span class="code-comment">  → Confirmed! Fix: use server time for exp check</span>
+
+<span class="code-key">11:04</span> — Fixed. Committed abc789.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 14: Action -->
+  <div class="slide center-col">
+    <div style="width:100%;max-width:600px;display:flex;flex-direction:column;gap:28px;align-items:center;text-align:center">
+      <div class="stagger" style="display:flex;flex-direction:column;align-items:center;gap:16px">
+        <div class="label">Your move</div>
+        <h2 class="heading">Take your current hardest bug through this workflow.</h2>
+        <div class="gold-line"></div>
+        <span class="badge badge-orange">DO IT NOW</span>
+      </div>
+      <div style="width:100%;text-align:left;display:flex;flex-direction:column;gap:0" class="stagger">
+        <div class="cta-step">
+          <div class="cta-num">1</div>
+          <div class="cta-text">
+            <h4>Write the bug report</h4>
+            <p>Expected, actual, error message, what you've tried. Be specific.</p>
+          </div>
+        </div>
+        <div class="cta-step">
+          <div class="cta-num">2</div>
+          <div class="cta-text">
+            <h4>Paste the debug prompt</h4>
+            <p>Use the template from slide 4. Force Claude into hypothesis mode before any fix.</p>
+          </div>
+        </div>
+        <div class="cta-step">
+          <div class="cta-num">3</div>
+          <div class="cta-text">
+            <h4>Test one thing at a time</h4>
+            <p>Validate or refute each hypothesis before moving on.</p>
+          </div>
+        </div>
+        <div class="cta-step">
+          <div class="cta-num">4</div>
+          <div class="cta-text">
+            <h4>Log what you learn</h4>
+            <p>Whether it works or not — write down the result. Future you will thank you.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="nav">
+  <button onclick="go(-1)">←</button>
+  <span><span id="cur">1</span> / <span id="tot"></span></span>
+  <button onclick="go(1)">→</button>
+</div>
+
+<script>
+const slides=document.querySelectorAll('.slide');
+let cur=0;
+document.getElementById('tot').textContent=slides.length;
+function show(n){
+  if(n<0||n>=slides.length)return;
+  slides[cur].classList.remove('active');cur=n;slides[cur].classList.add('active');
+  document.getElementById('cur').textContent=cur+1;
+  document.getElementById('progress').style.width=((cur+1)/slides.length*100)+'%';
+  slides[cur].querySelectorAll('.fade-up,.stagger>*').forEach(el=>{el.style.animation='none';el.offsetHeight;el.style.animation=''});
+}
+function go(d){show(cur+d)}
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();go(1)}
+  if(e.key==='ArrowLeft'){e.preventDefault();go(-1)}
+});
+show(0);
+</script>
+</body>
+</html>

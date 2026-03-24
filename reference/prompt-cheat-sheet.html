@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Code — Master Prompts</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #FAFAF8;
+      --bg-2: #F4F1EB;
+      --bg-3: #EDE8DF;
+      --orange: #E06418;
+      --orange-light: #F07835;
+      --orange-dim: rgba(224,100,24,0.08);
+      --orange-border: rgba(224,100,24,0.22);
+      --text: #1A1916;
+      --text-2: #4A4640;
+      --text-3: #9A9288;
+      --code-bg: #EDE8DF;
+      --code-border: rgba(0,0,0,0.08);
+      --blue: #2B5FA0;
+      --blue-dim: rgba(43,95,160,0.08);
+      --blue-border: rgba(43,95,160,0.25);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      line-height: 1.6;
+    }
+
+    .accent-line {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--orange), var(--orange-light));
+      z-index: 100;
+    }
+
+    .page {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 48px 48px 64px;
+    }
+
+    /* Header */
+    .header {
+      margin-bottom: 48px;
+      padding-top: 16px;
+    }
+
+    .header-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--orange);
+      margin-bottom: 12px;
+    }
+
+    .header-title {
+      font-size: 42px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      background: linear-gradient(135deg, var(--orange), var(--orange-light));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 10px;
+    }
+
+    .header-subtitle {
+      font-size: 18px;
+      color: var(--text-2);
+      font-weight: 400;
+    }
+
+    .divider {
+      width: 56px;
+      height: 3px;
+      background: linear-gradient(90deg, var(--orange), transparent);
+      border-radius: 2px;
+      margin: 16px 0 0;
+    }
+
+    /* Cards */
+    .cards {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .card {
+      background: #FFFFFF;
+      border: 1px solid rgba(0,0,0,0.08);
+      border-radius: 14px;
+      padding: 28px 32px 24px;
+      border-top: 3px solid var(--orange);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+    }
+
+    .badge-orange {
+      background: var(--orange-dim);
+      border: 1px solid var(--orange-border);
+      color: var(--orange);
+      text-transform: uppercase;
+    }
+
+    .badge-blue {
+      background: var(--blue-dim);
+      border: 1px solid var(--blue-border);
+      color: var(--blue);
+    }
+
+    .card-title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--text);
+      margin-bottom: 16px;
+    }
+
+    /* Code block */
+    .code-block {
+      background: var(--code-bg);
+      border: 1px solid var(--code-border);
+      border-radius: 10px;
+      padding: 18px 22px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.85;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin-bottom: 16px;
+    }
+
+    .code-key   { color: #E06418; font-weight: 500; }
+    .code-val   { color: #2D7A52; }
+    .code-str   { color: #2B5FA0; }
+    .code-var   { color: #C43B3B; }
+    .code-num   { color: #9A4E8A; }
+
+    /* Insight */
+    .insight {
+      font-size: 13px;
+      color: var(--text-3);
+      font-style: italic;
+      padding-top: 12px;
+      border-top: 1px solid rgba(0,0,0,0.07);
+    }
+
+    /* Footer */
+    .footer {
+      margin-top: 56px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(0,0,0,0.08);
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-3);
+    }
+
+    .footer a {
+      color: var(--orange);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* Print styles */
+    @media print {
+      .accent-line { display: none; }
+      .page { padding: 24px; }
+      .card { break-inside: avoid; page-break-inside: avoid; }
+      .header { margin-bottom: 24px; }
+      .footer { margin-top: 24px; }
+    }
+
+    @media (max-width: 600px) {
+      .page { padding: 32px 20px 48px; }
+      .header-title { font-size: 30px; }
+      .card { padding: 20px 20px 18px; }
+      .code-block { font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="accent-line"></div>
+
+  <div class="page">
+
+    <header class="header">
+      <div class="header-label">The Claude Code Playbook</div>
+      <h1 class="header-title">Claude Code — Master Prompts</h1>
+      <p class="header-subtitle">5 prompts. Every session covered.</p>
+      <div class="divider"></div>
+    </header>
+
+    <div class="cards">
+
+      <!-- PROMPT 1: PROJECT KICKOFF -->
+      <div class="card">
+        <div class="card-header">
+          <span class="badge badge-orange">Prompt 1 / 5</span>
+          <span class="badge badge-blue">When to use: Start of every session</span>
+        </div>
+        <h2 class="card-title">Project Kickoff</h2>
+        <div class="code-block"><span class="code-key">I'm working on</span> <span class="code-var">[project name]</span> — <span class="code-var">[one sentence description]</span>.
+<span class="code-key">Stack:</span> <span class="code-var">[your stack]</span>
+<span class="code-key">Key files:</span> <span class="code-var">[file paths]</span>
+
+<span class="code-key">Before we start, please:</span>
+<span class="code-num">1.</span> Read <span class="code-var">[key file]</span> to understand the current structure
+<span class="code-num">2.</span> Summarize what you understand about the project
+<span class="code-num">3.</span> Ask any clarifying questions before we build anything
+
+<span class="code-key">Today's goal:</span> <span class="code-var">[what you want to accomplish this session]</span></div>
+        <p class="insight">Sets shared context before any code is written — prevents Claude from making assumptions about your project structure.</p>
+      </div>
+
+      <!-- PROMPT 2: DEBUG MODE -->
+      <div class="card">
+        <div class="card-header">
+          <span class="badge badge-orange">Prompt 2 / 5</span>
+          <span class="badge badge-blue">When to use: Something broke</span>
+        </div>
+        <h2 class="card-title">Debug Mode</h2>
+        <div class="code-block"><span class="code-key">I have a bug. Here's exactly what's happening:</span>
+<span class="code-key">Expected:</span> <span class="code-var">[what should happen]</span>
+<span class="code-key">Actual:</span> <span class="code-var">[what is happening instead]</span>
+<span class="code-key">Error:</span> <span class="code-var">[paste the full error message]</span>
+
+<span class="code-key">Context:</span>
+- This started happening after: <span class="code-var">[what changed]</span>
+- Relevant file: <span class="code-var">[file path]</span>
+
+<span class="code-key">Before suggesting a fix, please:</span>
+<span class="code-num">1.</span> Read the file and understand its current state
+<span class="code-num">2.</span> Explain what you think is causing the bug
+<span class="code-num">3.</span> Ask if your theory matches my understanding
+<span class="code-num">4.</span> Then propose the fix</div>
+        <p class="insight">Forces diagnosis before prescription — you get a fix that actually addresses root cause, not just symptoms.</p>
+      </div>
+
+      <!-- PROMPT 3: CODE REVIEW -->
+      <div class="card">
+        <div class="card-header">
+          <span class="badge badge-orange">Prompt 3 / 5</span>
+          <span class="badge badge-blue">When to use: Before every commit</span>
+        </div>
+        <h2 class="card-title">Code Review</h2>
+        <div class="code-block"><span class="code-key">Please review</span> <span class="code-var">[file or diff]</span> before I commit this.
+
+<span class="code-key">I want you to check specifically for:</span>
+<span class="code-num">1.</span> Bugs or logic errors
+<span class="code-num">2.</span> Edge cases I haven't handled
+<span class="code-num">3.</span> Anything that will break with unexpected input
+<span class="code-num">4.</span> Security issues (if relevant)
+
+<span class="code-key">What this code does:</span> <span class="code-var">[one sentence]</span>
+
+<span class="code-key">Please be direct. Don't soften feedback.</span></div>
+        <p class="insight">The last line matters — without it, Claude softens criticism. This unlocks honest, actionable review feedback.</p>
+      </div>
+
+      <!-- PROMPT 4: REFACTOR -->
+      <div class="card">
+        <div class="card-header">
+          <span class="badge badge-orange">Prompt 4 / 5</span>
+          <span class="badge badge-blue">When to use: Cleaning up existing code</span>
+        </div>
+        <h2 class="card-title">Refactor</h2>
+        <div class="code-block"><span class="code-key">I want to refactor</span> <span class="code-var">[file or component name]</span>.
+<span class="code-key">Goal:</span> <span class="code-var">[what you want the refactored version to achieve]</span>
+
+<span class="code-key">Constraints (do not change these):</span>
+- The external API / props interface must stay the same
+- Do not change <span class="code-var">[specific thing]</span>
+
+<span class="code-key">Before making any changes:</span>
+<span class="code-num">1.</span> Read the current file
+<span class="code-num">2.</span> Describe what you plan to change and why
+<span class="code-num">3.</span> Call out any risks or side effects
+<span class="code-num">4.</span> Wait for my confirmation before writing code</div>
+        <p class="insight">Step 4 is the safety net — never let Claude refactor without showing its plan first. One confirmation saves hours of untangling.</p>
+      </div>
+
+      <!-- PROMPT 5: FEATURE FROM SPEC -->
+      <div class="card">
+        <div class="card-header">
+          <span class="badge badge-orange">Prompt 5 / 5</span>
+          <span class="badge badge-blue">When to use: Building something new</span>
+        </div>
+        <h2 class="card-title">Feature From Spec</h2>
+        <div class="code-block"><span class="code-key">I need to build:</span> <span class="code-var">[feature name]</span>
+
+<span class="code-key">What it should do:</span>
+- <span class="code-var">[behavior 1]</span>
+- <span class="code-var">[behavior 2]</span>
+
+<span class="code-key">What it should NOT do:</span>
+- <span class="code-var">[anti-requirement]</span>
+
+<span class="code-key">Files that will likely be involved:</span> <span class="code-var">[list the files]</span>
+
+<span class="code-key">Before writing any code:</span>
+<span class="code-num">1.</span> Read those files to understand existing patterns
+<span class="code-num">2.</span> Propose an implementation plan
+<span class="code-num">3.</span> Flag any questions or unclear requirements
+<span class="code-num">4.</span> Wait for approval before proceeding</div>
+        <p class="insight">Anti-requirements are as important as requirements — telling Claude what NOT to build prevents scope creep and unwanted "helpful" additions.</p>
+      </div>
+
+    </div><!-- /.cards -->
+
+    <footer class="footer">
+      The Claude Code Playbook — <a href="https://claudecodeplaybook.com" target="_blank">claudecodeplaybook.com</a>
+    </footer>
+
+  </div><!-- /.page -->
+
+</body>
+</html>

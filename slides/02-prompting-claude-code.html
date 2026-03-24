@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prompting Claude Code</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#FAFAF8;--bg-2:#F4F1EB;--bg-3:#EDE8DF;--orange:#E06418;--orange-light:#F07835;--orange-dim:rgba(224,100,24,0.08);--orange-border:rgba(224,100,24,0.22);--text:#1A1916;--text-2:#4A4640;--text-3:#9A9288;--code-bg:#EDE8DF;--code-border:rgba(0,0,0,0.08);--green:#2D7A52;--red:#C43B3B;--blue:#2B5FA0}
+    *{margin:0;padding:0;box-sizing:border-box}
+    html,body{width:100%;height:100%;overflow:hidden;background:#FAFAF8;color:#1A1916;font-family:'Inter',sans-serif}
+    .deck{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+    .slide{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:64px 80px;opacity:0;visibility:hidden;transition:opacity 0.35s ease;background:#FAFAF8}
+    .slide.active{opacity:1;visibility:visible}
+    .slide-inner{width:100%;max-width:1100px;display:flex;flex-direction:column;gap:28px}
+    .progress{position:fixed;top:0;left:0;height:2px;background:#E06418;transition:width 0.3s ease;z-index:100}
+    .nav{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:20px;z-index:100}
+    .nav button{background:rgba(0,0,0,0.05);border:1px solid rgba(0,0,0,0.12);color:#1A1916;width:38px;height:38px;border-radius:50%;cursor:pointer;font-size:16px;transition:background 0.2s,border-color 0.2s}
+    .nav button:hover{background:rgba(224,100,24,0.1);border-color:rgba(224,100,24,0.4)}
+    .nav span{color:#9A9288;font-size:13px;font-variant-numeric:tabular-nums}
+    .title{font-size:clamp(36px,5.5vw,68px);font-weight:700;line-height:1.1;letter-spacing:-0.02em;background:linear-gradient(135deg,#E06418,#F07835);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .subtitle{font-size:clamp(16px,2vw,22px);color:#4A4640;font-weight:400;line-height:1.5}
+    .label{font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#E06418}
+    .heading{font-size:clamp(24px,3.5vw,42px);font-weight:700;line-height:1.2;letter-spacing:-0.01em;color:#1A1916}
+    .body{font-size:clamp(14px,1.6vw,18px);line-height:1.7;color:#4A4640}
+    .small{font-size:clamp(12px,1.2vw,14px);color:#9A9288;line-height:1.5}
+    .split{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start;width:100%}
+    .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;width:100%}
+    .stack{display:flex;flex-direction:column;gap:16px;width:100%}
+    .card{background:#FFFFFF;border:1px solid rgba(0,0,0,0.08);border-radius:12px;padding:24px;transition:border-color 0.2s}
+    .card:hover{border-color:rgba(224,100,24,0.25)}
+    .card-orange{border-top:2px solid #E06418}
+    .code-block{background:#EDE8DF;border:1px solid rgba(0,0,0,0.08);border-radius:10px;padding:20px 24px;font-family:'JetBrains Mono',monospace;font-size:clamp(11px,1.1vw,13px);line-height:1.8;color:#1A1916;overflow:auto;max-height:300px;white-space:pre}
+    .code-comment{color:#9A9288}
+    .code-key{color:#E06418}
+    .code-val{color:#2D7A52}
+    .code-str{color:#2B5FA0}
+    .code-var{color:#C43B3B}
+    .code-cmd{color:#C43B3B}
+    .badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:500}
+    .badge-orange{background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.25);color:#E06418}
+    .badge-green{background:rgba(45,122,82,0.08);border:1px solid rgba(45,122,82,0.25);color:#2D7A52}
+    .badge-red{background:rgba(196,59,59,0.08);border:1px solid rgba(196,59,59,0.25);color:#C43B3B}
+    .badge-blue{background:rgba(43,95,160,0.08);border:1px solid rgba(43,95,160,0.25);color:#2B5FA0}
+    .divider{width:48px;height:2px;background:linear-gradient(90deg,#E06418,transparent);border-radius:2px;margin:4px 0}
+    .steps{display:flex;flex-direction:column;gap:0;width:100%}
+    .step{display:grid;grid-template-columns:40px 1fr;gap:20px;align-items:flex-start;padding-bottom:24px;position:relative}
+    .step:not(:last-child)::after{content:'';position:absolute;left:19px;top:40px;bottom:0;width:1px;background:rgba(224,100,24,0.2)}
+    .step-num{width:40px;height:40px;border-radius:50%;background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.3);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:#E06418;flex-shrink:0}
+    .step-content h4{font-size:16px;font-weight:600;color:#1A1916;margin-bottom:4px}
+    .step-content p{font-size:14px;color:#4A4640;line-height:1.6}
+    .gold-line{width:56px;height:3px;background:linear-gradient(90deg,#E06418,#F07835);border-radius:2px}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes scaleIn{from{opacity:0;transform:scale(0.96)}to{opacity:1;transform:scale(1)}}
+    .fade-up{opacity:0;animation:fadeUp 0.5s ease-out forwards}
+    .scale-in{opacity:0;animation:scaleIn 0.4s ease-out forwards}
+    .stagger>*{opacity:0;animation:fadeUp 0.5s ease-out forwards}
+    .stagger>*:nth-child(1){animation-delay:0.08s}
+    .stagger>*:nth-child(2){animation-delay:0.18s}
+    .stagger>*:nth-child(3){animation-delay:0.28s}
+    .stagger>*:nth-child(4){animation-delay:0.38s}
+    .stagger>*:nth-child(5){animation-delay:0.48s}
+    .stagger>*:nth-child(6){animation-delay:0.58s}
+
+    /* Slide-specific */
+    .cover-slide{align-items:flex-start;justify-content:center;padding-left:96px}
+    .cover-accent{position:absolute;left:80px;top:20%;bottom:20%;width:2px;background:linear-gradient(180deg,transparent,#E06418 40%,#E06418 60%,transparent)}
+    .card-red-tint{border-top:2px solid #C43B3B;background:rgba(196,59,59,0.04)}
+    .card-gold-tint{border-top:2px solid #E06418;background:rgba(224,100,24,0.04)}
+    .list-item{display:flex;align-items:flex-start;gap:10px;padding:6px 0;font-size:14px;color:#4A4640;line-height:1.5}
+    .list-item-dot{width:6px;height:6px;border-radius:50%;background:#E06418;flex-shrink:0;margin-top:7px}
+    .anatomy-row{display:flex;align-items:flex-start;gap:14px;padding:8px 0;border-bottom:1px solid rgba(0,0,0,0.06)}
+    .anatomy-row:last-child{border-bottom:none}
+    .anatomy-tag{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;color:#E06418;background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.2);padding:2px 8px;border-radius:4px;flex-shrink:0;min-width:90px;text-align:center;margin-top:2px}
+    .anatomy-desc{font-size:13px;color:#4A4640;line-height:1.5}
+    .cta-card{background:#FFFFFF;border:1px solid rgba(224,100,24,0.3);border-radius:16px;padding:40px 48px;width:100%}
+    .insight{font-size:13px;color:#9A9288;font-style:italic;padding:8px 0 0;border-top:1px solid rgba(0,0,0,0.08);margin-top:8px}
+  </style>
+</head>
+<body>
+  <div class="progress" id="progress"></div>
+  <div class="deck" id="deck">
+
+    <!-- SLIDE 1: COVER -->
+    <div class="slide cover-slide">
+      <div class="cover-accent"></div>
+      <div class="fade-up" style="animation-delay:0.1s">
+        <span class="label">Claude Code — Prompting</span>
+      </div>
+      <div style="height:20px"></div>
+      <h1 class="title fade-up" style="animation-delay:0.2s;max-width:640px">Prompting Claude Code</h1>
+      <div class="gold-line fade-up" style="animation-delay:0.35s;margin:20px 0"></div>
+      <p class="subtitle fade-up" style="animation-delay:0.45s;max-width:480px">5 prompts. Every session covered.</p>
+    </div>
+
+    <!-- SLIDE 2: WHY PEOPLE PROMPT WRONG -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="label fade-up">The Problem</div>
+        <h2 class="heading fade-up">ChatGPT habits don't work here</h2>
+        <div class="split stagger" style="margin-top:8px">
+          <div class="card card-red-tint">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px">
+              <span class="badge badge-red">ChatGPT Style</span>
+            </div>
+            <p style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:14px">Ask once. Expect an answer.</p>
+            <div class="stack" style="gap:8px">
+              <div class="list-item"><div class="list-item-dot" style="background:#C43B3B"></div>"Add a login form to my app"</div>
+              <div class="list-item"><div class="list-item-dot" style="background:#C43B3B"></div>Claude generates something generic</div>
+              <div class="list-item"><div class="list-item-dot" style="background:#C43B3B"></div>You spend 20 minutes adapting it</div>
+              <div class="list-item"><div class="list-item-dot" style="background:#C43B3B"></div>Half the session is correction</div>
+            </div>
+          </div>
+          <div class="card card-gold-tint">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px">
+              <span class="badge badge-orange">Claude Code Style</span>
+            </div>
+            <p style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:14px">Set context. Ask Claude to plan. Then build.</p>
+            <div class="stack" style="gap:8px">
+              <div class="list-item"><div class="list-item-dot"></div>Brief Claude on your full project first</div>
+              <div class="list-item"><div class="list-item-dot"></div>Ask it to read files before writing</div>
+              <div class="list-item"><div class="list-item-dot"></div>Request a plan before implementation</div>
+              <div class="list-item"><div class="list-item-dot"></div>First output fits — minimal correction needed</div>
+            </div>
+          </div>
+        </div>
+        <p class="small fade-up" style="text-align:center">Claude Code is a long-context coding agent, not a chatbot. Treat the session like a briefing, not a Q&A.</p>
+      </div>
+    </div>
+
+    <!-- SLIDE 3: PROMPT 1 — PROJECT KICKOFF -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div style="display:flex;align-items:center;gap:12px" class="fade-up">
+          <span class="badge badge-orange">PROMPT 1 / 5</span>
+          <span class="badge badge-blue">WHEN TO USE: Start of every session</span>
+        </div>
+        <h2 class="heading fade-up">Project Kickoff</h2>
+        <div class="code-block scale-in" style="max-height:340px"><span class="code-comment"># Project Kickoff Prompt</span>
+
+I'm working on <span class="code-var">[project name]</span> — <span class="code-var">[one sentence description]</span>.
+
+<span class="code-key">Stack:</span> <span class="code-val">TypeScript, React, Vite, Tailwind</span>
+<span class="code-key">Key files:</span> <span class="code-val">src/App.tsx, src/components/, src/store/</span>
+
+Before we start, please:
+<span class="code-val">1. Read src/App.tsx to understand the current structure</span>
+<span class="code-val">2. Read src/store/ to understand state management</span>
+<span class="code-val">3. Summarize what you understand about the project</span>
+<span class="code-val">4. Ask any clarifying questions before we build anything</span>
+
+Today's goal: <span class="code-var">[what you want to accomplish this session]</span></div>
+        <p class="insight fade-up">Always ask Claude to summarize back before building — it surfaces misunderstandings before they become wrong code.</p>
+      </div>
+    </div>
+
+    <!-- SLIDE 4: PROMPT 2 — DEBUG MODE -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div style="display:flex;align-items:center;gap:12px" class="fade-up">
+          <span class="badge badge-orange">PROMPT 2 / 5</span>
+          <span class="badge badge-blue">WHEN TO USE: Something broke</span>
+        </div>
+        <h2 class="heading fade-up">Debug Mode</h2>
+        <div class="code-block scale-in" style="max-height:340px"><span class="code-comment"># Debug Mode Prompt</span>
+
+I have a bug. Here's exactly what's happening:
+
+<span class="code-key">Expected:</span> <span class="code-var">[what should happen]</span>
+<span class="code-key">Actual:</span> <span class="code-var">[what is happening instead]</span>
+<span class="code-key">Error:</span> <span class="code-var">[paste the full error message]</span>
+
+<span class="code-key">Context:</span>
+- This started happening after: <span class="code-var">[what changed]</span>
+- Relevant file: <span class="code-var">[file path]</span>
+
+Before suggesting a fix, please:
+<span class="code-val">1. Read the file and understand its current state</span>
+<span class="code-val">2. Explain what you think is causing the bug</span>
+<span class="code-val">3. Ask if your theory matches my understanding</span>
+<span class="code-val">4. Then propose the fix</span></div>
+        <p class="insight fade-up">Making Claude explain its theory first catches wrong diagnoses before they produce wrong fixes.</p>
+      </div>
+    </div>
+
+    <!-- SLIDE 5: PROMPT 3 — CODE REVIEW -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div style="display:flex;align-items:center;gap:12px" class="fade-up">
+          <span class="badge badge-orange">PROMPT 3 / 5</span>
+          <span class="badge badge-blue">WHEN TO USE: Before every commit</span>
+        </div>
+        <h2 class="heading fade-up">Code Review</h2>
+        <div class="code-block scale-in" style="max-height:340px"><span class="code-comment"># Code Review Prompt</span>
+
+Please review <span class="code-var">[file or diff]</span> before I commit this.
+
+I want you to check specifically for:
+<span class="code-val">1. Bugs or logic errors</span>
+<span class="code-val">2. Edge cases I haven't handled</span>
+<span class="code-val">3. Anything that will break with unexpected input</span>
+<span class="code-val">4. Security issues (if relevant)</span>
+
+<span class="code-key">What this code does:</span> <span class="code-var">[one sentence]</span>
+<span class="code-key">Context:</span> <span class="code-var">[anything reviewers need to know]</span>
+
+Please be direct. Don't soften feedback.
+Flag anything you're uncertain about — don't
+just skip it because you're not sure.</div>
+        <p class="insight fade-up">"Don't soften feedback" matters — Claude defaults to diplomatic. You want honest, not kind.</p>
+      </div>
+    </div>
+
+    <!-- SLIDE 6: PROMPT 4 — REFACTOR -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div style="display:flex;align-items:center;gap:12px" class="fade-up">
+          <span class="badge badge-orange">PROMPT 4 / 5</span>
+          <span class="badge badge-blue">WHEN TO USE: Cleaning up existing code</span>
+        </div>
+        <h2 class="heading fade-up">Refactor</h2>
+        <div class="code-block scale-in" style="max-height:340px"><span class="code-comment"># Refactor Prompt</span>
+
+I want to refactor <span class="code-var">[file or component name]</span>.
+
+<span class="code-key">Goal:</span> <span class="code-var">[what you want the refactored version to achieve]</span>
+
+<span class="code-key">Constraints (do not change these):</span>
+<span class="code-val">- The external API / props interface must stay the same</span>
+<span class="code-val">- Do not change [specific thing]</span>
+
+Before making any changes:
+<span class="code-val">1. Read the current file</span>
+<span class="code-val">2. Describe what you plan to change and why</span>
+<span class="code-val">3. Call out any risks or side effects</span>
+<span class="code-val">4. Wait for my confirmation before writing code</span></div>
+        <p class="insight fade-up">The plan-first step catches scope creep before it happens — Claude's refactors tend to expand unless you constrain them.</p>
+      </div>
+    </div>
+
+    <!-- SLIDE 7: PROMPT 5 — FEATURE FROM SPEC -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div style="display:flex;align-items:center;gap:12px" class="fade-up">
+          <span class="badge badge-orange">PROMPT 5 / 5</span>
+          <span class="badge badge-blue">WHEN TO USE: Building something new</span>
+        </div>
+        <h2 class="heading fade-up">Feature from Spec</h2>
+        <div class="code-block scale-in" style="max-height:340px"><span class="code-comment"># Feature from Spec Prompt</span>
+
+I need to build: <span class="code-var">[feature name]</span>
+
+<span class="code-key">What it should do:</span>
+<span class="code-val">- [behavior 1]</span>
+<span class="code-val">- [behavior 2]</span>
+<span class="code-val">- [behavior 3]</span>
+
+<span class="code-key">What it should NOT do:</span>
+<span class="code-val">- [anti-requirement 1]</span>
+
+<span class="code-key">Files that will likely be involved:</span>
+<span class="code-var">[list the files]</span>
+
+Before writing any code:
+<span class="code-val">1. Read those files to understand existing patterns</span>
+<span class="code-val">2. Propose an implementation plan</span>
+<span class="code-val">3. Flag any questions or unclear requirements</span>
+<span class="code-val">4. Wait for approval before proceeding</span></div>
+        <p class="insight fade-up">Anti-requirements ("what it should NOT do") are underrated. They prevent half the wrong implementations.</p>
+      </div>
+    </div>
+
+    <!-- SLIDE 8: STACKING PROMPTS -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="label fade-up">Sequencing</div>
+        <h2 class="heading fade-up">Prompts stack. Use them in order.</h2>
+        <div class="steps stagger" style="margin-top:8px">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-content">
+              <h4>Kickoff — Set the full context</h4>
+              <p>Run this at the start of every session. Claude reads your files and understands the project before touching anything.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-content">
+              <h4>Feature from Spec — Plan before building</h4>
+              <p>Use this when you know what you want to build. Forces Claude to plan and surface questions before generating code.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-content">
+              <h4>Code Review — Before every commit</h4>
+              <p>Run a review on the diff before you commit. Catches bugs and edge cases when they're still cheap to fix.</p>
+            </div>
+          </div>
+          <div class="step" style="padding-bottom:0">
+            <div class="step-num">4</div>
+            <div class="step-content">
+              <h4>Debug Mode — When something breaks</h4>
+              <p>Use this instead of pasting errors and hoping. Structure forces Claude to diagnose before it prescribes.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 9: WHEN IT'S NOT WORKING -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="label fade-up">Warning Signs</div>
+        <h2 class="heading fade-up">When something feels off, there's a pattern</h2>
+        <div class="grid-3 stagger" style="margin-top:8px">
+          <div class="card card-orange">
+            <div class="badge badge-red" style="margin-bottom:14px">Warning</div>
+            <p style="font-size:14px;font-weight:600;color:#1A1916;margin-bottom:10px">Claude keeps changing things you didn't ask it to change</p>
+            <div class="divider"></div>
+            <p class="small" style="margin-top:12px;color:#4A4640">Context drift. Claude's mental model of your project has slipped. Reset with the Kickoff prompt — make it read the current files again.</p>
+          </div>
+          <div class="card card-orange">
+            <div class="badge badge-red" style="margin-bottom:14px">Warning</div>
+            <p style="font-size:14px;font-weight:600;color:#1A1916;margin-bottom:10px">Answers getting vaguer and more hedged with each exchange</p>
+            <div class="divider"></div>
+            <p class="small" style="margin-top:12px;color:#4A4640">Context window is filling up. Start a fresh session. Don't try to push through — quality degrades fast near the limit.</p>
+          </div>
+          <div class="card card-orange">
+            <div class="badge badge-red" style="margin-bottom:14px">Warning</div>
+            <p style="font-size:14px;font-weight:600;color:#1A1916;margin-bottom:10px">Claude's suggestions contradict code it wrote earlier in the session</p>
+            <div class="divider"></div>
+            <p class="small" style="margin-top:12px;color:#4A4640">Session drift — Claude has lost track of its own earlier work. New session, Kickoff prompt, point it at the current state of the files.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 10: BUILD YOUR OWN -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="label fade-up">Anatomy</div>
+        <h2 class="heading fade-up">Every good prompt has the same five parts</h2>
+        <div class="split stagger" style="margin-top:8px">
+          <div class="card" style="padding:28px">
+            <div class="stack" style="gap:0">
+              <div class="anatomy-row">
+                <div class="anatomy-tag">CONTEXT</div>
+                <div class="anatomy-desc">What project, what files, what's already built</div>
+              </div>
+              <div class="anatomy-row">
+                <div class="anatomy-tag">GOAL</div>
+                <div class="anatomy-desc">Exactly what you want to accomplish — specific, not vague</div>
+              </div>
+              <div class="anatomy-row">
+                <div class="anatomy-tag">CONSTRAINTS</div>
+                <div class="anatomy-desc">What must not change. Anti-requirements. Hard limits.</div>
+              </div>
+              <div class="anatomy-row">
+                <div class="anatomy-tag">PROCESS</div>
+                <div class="anatomy-desc">Read first → plan → confirm → then build</div>
+              </div>
+              <div class="anatomy-row">
+                <div class="anatomy-tag">TONE</div>
+                <div class="anatomy-desc">Be direct. Don't soften. Flag uncertainty.</div>
+              </div>
+            </div>
+          </div>
+          <div class="code-block" style="max-height:340px;font-size:12px"><span class="code-comment"># Applied example</span>
+
+<span class="code-comment"># CONTEXT</span>
+<span class="code-val">Working on the GTO Poker app.</span>
+<span class="code-val">Read src/analyzer/hand.ts first.</span>
+
+<span class="code-comment"># GOAL</span>
+<span class="code-val">Add equity calculation to HandAnalyzer</span>
+
+<span class="code-comment"># CONSTRAINTS</span>
+<span class="code-val">Don't change the HandAnalyzer interface.</span>
+<span class="code-val">Don't add new dependencies.</span>
+
+<span class="code-comment"># PROCESS</span>
+<span class="code-val">1. Read hand.ts</span>
+<span class="code-val">2. Propose the plan</span>
+<span class="code-val">3. Wait for approval</span>
+
+<span class="code-comment"># TONE</span>
+<span class="code-val">Be direct. Flag any uncertainty.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 11: WHAT THEY ALL SHARE -->
+    <div class="slide">
+      <div class="slide-inner" style="align-items:center;text-align:center;gap:24px">
+        <div class="label fade-up">The Pattern</div>
+        <h2 class="heading fade-up" style="font-size:clamp(22px,3.2vw,44px);max-width:820px;background:linear-gradient(135deg,#E06418,#F07835);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">Every prompt delays coding until Claude understands the full picture.</h2>
+        <div class="divider fade-up" style="margin:0 auto"></div>
+        <p class="body fade-up" style="max-width:680px;font-size:clamp(15px,1.8vw,20px)">That delay is the feature, not the friction. The ten seconds you spend writing a structured prompt saves thirty minutes of correcting output that was confidently wrong from the start.</p>
+        <p class="body fade-up" style="color:#9A9288;max-width:600px">Claude doesn't know what you know. These prompts are the mechanism for closing that gap before the first line of code gets written.</p>
+      </div>
+    </div>
+
+    <!-- SLIDE 12: ACTION -->
+    <div class="slide">
+      <div class="slide-inner" style="align-items:center">
+        <div class="cta-card fade-up">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:28px">
+            <h2 class="heading">Run the Kickoff prompt on your current project.</h2>
+            <span class="badge badge-green">START NOW</span>
+          </div>
+          <div class="code-block" style="font-size:12px;max-height:160px;margin-bottom:20px"><span class="code-val">I'm working on [project]. Stack: [your stack].</span>
+<span class="code-val">Read [key file] to understand the structure,</span>
+<span class="code-val">summarize what you see, then ask me what to build.</span></div>
+          <p class="small" style="color:#9A9288">Open Claude Code. Paste that. Fill in the brackets. See what happens when Claude actually understands your project before it writes a single line.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <nav class="nav">
+    <button onclick="go(-1)">←</button>
+    <span><span id="cur">1</span> / <span id="tot">1</span></span>
+    <button onclick="go(1)">→</button>
+  </nav>
+
+  <script>
+    const slides=document.querySelectorAll('.slide');
+    let cur=0;
+    document.getElementById('tot').textContent=slides.length;
+    function show(n){
+      if(n<0||n>=slides.length)return;
+      slides[cur].classList.remove('active');
+      cur=n;
+      slides[cur].classList.add('active');
+      document.getElementById('cur').textContent=cur+1;
+      document.getElementById('progress').style.width=((cur+1)/slides.length*100)+'%';
+      slides[cur].querySelectorAll('.fade-up,.scale-in,.stagger>*').forEach(el=>{
+        el.style.animation='none';el.offsetHeight;el.style.animation='';
+      });
+    }
+    function go(d){show(cur+d)}
+    document.addEventListener('keydown',e=>{
+      if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();go(1)}
+      if(e.key==='ArrowLeft'){e.preventDefault();go(-1)}
+    });
+    show(0);
+  </script>
+</body>
+</html>

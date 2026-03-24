@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The GSD System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#FAFAF8;--bg-2:#F4F1EB;--bg-3:#EDE8DF;
+  --orange:#E06418;--orange-light:#F07835;--orange-dim:rgba(224,100,24,0.08);--orange-border:rgba(224,100,24,0.22);
+  --text:#1A1916;--text-2:#4A4640;--text-3:#9A9288;
+  --code-bg:#EDE8DF;--code-border:rgba(0,0,0,0.08);--green:#2D7A52;--red:#C43B3B;--blue:#2B5FA0;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#FAFAF8;color:#1A1916;font-family:'Inter',sans-serif}
+.deck{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+.slide{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:64px 80px;opacity:0;visibility:hidden;transition:opacity 0.35s ease;background:#FAFAF8}
+.slide.active{opacity:1;visibility:visible}
+.progress{position:fixed;top:0;left:0;height:2px;background:#E06418;transition:width 0.3s ease;z-index:100}
+.nav{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:20px;z-index:100}
+.nav button{background:rgba(0,0,0,0.05);border:1px solid rgba(0,0,0,0.12);color:#1A1916;width:38px;height:38px;border-radius:50%;cursor:pointer;font-size:16px;transition:all 0.2s}
+.nav button:hover{background:rgba(224,100,24,0.1);border-color:rgba(224,100,24,0.4)}
+.nav span{color:#9A9288;font-size:13px}
+.title{font-size:clamp(36px,5.5vw,68px);font-weight:700;line-height:1.1;letter-spacing:-0.02em;background:linear-gradient(135deg,#E06418,#F07835);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.subtitle{font-size:clamp(16px,2vw,22px);color:#4A4640;font-weight:400;line-height:1.5}
+.label{font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#E06418}
+.heading{font-size:clamp(24px,3.5vw,42px);font-weight:700;line-height:1.2;letter-spacing:-0.01em;color:#1A1916}
+.body{font-size:clamp(14px,1.6vw,18px);line-height:1.7;color:#4A4640}
+.small{color:#9A9288}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;width:100%}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;width:100%}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;width:100%}
+.card{background:#FFFFFF;border:1px solid rgba(0,0,0,0.08);border-radius:12px;padding:24px;transition:border-color 0.2s}
+.card:hover{border-color:rgba(224,100,24,0.25)}
+.card-orange{border-top:2px solid #E06418}
+.card-green{border-top:2px solid #2D7A52}
+.card-red{border-top:2px solid #C43B3B;background:rgba(196,59,59,0.04)}
+.stat-num{font-size:clamp(40px,6vw,72px);font-weight:700;background:linear-gradient(135deg,#E06418,#F07835);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1}
+.stat-label{font-size:13px;color:#9A9288;margin-top:8px;text-transform:uppercase;letter-spacing:0.06em}
+.code-block{background:#EDE8DF;border:1px solid rgba(0,0,0,0.08);border-radius:10px;padding:20px 24px;font-family:'JetBrains Mono',monospace;font-size:clamp(11px,1.2vw,13px);line-height:1.8;color:#1A1916;overflow:auto;max-height:340px;white-space:pre}
+.code-comment{color:#9A9288}.code-key{color:#E06418}.code-val{color:#2D7A52}.code-str{color:#2B5FA0}.code-cmd{color:#C43B3B}
+.badge{display:inline-flex;align-items:center;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:500}
+.badge-orange{background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.25);color:#E06418}
+.badge-green{background:rgba(45,122,82,0.08);border:1px solid rgba(45,122,82,0.25);color:#2D7A52}
+.badge-red{background:rgba(196,59,59,0.08);border:1px solid rgba(196,59,59,0.25);color:#C43B3B}
+.divider{width:48px;height:2px;background:linear-gradient(90deg,#E06418,transparent);border-radius:2px}
+.steps{display:flex;flex-direction:column;gap:0;width:100%}
+.step{display:grid;grid-template-columns:40px 1fr;gap:20px;padding-bottom:20px;position:relative}
+.step:not(:last-child)::after{content:'';position:absolute;left:19px;top:40px;bottom:0;width:1px;background:rgba(224,100,24,0.2)}
+.step-num{width:40px;height:40px;border-radius:50%;background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.3);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:#E06418;flex-shrink:0}
+.step-content h4{font-size:16px;font-weight:600;color:#1A1916;margin-bottom:4px}
+.step-content p{font-size:14px;color:#4A4640;line-height:1.6}
+.gold-line{width:56px;height:3px;background:linear-gradient(90deg,#E06418,#F07835);border-radius:2px}
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+@keyframes scaleIn{from{opacity:0;transform:scale(0.96)}to{opacity:1;transform:scale(1)}}
+.fade-up{opacity:0;animation:fadeUp 0.5s ease-out forwards}
+.stagger>*{opacity:0;animation:fadeUp 0.5s ease-out forwards}
+.stagger>*:nth-child(1){animation-delay:0.08s}
+.stagger>*:nth-child(2){animation-delay:0.18s}
+.stagger>*:nth-child(3){animation-delay:0.28s}
+.stagger>*:nth-child(4){animation-delay:0.38s}
+.stagger>*:nth-child(5){animation-delay:0.48s}
+
+/* extras */
+.flow-stack{display:flex;flex-direction:column;gap:0;align-items:stretch}
+.flow-card{background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.3);border-radius:10px;padding:16px 20px;text-align:center}
+.flow-card h4{font-size:15px;font-weight:600;color:#E06418}
+.flow-card p{font-size:12px;color:#4A4640;margin-top:4px}
+.flow-arrow{text-align:center;color:#E06418;font-size:18px;padding:4px 0;line-height:1}
+.phase-row{display:flex;gap:16px;width:100%}
+.phase-card{flex:1;background:#FFFFFF;border:1px solid rgba(0,0,0,0.08);border-radius:12px;padding:20px}
+.phase-card.active-phase{border:1px solid rgba(224,100,24,0.5);background:rgba(224,100,24,0.04)}
+.phase-card h4{font-size:13px;font-weight:600;color:#E06418;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.06em}
+.task-item{font-size:13px;color:#4A4640;padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.06);display:flex;align-items:center;gap:8px}
+.task-item:last-child{border-bottom:none}
+.task-dot{width:6px;height:6px;border-radius:50%;background:#E06418;flex-shrink:0}
+.cta-step{display:flex;align-items:flex-start;gap:16px;padding:10px 0}
+.cta-num{width:32px;height:32px;border-radius:50%;background:rgba(224,100,24,0.08);border:1px solid rgba(224,100,24,0.3);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#E06418;flex-shrink:0;margin-top:2px}
+.cta-text h4{font-size:16px;font-weight:600;color:#1A1916}
+.cta-text p{font-size:14px;color:#4A4640}
+.cta-card{background:#FFFFFF;border:1px solid rgba(224,100,24,0.3);border-radius:16px}
+.code-block-red{background:rgba(196,59,59,0.04);border:1px solid rgba(196,59,59,0.2);border-radius:10px;padding:16px 20px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7;color:#1A1916;white-space:pre}
+.code-block-green{background:rgba(45,122,82,0.04);border:1px solid rgba(45,122,82,0.2);border-radius:10px;padding:16px 20px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7;color:#1A1916;white-space:pre}
+.center-col{display:flex;flex-direction:column;align-items:center;text-align:center}
+.cover-accent{background:linear-gradient(180deg,transparent,#E06418 40%,#E06418 60%,transparent)}
+.list-item{color:#4A4640}
+.list-item-dot{background:#E06418}
+.insight{color:#9A9288;border-top:1px solid rgba(0,0,0,0.08)}
+</style>
+</head>
+<body>
+<div id="progress" class="progress"></div>
+
+<div class="deck">
+
+  <!-- SLIDE 1: Cover -->
+  <div class="slide active center-col">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:20px" class="stagger">
+      <span class="badge badge-orange">LEVEL 2 — BUILDER</span>
+      <h1 class="title">The GSD System</h1>
+      <div class="gold-line"></div>
+      <p class="subtitle">Plan. Execute. Ship. Repeat.</p>
+    </div>
+  </div>
+
+  <!-- SLIDE 2: The Problem -->
+  <div class="slide">
+    <div style="width:100%;display:flex;flex-direction:column;gap:32px">
+      <div class="fade-up">
+        <div class="label" style="margin-bottom:8px">The Problem</div>
+        <h2 class="heading">Why most AI dev sessions go sideways</h2>
+      </div>
+      <div class="grid-3 stagger">
+        <div class="card card-red">
+          <span style="font-size:32px;margin-bottom:12px;display:block">⚡</span>
+          <h4 style="font-size:16px;font-weight:600;color:#1A1916;margin-bottom:8px">Jumping straight to code</h4>
+          <p style="font-size:14px;color:#4A4640;line-height:1.6">You open Claude, describe the vibe, and start building — with no plan, no phases, no exit criteria.</p>
+        </div>
+        <div class="card card-red">
+          <span style="font-size:32px;margin-bottom:12px;display:block">🌀</span>
+          <h4 style="font-size:16px;font-weight:600;color:#1A1916;margin-bottom:8px">Losing track mid-session</h4>
+          <p style="font-size:14px;color:#4A4640;line-height:1.6">Three hours in, you don't know what's done, what's broken, or what you were even trying to build.</p>
+        </div>
+        <div class="card card-red">
+          <span style="font-size:32px;margin-bottom:12px;display:block">🔄</span>
+          <h4 style="font-size:16px;font-weight:600;color:#1A1916;margin-bottom:8px">Rewriting the same thing</h4>
+          <p style="font-size:14px;color:#4A4640;line-height:1.6">Claude forgets. You forget. The same component gets rebuilt from scratch three different times.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 3: What GSD is -->
+  <div class="slide">
+    <div class="split">
+      <div style="display:flex;flex-direction:column;gap:20px" class="fade-up">
+        <div class="label">What GSD Is</div>
+        <h2 class="heading">A structured execution framework for Claude Code</h2>
+        <div class="gold-line"></div>
+        <p class="body">GSD (Get Stuff Done) is a set of slash commands that impose structure on your build sessions. Instead of freewheeling prompts, you work in defined phases with tracked tasks.</p>
+        <p class="body">Every session starts with a plan. Every plan has phases. Every phase has a clear deliverable. You always know exactly where you are and what's next.</p>
+      </div>
+      <div class="flow-stack stagger">
+        <div class="flow-card">
+          <h4>Phase</h4>
+          <p>A named milestone with a defined scope</p>
+        </div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-card">
+          <h4>Tasks</h4>
+          <p>Concrete, testable work items inside the phase</p>
+        </div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-card">
+          <h4>Execute</h4>
+          <p>Claude runs tasks one at a time, state is saved</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 4: Installing -->
+  <div class="slide">
+    <div class="split">
+      <div style="display:flex;flex-direction:column;gap:20px" class="fade-up">
+        <div class="label">Installation</div>
+        <h2 class="heading">Get it in 30 seconds</h2>
+        <div class="gold-line"></div>
+        <p class="body">GSD ships as part of the superpowers plugin for Claude Code. One command drops all the slash commands into your global config.</p>
+        <p class="body">Once installed, the commands are available in every project — no per-project setup required.</p>
+        <p class="body">Your state files live in the project directory, so they're portable and version-controllable.</p>
+      </div>
+      <div class="fade-up">
+        <div class="code-block"><span class="code-comment"># Install the superpowers plugin</span>
+<span class="code-cmd">claude mcp add superpowers</span>
+
+<span class="code-comment"># Or manually via npm</span>
+<span class="code-cmd">npm install -g @superpowers/claude-code</span>
+
+<span class="code-comment"># Verify it's working</span>
+<span class="code-cmd">claude /gsd:status</span>
+
+<span class="code-comment"># What gets added:</span>
+<span class="code-key">  /gsd:new-project</span>   <span class="code-comment">→ initialize a project plan</span>
+<span class="code-key">  /gsd:resume-work</span>   <span class="code-comment">→ pick up where you left off</span>
+<span class="code-key">  /gsd:execute-phase</span> <span class="code-comment">→ run the current phase</span>
+<span class="code-key">  /gsd:progress</span>      <span class="code-comment">→ see what's done</span>
+<span class="code-key">  /gsd:quick</span>         <span class="code-comment">→ lightweight single-task mode</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 5: /gsd:new-project -->
+  <div class="slide">
+    <div style="width:100%;display:flex;flex-direction:column;gap:32px">
+      <div class="fade-up">
+        <div class="label" style="margin-bottom:8px">Command</div>
+        <h2 class="heading" style="font-family:'JetBrains Mono',monospace;font-size:clamp(20px,2.8vw,36px)">/gsd:new-project</h2>
+      </div>
+      <div class="steps stagger">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h4>What GSD asks you</h4>
+            <p>Project name, description, tech stack, and success criteria. It builds context before generating anything.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h4>What it generates</h4>
+            <p>A phased project plan with 3–6 phases, each containing 4–8 specific, testable tasks. Saved to <code style="font-family:'JetBrains Mono',monospace;color:#E06418;font-size:12px">gsd-state.json</code>.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h4>How phases are structured</h4>
+            <p>Each phase has a name, a goal, and a list of tasks. Tasks have a status (todo / in-progress / done) and an optional acceptance test.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <h4>Where it saves state</h4>
+            <p>Everything lives in <code style="font-family:'JetBrains Mono',monospace;color:#E06418;font-size:12px">./gsd-state.json</code> in your project root. Git-committable, human-readable, always in sync.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 6: Phase structure -->
+  <div class="slide">
+    <div style="width:100%;display:flex;flex-direction:column;gap:32px">
+      <div class="fade-up">
+        <div class="label" style="margin-bottom:8px">Project Structure</div>
+        <h2 class="heading">How phases are organized</h2>
+      </div>
+      <div class="phase-row fade-up">
+        <div class="phase-card">
+          <h4>Phase 1 — Foundation</h4>
+          <div class="task-item"><div class="task-dot" style="background:#2D7A52"></div><span style="color:#2D7A52;text-decoration:line-through">Scaffold project structure</span></div>
+          <div class="task-item"><div class="task-dot" style="background:#2D7A52"></div><span style="color:#2D7A52;text-decoration:line-through">Configure TypeScript + ESLint</span></div>
+          <div class="task-item"><div class="task-dot" style="background:#2D7A52"></div><span style="color:#2D7A52;text-decoration:line-through">Set up routing</span></div>
+        </div>
+        <div class="phase-card active-phase">
+          <h4>Phase 2 — Core Screens</h4>
+          <div class="task-item"><div class="task-dot" style="background:#2D7A52"></div><span style="color:#2D7A52;text-decoration:line-through">Home screen layout</span></div>
+          <div class="task-item"><div class="task-dot" style="background:#E06418"></div><span style="color:#F07835">Lesson detail view</span></div>
+          <div class="task-item"><div class="task-dot" style="background:#9A9288"></div><span>Progress tracker</span></div>
+        </div>
+        <div class="phase-card">
+          <h4>Phase 3 — Polish</h4>
+          <div class="task-item"><div class="task-dot" style="background:#9A9288"></div><span>Animations + transitions</span></div>
+          <div class="task-item"><div class="task-dot" style="background:#9A9288"></div><span>Error states</span></div>
+          <div class="task-item"><div class="task-dot" style="background:#9A9288"></div><span>Performance audit</span></div>
+        </div>
+      </div>
+      <div class="fade-up" style="display:flex;gap:24px;align-items:center">
+        <span style="display:flex;align-items:center;gap:8px;font-size:13px;color:#2D7A52"><span style="width:8px;height:8px;border-radius:50%;background:#2D7A52;display:inline-block"></span>Done</span>
+        <span style="display:flex;align-items:center;gap:8px;font-size:13px;color:#F07835"><span style="width:8px;height:8px;border-radius:50%;background:#E06418;display:inline-block"></span>In Progress</span>
+        <span style="display:flex;align-items:center;gap:8px;font-size:13px;color:#9A9288"><span style="width:8px;height:8px;border-radius:50%;background:#9A9288;display:inline-block"></span>Todo</span>
+        <span style="margin-left:auto;font-size:13px;color:#4A4640">Gold border = active phase</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 7: Daily commands -->
+  <div class="slide">
+    <div style="width:100%;display:flex;flex-direction:column;gap:32px">
+      <div class="fade-up">
+        <div class="label" style="margin-bottom:8px">Daily Workflow</div>
+        <h2 class="heading">The three commands you'll live in</h2>
+      </div>
+      <div class="grid-3 stagger">
+        <div class="card card-orange">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#E06418;font-weight:500;margin-bottom:12px">/gsd:resume-work</div>
+          <p style="font-size:14px;color:#1A1916;font-weight:500;margin-bottom:8px">Picks up exactly where you left off</p>
+          <p style="font-size:13px;color:#4A4640;line-height:1.6">Reads your state file, summarizes completed tasks, and primes Claude on what's next. Run this at the start of every session.</p>
+        </div>
+        <div class="card card-orange">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#E06418;font-weight:500;margin-bottom:12px">/gsd:execute-phase</div>
+          <p style="font-size:14px;color:#1A1916;font-weight:500;margin-bottom:8px">Runs the current phase</p>
+          <p style="font-size:13px;color:#4A4640;line-height:1.6">Tells Claude to work through the active phase tasks one by one, checking each off as it completes. State updates automatically.</p>
+        </div>
+        <div class="card card-orange">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#E06418;font-weight:500;margin-bottom:12px">/gsd:progress</div>
+          <p style="font-size:14px;color:#1A1916;font-weight:500;margin-bottom:8px">Snapshot of where you are</p>
+          <p style="font-size:13px;color:#4A4640;line-height:1.6">Prints completed phases, current tasks, blockers, and estimated remaining work. Use it anytime you feel lost.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 8: Quick vs full -->
+  <div class="slide">
+    <div style="width:100%;display:flex;flex-direction:column;gap:32px">
+      <div class="fade-up">
+        <div class="label" style="margin-bottom:8px">Choosing the right mode</div>
+        <h2 class="heading">Quick vs. full GSD</h2>
+      </div>
+      <div class="split fade-up">
+        <div style="background:rgba(45,122,82,0.04);border:1px solid rgba(45,122,82,0.3);border-radius:12px;padding:28px">
+          <h4 style="font-size:15px;font-weight:600;color:#2D7A52;margin-bottom:16px">Use /gsd:quick when...</h4>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;align-items:flex-start;gap:10px"><span style="color:#2D7A52;font-weight:700;flex-shrink:0">✓</span><p style="font-size:14px;color:#4A4640">You have a single, well-defined task that takes under an hour</p></div>
+            <div style="display:flex;align-items:flex-start;gap:10px"><span style="color:#2D7A52;font-weight:700;flex-shrink:0">✓</span><p style="font-size:14px;color:#4A4640">You're adding a feature to an existing, stable project</p></div>
+            <div style="display:flex;align-items:flex-start;gap:10px"><span style="color:#2D7A52;font-weight:700;flex-shrink:0">✓</span><p style="font-size:14px;color:#4A4640">You don't need persistent state across sessions</p></div>
+          </div>
+        </div>
+        <div style="background:rgba(224,100,24,0.04);border:1px solid rgba(224,100,24,0.3);border-radius:12px;padding:28px">
+          <h4 style="font-size:15px;font-weight:600;color:#E06418;margin-bottom:16px">Use full GSD when...</h4>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;align-items:flex-start;gap:10px"><span style="color:#E06418;font-weight:700;flex-shrink:0">→</span><p style="font-size:14px;color:#4A4640">You're building something that spans multiple sessions or days</p></div>
+            <div style="display:flex;align-items:flex-start;gap:10px"><span style="color:#E06418;font-weight:700;flex-shrink:0">→</span><p style="font-size:14px;color:#4A4640">The project has multiple distinct deliverables or milestones</p></div>
+            <div style="display:flex;align-items:flex-start;gap:10px"><span style="color:#E06418;font-weight:700;flex-shrink:0">→</span><p style="font-size:14px;color:#4A4640">You want a shared plan that teammates can see and contribute to</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 9: Good task definition -->
+  <div class="slide">
+    <div style="width:100%;display:flex;flex-direction:column;gap:28px">
+      <div class="fade-up">
+        <div class="label" style="margin-bottom:8px">Task Definition</div>
+        <h2 class="heading">What makes a task good</h2>
+      </div>
+      <div class="split fade-up">
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="badge badge-red" style="width:fit-content">Bad task</div>
+          <div class="code-block-red"><span style="color:#C43B3B">task:</span> "Work on the auth stuff"
+
+<span style="color:#9A9288"># Vague. No output defined.
+# Claude will guess what
+# "auth stuff" means and
+# probably guess wrong.</span></div>
+          <p style="font-size:13px;color:#9A9288;line-height:1.6">No clear scope, no acceptance criteria, no way to know when it's done. Claude interprets this as broadly as possible.</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="badge badge-green" style="width:fit-content">Good task</div>
+          <div class="code-block-green"><span style="color:#2D7A52">task:</span> "Implement email/password login"
+<span style="color:#2B5FA0">accepts:</span> |
+  - POST /auth/login returns JWT
+  - Invalid creds return 401
+  - Token stored in AsyncStorage
+  - Redirects to /home on success</div>
+          <p style="font-size:13px;color:#9A9288;line-height:1.6">Specific deliverable. Acceptance criteria are testable. Claude knows exactly when it's done and can't scope-creep.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 10: Pause/resume -->
+  <div class="slide">
+    <div class="split">
+      <div style="display:flex;flex-direction:column;gap:20px" class="fade-up">
+        <div class="label">State Management</div>
+        <h2 class="heading">Pause anytime. Resume exactly where you stopped.</h2>
+        <div class="gold-line"></div>
+        <p class="body">GSD saves state to <code style="font-family:'JetBrains Mono',monospace;color:#E06418;font-size:13px">gsd-state.json</code> after every task completes. The file is plain JSON — readable, diffable, and safe to commit.</p>
+        <p class="body">When you start a new session, <code style="font-family:'JetBrains Mono',monospace;color:#E06418;font-size:13px">/gsd:resume-work</code> reads the file and reconstructs context for Claude without you having to re-explain anything.</p>
+      </div>
+      <div class="fade-up">
+        <div class="code-block"><span class="code-comment">// gsd-state.json</span>
+{
+  <span class="code-key">"project"</span>: <span class="code-str">"eMotus"</span>,
+  <span class="code-key">"currentPhase"</span>: <span class="code-val">2</span>,
+  <span class="code-key">"phases"</span>: [
+    {
+      <span class="code-key">"id"</span>: <span class="code-val">1</span>,
+      <span class="code-key">"name"</span>: <span class="code-str">"Foundation"</span>,
+      <span class="code-key">"status"</span>: <span class="code-str">"complete"</span>
+    },
+    {
+      <span class="code-key">"id"</span>: <span class="code-val">2</span>,
+      <span class="code-key">"name"</span>: <span class="code-str">"Core Screens"</span>,
+      <span class="code-key">"status"</span>: <span class="code-str">"in-progress"</span>,
+      <span class="code-key">"tasks"</span>: [
+        { <span class="code-key">"name"</span>: <span class="code-str">"Home screen"</span>, <span class="code-key">"done"</span>: <span class="code-val">true</span> },
+        { <span class="code-key">"name"</span>: <span class="code-str">"Lesson view"</span>, <span class="code-key">"done"</span>: <span class="code-val">false</span> },
+        { <span class="code-key">"name"</span>: <span class="code-str">"Progress tracker"</span>, <span class="code-key">"done"</span>: <span class="code-val">false</span> }
+      ]
+    }
+  ]
+}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 11: When to skip -->
+  <div class="slide">
+    <div style="width:100%;display:flex;flex-direction:column;gap:32px">
+      <div class="fade-up">
+        <div class="label" style="margin-bottom:8px">Know the limits</div>
+        <h2 class="heading">When GSD is overkill</h2>
+      </div>
+      <div class="grid-3 stagger">
+        <div class="card">
+          <div style="font-size:28px;margin-bottom:12px">🐛</div>
+          <h4 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:8px">Quick bug fix</h4>
+          <p style="font-size:13px;color:#4A4640;line-height:1.6;margin-bottom:12px">A single broken thing. You know what's wrong. Just fix it.</p>
+          <div style="font-size:12px;color:#E06418;font-weight:500">→ Use /gsd:quick or just prompt directly</div>
+        </div>
+        <div class="card">
+          <div style="font-size:28px;margin-bottom:12px">🔭</div>
+          <h4 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:8px">Exploratory spike</h4>
+          <p style="font-size:13px;color:#4A4640;line-height:1.6;margin-bottom:12px">You don't know what you're building yet. Planning is premature.</p>
+          <div style="font-size:12px;color:#E06418;font-weight:500">→ Explore first, GSD when the shape is clear</div>
+        </div>
+        <div class="card">
+          <div style="font-size:28px;margin-bottom:12px">📄</div>
+          <h4 style="font-size:15px;font-weight:600;color:#1A1916;margin-bottom:8px">Single-file change</h4>
+          <p style="font-size:13px;color:#4A4640;line-height:1.6;margin-bottom:12px">Editing one component, one config, one query. No phases needed.</p>
+          <div style="font-size:12px;color:#E06418;font-weight:500">→ Prompt directly with full file context</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 12: GSD + CLAUDE.md -->
+  <div class="slide">
+    <div style="width:100%;display:flex;flex-direction:column;gap:32px">
+      <div class="fade-up">
+        <div class="label" style="margin-bottom:8px">The power combo</div>
+        <h2 class="heading">GSD + CLAUDE.md</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:24px;align-items:center;width:100%" class="fade-up">
+        <div class="card card-orange" style="padding:28px">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:15px;color:#E06418;font-weight:500;margin-bottom:16px">CLAUDE.md</div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:flex-start;gap:8px"><span style="color:#E06418;flex-shrink:0">→</span><p style="font-size:13px;color:#4A4640">Project context &amp; architecture overview</p></div>
+            <div style="display:flex;align-items:flex-start;gap:8px"><span style="color:#E06418;flex-shrink:0">→</span><p style="font-size:13px;color:#4A4640">Coding conventions &amp; style rules</p></div>
+            <div style="display:flex;align-items:flex-start;gap:8px"><span style="color:#E06418;flex-shrink:0">→</span><p style="font-size:13px;color:#4A4640">Tech stack &amp; environment notes</p></div>
+            <div style="display:flex;align-items:flex-start;gap:8px"><span style="color:#E06418;flex-shrink:0">→</span><p style="font-size:13px;color:#4A4640">Permanent across every conversation</p></div>
+          </div>
+        </div>
+        <div style="text-align:center;padding:0 8px">
+          <div style="font-size:28px;color:#E06418;font-weight:700">+</div>
+          <div style="font-size:11px;color:#9A9288;text-transform:uppercase;letter-spacing:0.1em;margin-top:4px">Together</div>
+          <div style="font-size:13px;color:#F07835;font-weight:600;margin-top:4px">Zero lost<br>context</div>
+        </div>
+        <div class="card" style="padding:28px">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:15px;color:#4A4640;font-weight:500;margin-bottom:16px">GSD state</div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:flex-start;gap:8px"><span style="color:#4A4640;flex-shrink:0">→</span><p style="font-size:13px;color:#4A4640">Phased execution plan</p></div>
+            <div style="display:flex;align-items:flex-start;gap:8px"><span style="color:#4A4640;flex-shrink:0">→</span><p style="font-size:13px;color:#4A4640">Task status &amp; completion tracking</p></div>
+            <div style="display:flex;align-items:flex-start;gap:8px"><span style="color:#4A4640;flex-shrink:0">→</span><p style="font-size:13px;color:#4A4640">Session-to-session continuity</p></div>
+            <div style="display:flex;align-items:flex-start;gap:8px"><span style="color:#4A4640;flex-shrink:0">→</span><p style="font-size:13px;color:#4A4640">Dynamic — updates as you build</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 13: eMotus example -->
+  <div class="slide">
+    <div style="width:100%;display:flex;flex-direction:column;gap:24px">
+      <div class="fade-up">
+        <div class="label" style="margin-bottom:8px">Real example</div>
+        <h2 class="heading">eMotus — GSD phase log</h2>
+      </div>
+      <div class="code-block fade-up" style="max-height:400px"><span class="code-comment">## eMotus — GSD Phase Log</span>
+
+<span class="code-key">Phase 1: Setup &amp; Foundation</span>   <span class="code-val">[COMPLETE]</span>
+<span class="code-comment">  ✓ Scaffold Expo 54 project with TypeScript</span>
+<span class="code-comment">  ✓ Configure ESLint, Prettier, path aliases</span>
+<span class="code-comment">  ✓ Set up React Navigation v7 stack + tab navigators</span>
+<span class="code-comment">  ✓ Implement design token system (gold/black/serif)</span>
+<span class="code-comment">  ✓ Create base component library (Card, Button, Text)</span>
+
+<span class="code-key">Phase 2: Core Screens</span>          <span class="code-val">[COMPLETE]</span>
+<span class="code-comment">  ✓ HomeScreen — cosmic observatory hero + lesson feed</span>
+<span class="code-comment">  ✓ LessonDetailScreen — scroll layout + progress bar</span>
+<span class="code-comment">  ✓ QuizScreen — multiple choice with answer feedback</span>
+<span class="code-comment">  ✓ ProgressScreen — streak tracker + completion stats</span>
+
+<span class="code-key">Phase 3: Polish &amp; Ship</span>          <span class="code-str">[IN PROGRESS]</span>
+<span class="code-comment">  ✓ Entrance animations on lesson cards</span>
+<span class="code-comment">  ✓ Haptic feedback on quiz answers</span>
+  <span class="code-str">→ Offline mode (AsyncStorage caching)</span>         <span class="code-str">[active]</span>
+  <span class="code-comment">· App icon + splash screen assets</span>
+  <span class="code-comment">· EAS build configuration</span>
+  <span class="code-comment">· TestFlight submission</span>
+
+<span class="code-comment">Sessions: 7  |  Tasks: 14/19 done  |  Est. remaining: ~4h</span></div>
+    </div>
+  </div>
+
+  <!-- SLIDE 14: Action -->
+  <div class="slide center-col">
+    <div style="width:100%;max-width:580px;display:flex;flex-direction:column;gap:28px;align-items:center;text-align:center">
+      <div class="stagger" style="display:flex;flex-direction:column;align-items:center;gap:16px">
+        <div class="label">Your move</div>
+        <h2 class="heading">Run /gsd:new-project on something you're building.</h2>
+        <div class="gold-line"></div>
+        <span class="badge badge-orange">10 MINUTES</span>
+      </div>
+      <div style="width:100%;text-align:left;display:flex;flex-direction:column;gap:0" class="stagger">
+        <div class="cta-step">
+          <div class="cta-num">1</div>
+          <div class="cta-text">
+            <h4>Install superpowers</h4>
+            <p>Run <code style="font-family:'JetBrains Mono',monospace;color:#E06418;font-size:12px">claude mcp add superpowers</code> in your terminal</p>
+          </div>
+        </div>
+        <div class="cta-step">
+          <div class="cta-num">2</div>
+          <div class="cta-text">
+            <h4>Open your project</h4>
+            <p>Start a Claude Code session in a project you're actively building</p>
+          </div>
+        </div>
+        <div class="cta-step">
+          <div class="cta-num">3</div>
+          <div class="cta-text">
+            <h4>Run the command</h4>
+            <p>Type <code style="font-family:'JetBrains Mono',monospace;color:#E06418;font-size:12px">/gsd:new-project</code> and answer the prompts honestly</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="nav">
+  <button onclick="go(-1)">←</button>
+  <span><span id="cur">1</span> / <span id="tot"></span></span>
+  <button onclick="go(1)">→</button>
+</div>
+
+<script>
+const slides=document.querySelectorAll('.slide');
+let cur=0;
+document.getElementById('tot').textContent=slides.length;
+function show(n){
+  if(n<0||n>=slides.length)return;
+  slides[cur].classList.remove('active');cur=n;slides[cur].classList.add('active');
+  document.getElementById('cur').textContent=cur+1;
+  document.getElementById('progress').style.width=((cur+1)/slides.length*100)+'%';
+  slides[cur].querySelectorAll('.fade-up,.stagger>*').forEach(el=>{el.style.animation='none';el.offsetHeight;el.style.animation=''});
+}
+function go(d){show(cur+d)}
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();go(1)}
+  if(e.key==='ArrowLeft'){e.preventDefault();go(-1)}
+});
+show(0);
+</script>
+</body>
+</html>

@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome — The Claude Code Playbook</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #FAFAF8;
+      --orange: #E06418;
+      --orange-light: #F07835;
+      --orange-dim: rgba(224,100,24,0.08);
+      --orange-border: rgba(224,100,24,0.22);
+      --text: #1A1916;
+      --text-2: #4A4640;
+      --text-3: #9A9288;
+      --card-bg: #FFFFFF;
+      --card-border: rgba(0,0,0,0.08);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    /* Orange progress line at top */
+    .progress-line {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: linear-gradient(90deg, var(--orange), var(--orange-light));
+      z-index: 100;
+    }
+
+    .page {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 72px 32px 80px;
+    }
+
+    /* Header */
+    .label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--orange);
+      margin-bottom: 20px;
+    }
+
+    .hero-title {
+      font-size: clamp(36px, 5vw, 56px);
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      margin-bottom: 16px;
+    }
+
+    .hero-subtitle {
+      font-size: clamp(16px, 2vw, 20px);
+      color: var(--text-2);
+      font-weight: 400;
+      line-height: 1.5;
+      max-width: 600px;
+      margin-bottom: 32px;
+    }
+
+    .gold-line {
+      width: 56px;
+      height: 3px;
+      background: linear-gradient(90deg, var(--orange), var(--orange-light));
+      border-radius: 2px;
+      margin-bottom: 56px;
+    }
+
+    /* Sections */
+    section {
+      margin-bottom: 56px;
+    }
+
+    .section-heading {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 20px;
+    }
+
+    /* Deliverables grid */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    @media (max-width: 600px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .links-grid { grid-template-columns: 1fr !important; }
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 24px;
+      transition: border-color 0.2s;
+    }
+
+    .card:hover {
+      border-color: rgba(224,100,24,0.25);
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .card-desc {
+      font-size: 14px;
+      color: var(--text-2);
+      line-height: 1.5;
+    }
+
+    .card-icon {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--orange);
+      margin-bottom: 10px;
+      letter-spacing: 0.04em;
+    }
+
+    /* Steps */
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 40px 1fr;
+      gap: 20px;
+      align-items: flex-start;
+      padding-bottom: 24px;
+      position: relative;
+    }
+
+    .step:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      left: 19px;
+      top: 40px;
+      bottom: 0;
+      width: 1px;
+      background: rgba(224,100,24,0.2);
+    }
+
+    .step-num {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: rgba(224,100,24,0.08);
+      border: 1px solid rgba(224,100,24,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--orange);
+      flex-shrink: 0;
+    }
+
+    .step-content h4 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .step-content p {
+      font-size: 14px;
+      color: var(--text-2);
+      line-height: 1.6;
+    }
+
+    .step-file {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--orange);
+      font-family: monospace;
+    }
+
+    /* First win card */
+    .win-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-left: 4px solid var(--orange);
+      border-radius: 12px;
+      padding: 28px 32px;
+    }
+
+    .win-card-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 16px;
+    }
+
+    .win-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .win-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 15px;
+      color: var(--text-2);
+      line-height: 1.5;
+    }
+
+    .win-list li::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--orange);
+      flex-shrink: 0;
+      margin-top: 8px;
+    }
+
+    .win-closer {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      padding-top: 16px;
+      border-top: 1px solid rgba(0,0,0,0.08);
+    }
+
+    /* Links grid */
+    .links-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .link-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 16px 20px;
+      text-decoration: none;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 500;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .link-card:hover {
+      border-color: rgba(224,100,24,0.4);
+      background: rgba(224,100,24,0.03);
+    }
+
+    .link-card-arrow {
+      color: var(--orange);
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    /* Footer */
+    footer {
+      margin-top: 64px;
+      padding-top: 24px;
+      border-top: 1px solid rgba(0,0,0,0.08);
+      font-size: 13px;
+      color: var(--text-3);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="progress-line"></div>
+
+  <div class="page">
+
+    <!-- Header -->
+    <div class="label">THE CLAUDE CODE PLAYBOOK</div>
+    <h1 class="hero-title">Welcome. Let's build something.</h1>
+    <p class="hero-subtitle">You have everything you need to ship real software with Claude Code. Here's where to start.</p>
+    <div class="gold-line"></div>
+
+    <!-- Section 1: What's in the box -->
+    <section>
+      <div class="section-heading">What's in the box</div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-icon">6 SLIDE DECKS (HTML)</div>
+          <div class="card-title">The Complete Curriculum</div>
+          <div class="card-desc">The complete Claude Code curriculum. Open in Chrome, navigate with arrow keys.</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">4 CLAUDE.MD TEMPLATES</div>
+          <div class="card-title">Ready-to-Drop Templates</div>
+          <div class="card-desc">Drop into any project. Instant context for Claude Code.</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">PROMPT CHEAT SHEET</div>
+          <div class="card-title">5 Master Prompts</div>
+          <div class="card-desc">5 master prompts. Print it. Keep it at your desk.</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">SESSION CHECKLIST</div>
+          <div class="card-title">Your Session Workflow</div>
+          <div class="card-desc">Run before, during, and after every session.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 2: Recommended order -->
+    <section>
+      <div class="section-heading">Start here — recommended order</div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h4><span class="step-file">01-the-claude-md-system.html</span></h4>
+            <p>Understand what CLAUDE.md is and why it changes everything</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h4><span class="step-file">02-prompting-claude-code.html</span></h4>
+            <p>Learn the 5 prompts you'll use every single session</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h4>Pick a CLAUDE.md template</h4>
+            <p>Drop the right one into your current project</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <h4>Bookmark the prompt cheat sheet</h4>
+            <p>Keep it open while you work</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">5</div>
+          <div class="step-content">
+            <h4>Open 03 through 06</h4>
+            <p>Go deeper on GSD, debugging, shipping, and advanced systems</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 3: First win -->
+    <section>
+      <div class="section-heading">Your first win (10 minutes)</div>
+      <div class="win-card">
+        <div class="win-card-title">Before you go further, do this right now:</div>
+        <ul class="win-list">
+          <li>Open Claude Code</li>
+          <li>Pick the Starter CLAUDE.md template</li>
+          <li>Fill in your project name and stack</li>
+          <li>Drop it in your project root</li>
+          <li>Run the Session Kickoff prompt from the cheat sheet</li>
+        </ul>
+        <div class="win-closer">That's it. You're already ahead of 90% of people using Claude Code.</div>
+      </div>
+    </section>
+
+    <!-- Section 4: Quick links -->
+    <section>
+      <div class="section-heading">Quick access</div>
+      <div class="links-grid">
+        <a class="link-card" href="slides/01-the-claude-md-system.html">
+          <span>01 The CLAUDE.md System</span>
+          <span class="link-card-arrow">→</span>
+        </a>
+        <a class="link-card" href="slides/02-prompting-claude-code.html">
+          <span>02 Prompting Claude Code</span>
+          <span class="link-card-arrow">→</span>
+        </a>
+        <a class="link-card" href="slides/03-the-gsd-system.html">
+          <span>03 The GSD System</span>
+          <span class="link-card-arrow">→</span>
+        </a>
+        <a class="link-card" href="slides/04-debugging-with-claude-code.html">
+          <span>04 Debugging with Claude Code</span>
+          <span class="link-card-arrow">→</span>
+        </a>
+        <a class="link-card" href="slides/05-shipping-a-real-product.html">
+          <span>05 Shipping a Real Product</span>
+          <span class="link-card-arrow">→</span>
+        </a>
+        <a class="link-card" href="slides/06-advanced-building-systems.html">
+          <span>06 Advanced Building Systems</span>
+          <span class="link-card-arrow">→</span>
+        </a>
+        <a class="link-card" href="reference/prompt-cheat-sheet.html">
+          <span>Prompt Cheat Sheet</span>
+          <span class="link-card-arrow">→</span>
+        </a>
+        <a class="link-card" href="reference/session-checklist.html">
+          <span>Session Checklist</span>
+          <span class="link-card-arrow">→</span>
+        </a>
+      </div>
+    </section>
+
+    <footer>
+      The Claude Code Playbook — Questions? Reach out on X/Twitter.
+    </footer>
+
+  </div>
+
+</body>
+</html>
