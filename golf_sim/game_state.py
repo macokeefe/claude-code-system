@@ -74,11 +74,21 @@ class GameState:
         land_terrain  = check_terrain(land_x, land_y,   hole)
         final_terrain = check_terrain(final_x, final_y, hole)
 
-        # Water: drop near entry point
+        # Water: walk back toward tee until out of water, then drop there
         if final_terrain == "water":
-            final_x = land_x
-            final_y = max(land_y - 8, by + 5)
-            final_terrain = "rough"
+            drop_x, drop_y = land_x, land_y
+            for step in range(1, int(land_y - by) + 5):
+                tx = land_x * (1 - step / max(land_y, 1))
+                ty = land_y - step
+                if ty < by:
+                    tx, ty = bx, by   # back to tee
+                    break
+                if check_terrain(tx, ty, hole) not in ("water", "ob"):
+                    drop_x, drop_y = tx, ty
+                    break
+            else:
+                drop_x, drop_y = bx, by   # fall back to tee
+            final_x, final_y = drop_x, drop_y
 
         # OB: no roll (flag for penalty message)
         if final_terrain == "ob":
