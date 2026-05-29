@@ -615,14 +615,14 @@ def _render_distance_markers(surface: pygame.Surface, cam: Camera3D, hole: dict)
         if base is None or top is None:
             continue
         bx, by_s = base;  tx, ty_s = top
-        lw = max(1, int(4 / d * FOCAL))
-        pygame.draw.line(surface, C_POLE, (bx, by_s), (tx, ty_s), max(1, lw))
-        # Coloured disc cap
-        cap_r = max(2, lw + 1)
+        lw = max(1, int(0.04 / d * FOCAL))   # ~4 cm pole diameter
+        pygame.draw.line(surface, C_POLE, (bx, by_s), (tx, ty_s), lw)
+        # Coloured disc cap (~10 cm radius, always at least 4 px so it's clickable)
+        cap_r = max(4, int(0.10 / d * FOCAL))
         pygame.draw.circle(surface, (20, 20, 20), (tx, ty_s), cap_r + 1)
         pygame.draw.circle(surface, col, (tx, ty_s), cap_r)
-        if d < 120:
-            lbl = _font(max(10, int(18/d*FOCAL))).render(str(yards), True, col)
+        if d < 180:
+            lbl = _font(max(10, min(22, int(1.8 / d * FOCAL)))).render(str(yards), True, col)
             surface.blit(lbl, (tx + cap_r + 2, ty_s - lbl.get_height()//2))
 
 
@@ -643,9 +643,9 @@ def _render_pin(surface: pygame.Surface, cam: Camera3D,
     if base is None or top is None:
         return
 
-    lw = max(1, int(3.5 / d * FOCAL))
+    lw = max(1, int(0.035 / d * FOCAL))   # ~3.5 cm flagstick diameter
     # Pole with slight 3D roundness
-    pygame.draw.line(surface, (22, 22, 22), base, top, max(2, lw + 1))
+    pygame.draw.line(surface, (22, 22, 22), base, top, max(1, lw + 1))
     pygame.draw.line(surface, C_POLE,       base, top, lw)
 
     # Waving flag using sine wave offset
@@ -666,10 +666,10 @@ def _render_pin(surface: pygame.Surface, cam: Camera3D,
         pygame.draw.polygon(surface, C_FLAG,     fp_lt)
         pygame.draw.polygon(surface, C_FLAG_LT,  fp_lt, 1)
 
-    # Hole cup — dark circle
-    cup_r = max(2, int(2.8 / d * FOCAL))
+    # Hole cup — regulation 4.25 inch (0.118 yd) diameter, min 3 px
+    cup_r = max(3, int(0.06 / d * FOCAL))
     pygame.draw.circle(surface, (15, 15, 15), base, cup_r)
-    pygame.draw.circle(surface, (50, 50, 50), base, cup_r, 1)
+    pygame.draw.circle(surface, (55, 55, 55), base, cup_r, 1)
 
 
 # ── Ball ──────────────────────────────────────────────────────────────────────
