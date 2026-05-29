@@ -13,7 +13,7 @@ from course_data import HOLES
 from game_state  import GameState
 from physics     import process_shot
 from renderer    import (Viewport, draw_hole, draw_animated_ball,
-                          draw_stats_panel)
+                          draw_stats_panel, score_color)
 import r10_server
 
 # ── Layout ────────────────────────────────────────────────────────────────────
@@ -104,11 +104,16 @@ def main():
     # ── Overlay banner (hole complete etc.) ───────────────────────────────────
     banner_text   = ""
     banner_expiry = 0
+    banner_color  = (255, 235, 80)
 
-    def show_banner(text: str, ms: int = 4000):
-        nonlocal banner_text, banner_expiry
+    def show_banner(text: str, shots: int = 0, par: int = 0, ms: int = 4000):
+        nonlocal banner_text, banner_expiry, banner_color
         banner_text   = text
         banner_expiry = pygame.time.get_ticks() + ms
+        if shots and par:
+            banner_color = score_color(shots - par)
+        else:
+            banner_color = (255, 235, 80)
 
     running = True
     while running:
@@ -147,7 +152,8 @@ def main():
                         game.complete_hole()
                         label = score_label(game.shot_count,
                                             game.current_hole["par"])
-                        show_banner(f"{label}!  {game.shot_count} shots — Press N for next hole")
+                        show_banner(f"{label}!  {game.shot_count} shots — Press N for next hole",
+                                    game.shot_count, game.current_hole["par"])
 
         # ── Incoming shots ─────────────────────────────────────────────────
         while not r10_server.shot_queue.empty():
@@ -178,7 +184,8 @@ def main():
         if game.check_holed():
             game.complete_hole()
             label = score_label(game.shot_count, game.current_hole["par"])
-            show_banner(f"{label}!  {game.shot_count} shots — Press N for next hole")
+            show_banner(f"{label}!  {game.shot_count} shots — Press N for next hole",
+                        game.shot_count, game.current_hole["par"])
 
         # ── Draw ───────────────────────────────────────────────────────────
         screen.fill((15, 25, 15))
@@ -221,12 +228,12 @@ def main():
 
         # Banner overlay
         if banner_text and now < banner_expiry:
-            bsurf = font_xl.render(banner_text, True, (255, 235, 80))
+            bsurf = font_xl.render(banner_text, True, banner_color)
             bx    = (COURSE_W - bsurf.get_width()) // 2
             by    = WIN_H // 2 - bsurf.get_height() // 2
             bg    = pygame.Surface((bsurf.get_width() + 30, bsurf.get_height() + 18),
                                     pygame.SRCALPHA)
-            bg.fill((0, 0, 0, 160))
+            bg.fill((0, 0, 0, 172))
             screen.blit(bg, (bx - 15, by - 9))
             screen.blit(bsurf, (bx, by))
 
