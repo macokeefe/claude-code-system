@@ -2,7 +2,10 @@
 Pygame rendering helpers — improved visual style.
 """
 import math
+import random
 import pygame
+
+from physics import check_terrain
 
 # ── Palette ───────────────────────────────────────────────────────────────────
 C_OB            = (105,  68,  48)   # brownish-red: out-of-bounds
@@ -21,6 +24,13 @@ C_WATER         = ( 50, 140, 212)
 C_WATER_DARK    = ( 34, 112, 175)
 C_WATER_SHIMMER = (125, 190, 255)
 C_TEE           = (122, 188,  98)
+C_TEE_MARKER    = (230, 230, 235)
+C_STRIPE_LIGHT  = (255, 255, 255)
+C_TREE_SHADOW   = ( 28,  50,  26)
+C_TREE_BASE     = ( 34,  92,  40)
+C_TREE_TOP      = ( 58, 128,  58)
+C_AIM_LINE      = (250, 250, 250)
+C_AIM_RETICLE   = (255,  90,  90)
 C_PIN_POLE      = ( 38,  38,  38)
 C_PIN_FLAG      = (212,  42,  42)
 C_BALL          = (255, 255, 255)
@@ -126,7 +136,8 @@ def draw_hole(surface: pygame.Surface,
               vp: Viewport,
               hole: dict,
               ball_pos=None,
-              shot_history=None):
+              shot_history=None,
+              aim_heading=None):
     """Render the complete hole."""
 
     # 1. OB background (brownish-red, covers whole viewport)
@@ -151,11 +162,15 @@ def draw_hole(surface: pygame.Surface,
                 _draw_water_shimmer(surface, vp, hz["points"])
                 pygame.draw.polygon(surface, C_WATER_DARK, pts, 2)
 
-    # 4. Fairway
+    # 4. Fairway (with mowing stripes)
     fw = [vp.w2s(x, y) for x, y in hole["fairway"]]
     if len(fw) >= 3:
         pygame.draw.polygon(surface, C_FAIRWAY, fw)
+        _draw_fairway_stripes(surface, vp, fw)
         pygame.draw.polygon(surface, C_FAIRWAY_EDGE, fw, 2)
+
+    # 4b. Trees scattered through the rough
+    _draw_trees(surface, vp, hole)
 
     # 5. Bunkers
     for b in hole.get("bunkers", []):
@@ -180,7 +195,7 @@ def draw_hole(surface: pygame.Surface,
     pygame.draw.ellipse(surface, C_GREEN_EDGE,
                          pygame.Rect(gcx - grx, gcy - gry, grx * 2, gry * 2), 2)
 
-    # 7. Tee box
+    # 7. Tee box with two markers
     tb  = hole["tee_box"]
     tcx, tcy = vp.w2s(tb["cx"], tb["cy"])
     tw  = vp.r2s(tb["w"] / 2)
@@ -188,6 +203,9 @@ def draw_hole(surface: pygame.Surface,
     tee_rect = pygame.Rect(tcx - tw, tcy - th, tw * 2, th * 2)
     pygame.draw.rect(surface, C_TEE, tee_rect)
     pygame.draw.rect(surface, C_FAIRWAY_EDGE, tee_rect, 1)
+    mk = max(2, int(2 * vp.scale))
+    pygame.draw.circle(surface, C_TEE_MARKER, (tcx - tw, tcy), mk)
+    pygame.draw.circle(surface, C_TEE_MARKER, (tcx + tw, tcy), mk)
 
     # 8. Shot tracers
     if shot_history:
@@ -212,40 +230,61 @@ def draw_hole(surface: pygame.Surface,
     pygame.draw.polygon(surface, C_PIN_FLAG, flag_pts)
     pygame.draw.circle(surface, C_PIN_POLE, (px, py), max(2, int(3 * vp.scale)))
 
-    # 12. Ball and line-to-pin
+    # 12. Aim line + reticle (shown when it's the player's turn)
+    if ball_pos and aim_heading is not None:
+        _draw_aim_line(surface, vp, ball_pos, aim_heading, hole)
+
+    # 13. Ball and line-to-pin
     if ball_pos:
         _draw_ball(surface, vp, ball_pos)
-        _draw_dashed_line(surface, vp, ball_pos, hole["pin"])
+
+
+def _ball_screen_pos(vp, start, land, end, progress):
+    """Screen position of the ball at a given animation progress (with arc lift)."""
+    CARRY_PHASE = 0.82
+    if progress <= CARRY_PHASE:
+        t  = progress / CARRY_PHASE
+        wx = start[0] + (land[0] - start[0]) * t
+        wy = start[1] + (land[1] - start[1]) * t
+        sx, sy = vp.w2s(wx, wy)
+        carry_px = math.hypot(vp.w2s(*land)[0] - vp.w2s(*start)[0],
+                               vp.w2s(*land)[1] - vp.w2s(*start)[1])
+        arc_h = int(t * (1 - t) * 4 * max(40, carry_px * 0.28))
+        return sx, sy - arc_h, True, t
+    else:
+        t  = (progress - CARRY_PHASE) / (1 - CARRY_PHASE)
+        wx = land[0] + (end[0] - land[0]) * t
+        wy = land[1] + (end[1] - land[1]) * t
+        sx, sy = vp.w2s(wx, wy)
+        return sx, sy, False, t
 
 
 def draw_animated_ball(surface: pygame.Surface,
                        vp: Viewport,
                        start, land, end,
                        progress: float):
-    """Draw ball in flight (progress 0→1) with a parabolic screen-space arc."""
-    CARRY_PHASE = 0.82
+    """Draw ball in flight (progress 0→1) with a parabolic arc, trail, and shadow."""
+    sx, sy, in_air, t = _ball_screen_pos(vp, start, land, end, progress)
 
-    if progress <= CARRY_PHASE:
-        t  = progress / CARRY_PHASE
+    # Ground shadow tracks the ball's ground position
+    if in_air:
         wx = start[0] + (land[0] - start[0]) * t
         wy = start[1] + (land[1] - start[1]) * t
-        sx, sy = vp.w2s(wx, wy)
-
-        # Parabolic arc height in screen pixels
-        carry_px = math.hypot(vp.w2s(*land)[0] - vp.w2s(*start)[0],
-                               vp.w2s(*land)[1] - vp.w2s(*start)[1])
-        arc_h = int(t * (1 - t) * 4 * max(40, carry_px * 0.28))
-        sy   -= arc_h
-
-        # Ground shadow (grows as ball rises)
-        gx, gy  = vp.w2s(wx, wy)
-        sr      = max(2, int((2 + t * (1 - t) * 4) * vp.scale))
+        gx, gy = vp.w2s(wx, wy)
+        sr     = max(2, int((2 + t * (1 - t) * 4) * vp.scale))
         pygame.draw.circle(surface, (20, 38, 18), (gx, gy), sr)
-    else:
-        t  = (progress - CARRY_PHASE) / (1 - CARRY_PHASE)
-        wx = land[0] + (end[0] - land[0]) * t
-        wy = land[1] + (end[1] - land[1]) * t
-        sx, sy = vp.w2s(wx, wy)
+
+    # Motion trail: a few faded ghosts behind the ball
+    for k in range(1, 6):
+        p = progress - k * 0.018
+        if p <= 0:
+            break
+        tx, ty, _, _ = _ball_screen_pos(vp, start, land, end, p)
+        fade = int(70 * (1 - k / 6))
+        r    = max(2, int(5 * vp.scale) - k)
+        trail = pygame.Surface((r * 2 + 2, r * 2 + 2), pygame.SRCALPHA)
+        pygame.draw.circle(trail, (255, 255, 255, fade), (r + 1, r + 1), r)
+        surface.blit(trail, (tx - r - 1, ty - r - 1))
 
     _draw_ball(surface, vp, None, screen_pos=(sx, sy))
 
@@ -295,6 +334,12 @@ def draw_stats_panel(surface: pygame.Surface,
         tc = C_TERRAIN_LABEL.get(terrain, C_TEXT)
         line(f"Lie:     {terrain.upper()}", font_md, tc)
         line(f"Club:    {suggest_club(dist)}", font_md, (172, 215, 232))
+        off = game.aim_offset_deg()
+        if abs(off) < 0.5:
+            aim_txt = "Aim:     at pin"
+        else:
+            aim_txt = f"Aim:     {abs(off):.0f} deg {'R' if off > 0 else 'L'}"
+        line(aim_txt, font_md, (255, 170, 170))
     sep()
 
     # ── Wind ──────────────────────────────────────────────────────────────
@@ -317,6 +362,7 @@ def draw_stats_panel(surface: pygame.Surface,
         line(f"Carry:       {ls['carry']:.0f} yds",    font_sm)
         line(f"Total:       {ls['total']:.0f} yds",    font_sm)
         line(f"Launch:      {ls['vla']:.1f} / {ls['hla']:+.1f} deg", font_sm)
+        line(f"Curve:       {ls.get('curve', 0):+.0f} yds", font_sm)
         line(f"Backspin:    {ls['backspin']:.0f} rpm", font_sm)
     sep()
 
@@ -340,7 +386,8 @@ def draw_stats_panel(surface: pygame.Surface,
     sep()
 
     # ── Controls ──────────────────────────────────────────────────────────
-    for hint in ["T = test shot", "R = restart hole",
+    for hint in ["T = test shot", "< > = aim L/R",
+                 "C = re-aim at pin", "R = restart hole",
                  "N = next hole", "H = hole it", "ESC = quit"]:
         line(hint, font_sm, C_TEXT_DIM, gap=2)
 
@@ -364,6 +411,93 @@ def _draw_ball(surface, vp, world_pos, screen_pos=None):
     hi_r = max(1, r // 3)
     pygame.draw.circle(surface, (255, 255, 255),
                         (sx - max(1, r // 3), sy - max(1, r // 3)), hi_r)
+
+
+def _draw_fairway_stripes(surface, vp, fw_screen_pts):
+    """Faint alternating mowing stripes, masked to the fairway polygon."""
+    rect = vp.rect
+    w, h = rect.width, rect.height
+    miny = min(p[1] for p in fw_screen_pts)
+    maxy = max(p[1] for p in fw_screen_pts)
+
+    stripes = pygame.Surface((w, h), pygame.SRCALPHA)
+    band = max(8, int(11 * vp.scale))
+    i, yy = 0, miny
+    while yy < maxy:
+        if i % 2 == 0:
+            pygame.draw.rect(stripes, (*C_STRIPE_LIGHT, 24),
+                             (0, int(yy - rect.top), w, band))
+        yy += band
+        i  += 1
+
+    mask = pygame.Surface((w, h), pygame.SRCALPHA)
+    local = [(px - rect.left, py - rect.top) for px, py in fw_screen_pts]
+    pygame.draw.polygon(mask, (255, 255, 255, 255), local)
+    stripes.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+    surface.blit(stripes, rect.topleft)
+
+
+def _draw_trees(surface, vp, hole):
+    """Scatter deterministic trees through the rough lining the hole."""
+    rng    = random.Random(hole["hole"] * 1009 + 7)
+    bounds = hole.get("bounds", {"min_x": -70, "max_x": 70})
+    placed = 0
+    y      = 16.0
+    while y < hole["total_yards"] - 6 and placed < 70:
+        for side in (-1, 1):
+            edge   = bounds["min_x"] if side < 0 else bounds["max_x"]
+            inward = rng.uniform(2, 18)
+            x      = edge + inward if side < 0 else edge - inward
+            jy     = y + rng.uniform(-6, 6)
+            if check_terrain(x, jy, hole) == "rough":
+                _draw_one_tree(surface, vp, x, jy, rng)
+                placed += 1
+        y += rng.uniform(15, 28)
+
+
+def _draw_one_tree(surface, vp, x, y, rng):
+    cx, cy = vp.w2s(x, y)
+    r = max(3, int(rng.uniform(4.0, 7.0) * vp.scale))
+    off = max(1, r // 2)
+    pygame.draw.circle(surface, C_TREE_SHADOW, (cx + off, cy + off), r)
+    pygame.draw.circle(surface, C_TREE_BASE,   (cx, cy), r)
+    pygame.draw.circle(surface, C_TREE_TOP,    (cx - r // 3, cy - r // 3),
+                       max(2, int(r * 0.62)))
+
+
+def _draw_aim_line(surface, vp, ball_pos, aim_heading, hole):
+    """Dashed aim line from the ball with a target reticle at the end."""
+    bx, by   = ball_pos
+    px, py   = hole["pin"]
+    pin_dist = math.hypot(px - bx, py - by)
+    length   = max(30.0, min(pin_dist, 260.0))
+
+    rad = math.radians(aim_heading)
+    ex  = bx + math.sin(rad) * length
+    ey  = by + math.cos(rad) * length
+
+    sx, sy = vp.w2s(bx, by)
+    tx, ty = vp.w2s(ex, ey)
+
+    # Dashed line
+    total = math.hypot(tx - sx, ty - sy)
+    if total >= 1:
+        dx, dy = (tx - sx) / total, (ty - sy) / total
+        on, d  = True, 0.0
+        while d < total:
+            x1 = int(sx + dx * d); y1 = int(sy + dy * d)
+            d  = min(d + 9, total)
+            x2 = int(sx + dx * d); y2 = int(sy + dy * d)
+            if on:
+                pygame.draw.line(surface, C_AIM_LINE, (x1, y1), (x2, y2), 1)
+            d  += 6
+            on  = not on
+
+    # Reticle
+    rr = max(4, int(4 * vp.scale))
+    pygame.draw.circle(surface, C_AIM_RETICLE, (tx, ty), rr, 1)
+    pygame.draw.line(surface, C_AIM_RETICLE, (tx - rr - 2, ty), (tx + rr + 2, ty), 1)
+    pygame.draw.line(surface, C_AIM_RETICLE, (tx, ty - rr - 2), (tx, ty + rr + 2), 1)
 
 
 def _draw_tracer(surface, vp, shot):

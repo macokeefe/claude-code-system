@@ -47,10 +47,23 @@ protocol used by golf simulators). This game implements that server.
 | Key | Action |
 |-----|--------|
 | T   | Inject a random test shot |
+| ← / → (or , / .) | Aim left / right |
+| C   | Re-aim straight at the pin |
 | R   | Restart current hole |
 | N   | Advance to next hole |
 | H   | Mark ball as holed (use when on the green) |
 | ESC | Quit |
+
+### Aiming
+
+Every shot is aimed at the pin by default — the dashed white line with the red
+reticle shows where you're pointed. A dead-straight shot (HLA 0) flies right
+down that line, so on doglegs use **←/→** to aim at the corner of the fairway
+first, then swing. After each shot the aim automatically re-points at the pin
+from your new position.
+
+Sound effects (tee crack, splash, sand, hole-out chime) play automatically and
+are silently skipped if your machine has no audio output.
 
 ## What the simulator uses from the R10
 

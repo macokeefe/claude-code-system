@@ -36,6 +36,32 @@ class GameState:
         self.anim_land        = None
         self.anim_final       = None
         self.ob_penalty       = False
+        self.landed_in_water  = False
+        self.aim_heading      = 0.0
+        self.aim_at_pin()
+
+    # ── Aiming ──────────────────────────────────────────────────────────────
+
+    def aim_at_pin(self):
+        """Point the aim line straight at the pin from the current ball position."""
+        bx, by = self.ball_pos
+        px, py = self.current_hole["pin"]
+        self.aim_heading = math.degrees(math.atan2(px - bx, py - by))
+
+    def adjust_aim(self, delta_deg: float):
+        self.aim_heading += delta_deg
+
+    def aim_offset_deg(self) -> float:
+        """Aim direction relative to the straight-at-pin line (+ = right)."""
+        bx, by = self.ball_pos
+        px, py = self.current_hole["pin"]
+        pin_heading = math.degrees(math.atan2(px - bx, py - by))
+        d = self.aim_heading - pin_heading
+        while d > 180:
+            d -= 360
+        while d < -180:
+            d += 360
+        return d
 
     def restart_hole(self):
         self._reset_hole()
@@ -49,45 +75,50 @@ class GameState:
 
     # ── Shot application ──────────────────────────────────────────────────────
 
-    def apply_shot(self, shot_result: dict):
+    def apply_shot(self, shot_result: dict, aim_heading: float = None):
         """Compute ball's landing/final position from a shot result and start animation."""
         if self.animating:
             return
+
+        if aim_heading is None:
+            aim_heading = self.aim_heading
 
         hole      = self.current_hole
         bx, by    = self.ball_pos
         carry     = shot_result["carry"]
         total     = shot_result["total"]
-        lateral   = shot_result["lateral"]
+        curve     = shot_result.get("curve", 0.0)
+        hla       = shot_result["hla"]
 
-        # Where the ball lands (end of carry)
-        if total > 0:
-            land_x = bx + lateral * (carry / total)
-        else:
-            land_x = bx + lateral
-        land_y = by + carry
+        # Direction the ball actually flies: aim + launch angle
+        shot_rad = math.radians(aim_heading + hla)
+        fx, fy   = math.sin(shot_rad),  math.cos(shot_rad)   # forward unit vector
+        rx, ry   = math.cos(shot_rad), -math.sin(shot_rad)   # right-perp unit vector
 
-        # Where it stops (after roll)
-        final_x = bx + lateral
-        final_y = by + total
+        # Landing point (carry along shot line + perpendicular curve)
+        land_x = bx + fx * carry + rx * curve
+        land_y = by + fy * carry + ry * curve
+
+        # Roll continues forward along the shot line
+        roll    = max(0.0, total - carry)
+        final_x = land_x + fx * roll
+        final_y = land_y + fy * roll
 
         land_terrain  = check_terrain(land_x, land_y,   hole)
         final_terrain = check_terrain(final_x, final_y, hole)
+        self.landed_in_water = (final_terrain == "water")
 
-        # Water: walk back toward tee until out of water, then drop there
+        # Water: walk back from landing toward the ball until out of water
         if final_terrain == "water":
-            drop_x, drop_y = land_x, land_y
-            for step in range(1, int(land_y - by) + 5):
-                tx = land_x * (1 - step / max(land_y, 1))
-                ty = land_y - step
-                if ty < by:
-                    tx, ty = bx, by   # back to tee
-                    break
+            drop_x, drop_y = bx, by
+            steps = 48
+            for s in range(1, steps + 1):
+                f  = 1 - s / steps
+                tx = bx + (land_x - bx) * f
+                ty = by + (land_y - by) * f
                 if check_terrain(tx, ty, hole) not in ("water", "ob"):
                     drop_x, drop_y = tx, ty
                     break
-            else:
-                drop_x, drop_y = bx, by   # fall back to tee
             final_x, final_y = drop_x, drop_y
 
         # OB: no roll (flag for penalty message)
@@ -129,6 +160,7 @@ class GameState:
             self.animating       = False
             self.ball_pos        = self.anim_final
             self.current_terrain = check_terrain(*self.ball_pos, self.current_hole)
+            self.aim_at_pin()   # re-aim at the pin from the new position
 
     # ── Hole completion ───────────────────────────────────────────────────────
 

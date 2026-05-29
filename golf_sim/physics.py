@@ -5,43 +5,48 @@ All distances in yards, angles in degrees, speeds in mph, spin in RPM.
 import math
 
 
-def process_shot(ball_data: dict, wind_speed: float = 0, wind_dir: float = 0) -> dict:
+def process_shot(ball_data: dict, wind_speed: float = 0, wind_dir: float = 0,
+                 aim_heading: float = 0.0) -> dict:
     """
     Convert raw R10 BallData dict into a shot result.
 
+    aim_heading: the direction the player is aiming, in degrees clockwise from
+    straight ahead (+y, "north"). The shot's absolute bearing is aim + HLA, so
+    a dead-straight shot (HLA = 0) flies exactly along the aim line.
+
     Returns a dict with:
-      carry      - carry distance in yards (wind-adjusted)
+      carry      - carry distance in yards (wind-adjusted), along the shot line
       total      - total distance in yards (carry + roll)
-      lateral    - left/right offset in yards (+ = right)
       roll       - roll distance in yards
-      hla        - horizontal launch angle (degrees)
+      curve      - perpendicular drift (yds) from sidespin + crosswind (+ = right)
+      lateral    - net side offset from the aim line at landing (display only)
+      hla        - horizontal launch angle (degrees, relative to aim)
       vla        - vertical launch angle (degrees)
       speed      - ball speed (mph)
       backspin   - backspin RPM
     """
     carry_raw  = float(ball_data.get("CarryDistance", 150))
-    hla        = float(ball_data.get("HLA", 0))       # + = right
+    hla        = float(ball_data.get("HLA", 0))       # + = right of aim
     vla        = float(ball_data.get("VLA", 14))
     speed      = float(ball_data.get("Speed", 120))
     backspin   = float(ball_data.get("BackSpin", 3000))
-    sidespin   = float(ball_data.get("SideSpin", 0))  # + = draw for RH
+    sidespin   = float(ball_data.get("SideSpin", 0))
 
     # ── Wind effect ────────────────────────────────────────────────────────
-    # wind_dir: degrees clockwise from north = direction wind blows FROM
-    # shot direction is along the y-axis (0 deg), so headwind = 180 deg wind
-    shot_bearing = hla  # simplified: shot heading equals HLA off center
-    wind_rad = math.radians(wind_dir - 180 - shot_bearing)
+    # wind_dir: degrees clockwise from north = direction wind blows FROM.
+    # The shot's absolute bearing is the aim plus the launch angle.
+    bearing  = aim_heading + hla
+    wind_rad = math.radians(wind_dir - 180 - bearing)
 
     tailwind  =  math.cos(wind_rad) * wind_speed   # positive = helps carry
     crosswind = -math.sin(wind_rad) * wind_speed   # positive = pushes right
 
     carry = carry_raw + tailwind * 0.30 * (carry_raw / 200)
-    lateral_wind = crosswind * 0.18 * (carry / 200)
 
-    # ── Lateral offset (HLA + sidespin + wind) ────────────────────────────
-    lateral_hla  = carry * math.tan(math.radians(hla))
-    lateral_spin = sidespin * 0.003 * (carry / 100)   # ~3 yds per 100yd carry per 1000 rpm
-    lateral = lateral_hla + lateral_spin + lateral_wind
+    # ── Curve: perpendicular drift from spin + crosswind (NOT from HLA) ─────
+    curve_spin = sidespin * 0.003 * (carry / 100)   # ~3 yds /100yd /1000 rpm
+    curve_wind = crosswind * 0.18 * (carry / 200)
+    curve      = curve_spin + curve_wind
 
     # ── Roll estimate ─────────────────────────────────────────────────────
     # Lower VLA → more roll; higher backspin → less roll
@@ -51,11 +56,15 @@ def process_shot(ball_data: dict, wind_speed: float = 0, wind_dir: float = 0) ->
 
     total = carry + roll
 
+    # Net perpendicular offset from the aim line at landing (for the HUD)
+    lateral = carry * math.tan(math.radians(hla)) + curve
+
     return {
         "carry":    round(carry, 1),
         "total":    round(total, 1),
-        "lateral":  round(lateral, 1),
         "roll":     round(roll, 1),
+        "curve":    round(curve, 1),
+        "lateral":  round(lateral, 1),
         "hla":      round(hla, 1),
         "vla":      round(vla, 1),
         "speed":    round(speed, 1),

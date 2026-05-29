@@ -15,6 +15,9 @@ from physics     import process_shot
 from renderer    import (Viewport, draw_hole, draw_animated_ball,
                           draw_stats_panel, score_color)
 import r10_server
+import audio
+
+AIM_STEP = 2.0   # degrees per arrow-key press
 
 # ── Layout ────────────────────────────────────────────────────────────────────
 WIN_W, WIN_H = 1400, 900
@@ -74,6 +77,7 @@ def score_label(shots: int, par: int) -> str:
 
 def main():
     pygame.init()
+    audio.init()
     screen = pygame.display.set_mode((WIN_W, WIN_H))
     pygame.display.set_caption("Golf Sim  |  Garmin Approach R10")
     clock  = pygame.time.Clock()
@@ -150,10 +154,26 @@ def main():
                     # Manual "holed" (useful when on the green)
                     if not game.animating and game.current_terrain in ("green", "tee"):
                         game.complete_hole()
+                        audio.play("holeout")
                         label = score_label(game.shot_count,
                                             game.current_hole["par"])
                         show_banner(f"{label}!  {game.shot_count} shots — Press N for next hole",
                                     game.shot_count, game.current_hole["par"])
+
+                elif event.key in (pygame.K_LEFT, pygame.K_COMMA):
+                    if not game.animating:
+                        game.adjust_aim(-AIM_STEP)
+                        audio.play("aim", 0.6)
+
+                elif event.key in (pygame.K_RIGHT, pygame.K_PERIOD):
+                    if not game.animating:
+                        game.adjust_aim(AIM_STEP)
+                        audio.play("aim", 0.6)
+
+                elif event.key == pygame.K_c:
+                    if not game.animating:
+                        game.aim_at_pin()
+                        notify.push("Aim reset to pin")
 
         # ── Incoming shots ─────────────────────────────────────────────────
         while not r10_server.shot_queue.empty():
@@ -164,8 +184,10 @@ def main():
                 game.update_animation(0)
 
             bd     = raw.get("BallData", {})
-            result = process_shot(bd, game.wind_speed, game.wind_dir)
-            game.apply_shot(result)
+            aim    = game.aim_heading
+            result = process_shot(bd, game.wind_speed, game.wind_dir, aim_heading=aim)
+            game.apply_shot(result, aim_heading=aim)
+            audio.play("hit")
 
             if game.ob_penalty:
                 notify.push("OUT OF BOUNDS — stroke & distance penalty!", 4500)
@@ -177,12 +199,22 @@ def main():
                     f"{result['backspin']:.0f} rpm"
                 )
 
-        # ── Animation tick ─────────────────────────────────────────────────
+        # ── Animation tick (with landing-sound detection) ───────────────────
+        was_animating = game.animating
         game.update_animation(dt)
+        if was_animating and not game.animating:
+            if game.landed_in_water:
+                audio.play("splash")
+                notify.push("SPLASH — in the water!", 3500)
+            elif game.ob_penalty:
+                audio.play("ob")
+            elif game.current_terrain == "bunker":
+                audio.play("sand")
 
         # ── Auto-holed check ───────────────────────────────────────────────
         if game.check_holed():
             game.complete_hole()
+            audio.play("holeout")
             label = score_label(game.shot_count, game.current_hole["par"])
             show_banner(f"{label}!  {game.shot_count} shots — Press N for next hole",
                         game.shot_count, game.current_hole["par"])
@@ -193,7 +225,8 @@ def main():
         # Course view
         draw_hole(screen, vp, game.current_hole,
                   ball_pos    = (None if game.animating else game.ball_pos),
-                  shot_history= game.shot_history)
+                  shot_history= game.shot_history,
+                  aim_heading = (None if game.animating else game.aim_heading))
 
         if game.animating:
             draw_animated_ball(screen, vp,
