@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meritage 2-Seater — Assembly Analysis</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #f4f5f7;
+    color: #1a1a2e;
+    line-height: 1.5;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: #1a1a2e;
+    color: #fff;
+    padding: 36px 40px 28px;
+  }
+  .header h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 6px; }
+  .header p  { font-size: 0.95rem; opacity: 0.7; max-width: 680px; }
+  .header .tag {
+    display: inline-block;
+    background: #e65100;
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 3px 9px;
+    border-radius: 3px;
+    margin-bottom: 12px;
+  }
+
+  /* ── Layout ── */
+  .page { max-width: 1100px; margin: 0 auto; padding: 32px 24px 64px; }
+  section { margin-bottom: 48px; }
+  h2 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 18px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e0e0e0;
+    color: #1a1a2e;
+  }
+
+  /* ── Problem banner ── */
+  .problem-banner {
+    background: #fff3e0;
+    border-left: 5px solid #e65100;
+    border-radius: 6px;
+    padding: 20px 24px;
+    margin-bottom: 32px;
+  }
+  .problem-banner h3 { font-size: 1rem; font-weight: 700; color: #bf360c; margin-bottom: 8px; }
+  .problem-banner p  { font-size: 0.92rem; color: #5d3a1a; }
+  .problem-banner strong { color: #bf360c; }
+
+  /* ── Scenario cards ── */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 22px 20px 18px;
+    border-top: 5px solid #ccc;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  }
+  .card.current { border-top-color: #e53935; }
+  .card.propA   { border-top-color: #43a047; }
+  .card.propB   { border-top-color: #fb8c00; }
+  .card.propC   { border-top-color: #1e88e5; }
+
+  .card .scenario-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    opacity: 0.55;
+  }
+  .card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 14px; }
+
+  .big-num {
+    font-size: 2.4rem;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 2px;
+  }
+  .big-label {
+    font-size: 0.78rem;
+    color: #666;
+    margin-bottom: 16px;
+  }
+
+  .card-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 14px;
+    border-top: 1px solid #eee;
+    padding-top: 14px;
+  }
+  .stat-item .val { font-size: 1.1rem; font-weight: 700; }
+  .stat-item .lbl { font-size: 0.72rem; color: #888; }
+
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    margin-top: 8px;
+  }
+  .badge.good    { background: #e8f5e9; color: #2e7d32; }
+  .badge.bad     { background: #ffebee; color: #c62828; }
+  .badge.neutral { background: #fff3e0; color: #e65100; }
+  .badge.best    { background: #e3f2fd; color: #1565c0; }
+
+  /* ── Charts ── */
+  .chart-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 720px) { .chart-row { grid-template-columns: 1fr; } }
+
+  .chart-box {
+    background: #fff;
+    border-radius: 10px;
+    padding: 22px 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  }
+  .chart-box h3 {
+    font-size: 0.9rem;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .chart-box .chart-note {
+    font-size: 0.76rem;
+    color: #888;
+    margin-bottom: 14px;
+  }
+  .chart-box canvas { width: 100% !important; }
+
+  /* ── Sensitivity ── */
+  .sens-box {
+    background: #fff;
+    border-radius: 10px;
+    padding: 22px 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  }
+  .sens-box h3 { font-size: 0.9rem; font-weight: 700; margin-bottom: 4px; }
+  .sens-box .chart-note { font-size: 0.76rem; color: #888; margin-bottom: 14px; }
+
+  /* ── Timeline strip ── */
+  .timeline {
+    background: #fff;
+    border-radius: 10px;
+    padding: 24px 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    margin-bottom: 24px;
+  }
+  .timeline h3 { font-size: 0.9rem; font-weight: 700; margin-bottom: 18px; }
+  .tl-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+    gap: 10px;
+  }
+  .tl-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    width: 160px;
+    flex-shrink: 0;
+    color: #444;
+  }
+  .tl-bar-wrap {
+    flex: 1;
+    background: #f0f0f0;
+    border-radius: 4px;
+    height: 26px;
+    position: relative;
+    overflow: hidden;
+  }
+  .tl-seg {
+    height: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: rgba(0,0,0,0.55);
+    float: left;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .seg-pre    { background: #90a4ae; }
+  .seg-bar    { background: #ef9a9a; }
+  .seg-idle   { background: #ffcc80; }
+  .seg-weave  { background: #a5d6a7; }
+  .seg-delay  { background: #ef5350; }
+  .tl-time {
+    font-size: 0.75rem;
+    font-weight: 700;
+    width: 70px;
+    flex-shrink: 0;
+    text-align: right;
+  }
+
+  /* ── Legend ── */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 14px;
+    font-size: 0.76rem;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  /* ── Takeaways ── */
+  .takeaways {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+  }
+  .takeaway {
+    background: #fff;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  }
+  .takeaway .icon { font-size: 1.6rem; margin-bottom: 10px; }
+  .takeaway h4 { font-size: 0.9rem; font-weight: 700; margin-bottom: 6px; }
+  .takeaway p  { font-size: 0.82rem; color: #555; }
+  .takeaway .highlight { color: #2e7d32; font-weight: 700; }
+  .takeaway .warning   { color: #e65100; font-weight: 700; }
+
+  /* ── Placeholder warning ── */
+  .placeholder-bar {
+    background: #fffde7;
+    border: 1px solid #f9a825;
+    border-radius: 6px;
+    padding: 12px 18px;
+    font-size: 0.82rem;
+    color: #5d4037;
+    margin-bottom: 32px;
+  }
+  .placeholder-bar strong { color: #e65100; }
+
+  /* ── Cost model table ── */
+  .cost-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  .cost-table th {
+    text-align: left;
+    padding: 10px 14px;
+    background: #f0f0f0;
+    font-weight: 700;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #555;
+  }
+  .cost-table td { padding: 10px 14px; border-bottom: 1px solid #f0f0f0; }
+  .cost-table tr:last-child td { border-bottom: none; }
+  .cost-table tr.best-row td { background: #e8f5e9; font-weight: 600; }
+  .cost-table tr.worst-row td { background: #ffebee; }
+  .cost-table .cost-bar-cell { width: 200px; }
+  .cost-bar {
+    height: 14px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+  .footer {
+    text-align: center;
+    font-size: 0.75rem;
+    color: #aaa;
+    padding: 24px;
+    border-top: 1px solid #e0e0e0;
+    margin-top: 24px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="tag">TUUCI Internal — Meritage 2-Seater</div>
+  <h1>Assembly Line Analysis — Plain English Summary</h1>
+  <p>1,000 simulated chairs per scenario. Shows where time and money are being lost, and what each proposed fix actually does.</p>
+</div>
+
+<div class="page">
+
+  <!-- PLACEHOLDER WARNING -->
+  <div class="placeholder-bar">
+    <strong>⚠ Numbers marked with ★ are estimates, not measured data.</strong>
+    The 30% bar delay rate, defect rates, and $20/hr labor rate need to be verified with real production records before making staffing decisions.
+  </div>
+
+  <!-- THE PROBLEM -->
+  <section>
+    <h2>The Problem in Plain English</h2>
+    <div class="problem-banner">
+      <h3>Bars are showing up late — and it's costing you every single time it happens</h3>
+      <p>
+        Right now, about <strong>3 out of every 10 sofas</strong>★ arrive at the weaving table before their bars are attached.
+        When that happens, <strong>both weavers have to stand and wait</strong> — doing nothing — while one person attaches the bars.
+        That's roughly <strong>45 wasted worker-minutes per delayed sofa</strong> (close to the ~44 min documented by your team).
+        Meanwhile the other 70% of sofas flow through fine, so the problem feels random and is easy to overlook.
+      </p>
+    </div>
+
+    <!-- TIMELINE VISUALIZATION -->
+    <div class="timeline">
+      <h3>What one sofa's time actually looks like for each scenario</h3>
+      <p style="font-size:0.78rem;color:#888;margin-bottom:16px;">Each bar = one sofa from start to finish. Width = time spent. Total time shown in minutes.</p>
+
+      <!-- Current — no delay (70% of chairs) -->
+      <div class="tl-row">
+        <div class="tl-label">Current State<br><span style="color:#888;font-size:0.68rem;">No delay (70% of chairs)</span></div>
+        <div class="tl-bar-wrap">
+          <!-- Pre: 52.45, Bar (off-line): not shown on critical path, Weave: 11.9 — total ~64 -->
+          <div class="tl-seg seg-pre"  style="width:81.9%">Pre-assembly 52 min</div>
+          <div class="tl-seg seg-weave" style="width:18.1%">Weave 12 min</div>
+        </div>
+        <div class="tl-time" style="color:#2e7d32">~64 min</div>
+      </div>
+
+      <!-- Current — delayed (30% of chairs) -->
+      <div class="tl-row">
+        <div class="tl-label">Current State<br><span style="color:#e53935;font-size:0.68rem;">Bar delayed ★ (30% of chairs)</span></div>
+        <div class="tl-bar-wrap">
+          <!-- Pre: 52.45, Bar at table: 22.5, Weave: 11.9 — total ~87 -->
+          <div class="tl-seg seg-pre"   style="width:60.3%">Pre-assembly</div>
+          <div class="tl-seg seg-delay" style="width:25.9%">Bars late — weavers idle</div>
+          <div class="tl-seg seg-weave" style="width:13.7%">Weave</div>
+        </div>
+        <div class="tl-time" style="color:#e53935">~87 min</div>
+      </div>
+
+      <!-- Proposed A -->
+      <div class="tl-row">
+        <div class="tl-label">Proposed A<br><span style="color:#43a047;font-size:0.68rem;">3 bar ops + 3 weavers</span></div>
+        <div class="tl-bar-wrap">
+          <!-- Pre: 52.45, Bar parallel: 7.7, Weave parallel: 5.95 — total ~66 -->
+          <div class="tl-seg seg-pre"   style="width:80%">Pre-assembly 52 min</div>
+          <div class="tl-seg seg-bar"   style="width:11.8%">Bars ×3</div>
+          <div class="tl-seg seg-weave" style="width:9.1%">Weave ×3</div>
+        </div>
+        <div class="tl-time" style="color:#43a047">~67 min</div>
+      </div>
+
+      <!-- Proposed B -->
+      <div class="tl-row">
+        <div class="tl-label">Proposed B<br><span style="color:#fb8c00;font-size:0.68rem;">1 bar op + 1 weaver</span></div>
+        <div class="tl-bar-wrap">
+          <!-- Pre: 52.45, Bar+Weave pipelined: ~30 — total ~82 -->
+          <div class="tl-seg seg-pre"   style="width:63.9%">Pre-assembly</div>
+          <div class="tl-seg seg-bar"   style="width:20.0%">Bars (all 3 sides)</div>
+          <div class="tl-seg seg-weave" style="width:16.1%">Weave (all 3)</div>
+        </div>
+        <div class="tl-time" style="color:#fb8c00">~82 min</div>
+      </div>
+
+      <!-- Proposed C -->
+      <div class="tl-row">
+        <div class="tl-label">Proposed C<br><span style="color:#1e88e5;font-size:0.68rem;">A + fix supplier screws</span></div>
+        <div class="tl-bar-wrap">
+          <!-- Pre fixed: 49.2, Bar: 7.7, Weave: 5.95 — total ~63 -->
+          <div class="tl-seg seg-pre"   style="width:78.1%">Pre-assembly 49 min</div>
+          <div class="tl-seg seg-bar"   style="width:12.2%">Bars ×3</div>
+          <div class="tl-seg seg-weave" style="width:9.4%">Weave ×3</div>
+        </div>
+        <div class="tl-time" style="color:#1e88e5">~63 min</div>
+      </div>
+
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot seg-pre"></div>Pre-assembly (Steps 2, 3, 5)</div>
+        <div class="legend-item"><div class="legend-dot seg-delay"></div>Weavers idle — waiting for late bars ★</div>
+        <div class="legend-item"><div class="legend-dot seg-bar"></div>Bar attachment (Step 12)</div>
+        <div class="legend-item"><div class="legend-dot seg-weave"></div>Weaving (Step 13)</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCENARIO CARDS -->
+  <section>
+    <h2>The 4 Scenarios — Side by Side</h2>
+    <div class="cards">
+
+      <div class="card current">
+        <div class="scenario-label">Today</div>
+        <h3>Current State</h3>
+        <div class="big-num" style="color:#e53935">71.7</div>
+        <div class="big-label">avg minutes per sofa</div>
+        <p style="font-size:0.82rem;color:#555">
+          Looks okay on average — but that hides a big problem.
+          30%★ of sofas take <strong>87+ minutes</strong> because bars show up late.
+          The other 70% take ~64 min. You're essentially running two different processes.
+        </p>
+        <div class="card-stats">
+          <div class="stat-item">
+            <div class="val">3</div>
+            <div class="lbl">operators</div>
+          </div>
+          <div class="stat-item">
+            <div class="val">$38.91</div>
+            <div class="lbl">labor / chair ★</div>
+          </div>
+          <div class="stat-item">
+            <div class="val">91 min</div>
+            <div class="lbl">worst 10% of chairs</div>
+          </div>
+          <div class="stat-item">
+            <div class="val">±11.8</div>
+            <div class="lbl">min variability (std)</div>
+          </div>
+        </div>
+        <span class="badge bad">Unpredictable — high variance</span>
+      </div>
+
+      <div class="card propA">
+        <div class="scenario-label">Option A</div>
+        <h3>3 Bar Ops + 3 Weavers</h3>
+        <div class="big-num" style="color:#43a047">68.6</div>
+        <div class="big-label">avg minutes per sofa</div>
+        <p style="font-size:0.82rem;color:#555">
+          Three people attach bars simultaneously (one per side), then three weavers
+          weave simultaneously. Bars are always done on time so weavers
+          <strong>never sit idle</strong>. More consistent output.
+        </p>
+        <div class="card-stats">
+          <div class="stat-item">
+            <div class="val">7</div>
+            <div class="lbl">operators</div>
+          </div>
+          <div class="stat-item">
+            <div class="val">$33.65</div>
+            <div class="lbl">labor / chair ★</div>
+          </div>
+          <div class="stat-item">
+            <div class="val">72 min</div>
+            <div class="lbl">worst 10% of chairs</div>
+          </div>
+          <div class="stat-item">
+            <div class="val">±2.6</div>
+            <div class="lbl">min variability (std)</div>
+          </div>
+        </div>
+        <span class="badge good">Faster + cheaper despite more staff</span>
+      </div>
+
+      <div class="card propB">
+        <div class="scenario-label">Option B</div>
+        <h3>1 Bar Op + 1 Weaver</h3>
+        <div class="big-num" style="color:#fb8c00">84.2</div>
+        <div class="big-label">avg minutes per sofa</div>
+        <p style="font-size:0.82rem;color:#555">
+          One person does all bar attachment (all 3 sides), then one person
+          weaves (starting each side as soon as bars are done on that side).
+          Fewest people, but the slowest option — the bar op and weaver
+          end up waiting on each other.
+        </p>
+        <div class="card-stats">
+          <div class="stat-item">
+            <div class="val">3</div>
+            <div class="lbl">operators</div>
+          </div>
+          <div class="stat-item">
+            <div class="val">$36.65</div>
+            <div class="lbl">labor / chair ★</div>
+          </div>
+          <div class="stat-item">
+            <div class="val">90 min</div>
+            <div class="lbl">worst 10% of chairs</div>
+          </div>
+          <div class="stat-item">
+            <div class="val">±3.8</div>
+            <div class="lbl">min variability (std)</div>
+          </div>
+        </div>
+        <span class="badge neutral">Slowest — not recommended</span>
+      </div>
+
+      <div class="card propC">
+        <div class="scenario-label">Option C — Best</div>
+        <h3>A + Fix Supplier Screws</h3>
+        <div class="big-num" style="color:#1e88e5">65.4</div>
+        <div class="big-label">avg minutes per sofa</div>
+        <p style="font-size:0.82rem;color:#555">
+          Same as Option A, plus the supplier ships the correct screws.
+          That removes the 3 min 15 sec of wasted rework at Step 2 every single sofa.
+          <strong>Small fix, free savings on every chair forever.</strong>
+        </p>
+        <div class="card-stats">
+          <div class="stat-item">
+            <div class="val">7</div>
+            <div class="lbl">operators</div>
+          </div>
+          <div class="stat-item">
+            <div class="val">$32.56</div>
+            <div class="lbl">labor / chair ★</div>
+          </div>
+          <div class="stat-item">
+            <div class="val">68 min</div>
+            <div class="lbl">worst 10% of chairs</div>
+          </div>
+          <div class="stat-item">
+            <div class="val">±2.6</div>
+            <div class="lbl">min variability (std)</div>
+          </div>
+        </div>
+        <span class="badge best">Fastest + lowest cost per chair</span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- CHARTS -->
+  <section>
+    <h2>Visualized Comparison</h2>
+    <div class="chart-row">
+      <div class="chart-box">
+        <h3>How long does building one sofa take?</h3>
+        <div class="chart-note">Mean time ± variability. Shorter is better. Note how the current state swings wildly.</div>
+        <canvas id="cycleChart" height="240"></canvas>
+      </div>
+      <div class="chart-box">
+        <h3>Labor cost per sofa ★</h3>
+        <div class="chart-note">Total worker-clock-minutes converted to dollars. Idle time still costs money.</div>
+        <canvas id="costChart" height="240"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- SENSITIVITY -->
+  <section>
+    <h2>What If the Bar Delay Problem Gets Better or Worse? ★</h2>
+    <div class="sens-box">
+      <h3>How cycle time changes as the bar delay rate changes</h3>
+      <div class="chart-note">
+        The red line is today's situation. As the delay rate climbs, today's approach gets worse fast.
+        The green/blue lines (Options A and C) don't move — the delay problem doesn't exist in those scenarios.
+        ★ The current 30% delay rate is an estimate — this chart shows why measuring the real rate matters.
+      </div>
+      <canvas id="sensChart" height="200"></canvas>
+    </div>
+  </section>
+
+  <!-- COST TABLE -->
+  <section>
+    <h2>Labor Cost Breakdown ★</h2>
+    <div style="background:#fff;border-radius:10px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.06);">
+      <p style="font-size:0.82rem;color:#888;margin-bottom:16px;">
+        ★ Based on $20/hr placeholder rate. Replace with your actual burdened labor rate (wages + benefits + overhead) to get real numbers.
+        Op-minutes = every worker's clock time including idle — because idle workers still get paid.
+      </p>
+      <table class="cost-table">
+        <thead>
+          <tr>
+            <th>Scenario</th>
+            <th>Operators</th>
+            <th>Total worker-minutes per chair</th>
+            <th>Cost per chair ★</th>
+            <th>vs. Today</th>
+            <th style="width:160px;">Relative cost</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="worst-row">
+            <td><strong>Current State</strong></td>
+            <td>3</td>
+            <td>116.7 min</td>
+            <td><strong>$38.91</strong></td>
+            <td>—</td>
+            <td class="cost-bar-cell"><div class="cost-bar" style="width:100%;background:#e53935;"></div></td>
+          </tr>
+          <tr>
+            <td>Option A — 3+3 parallel</td>
+            <td>7</td>
+            <td>100.9 min</td>
+            <td><strong>$33.65</strong></td>
+            <td style="color:#2e7d32"><strong>−$5.26 / chair</strong></td>
+            <td class="cost-bar-cell"><div class="cost-bar" style="width:86.5%;background:#43a047;"></div></td>
+          </tr>
+          <tr>
+            <td>Option B — 1+1 sequential</td>
+            <td>3</td>
+            <td>109.9 min</td>
+            <td><strong>$36.65</strong></td>
+            <td style="color:#e65100">−$2.26 / chair</td>
+            <td class="cost-bar-cell"><div class="cost-bar" style="width:94.2%;background:#fb8c00;"></div></td>
+          </tr>
+          <tr class="best-row">
+            <td>Option C — A + supplier fix ✓</td>
+            <td>7</td>
+            <td>97.7 min</td>
+            <td><strong>$32.56</strong></td>
+            <td style="color:#1565c0"><strong>−$6.35 / chair</strong></td>
+            <td class="cost-bar-cell"><div class="cost-bar" style="width:83.7%;background:#1e88e5;"></div></td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="font-size:0.8rem;color:#888;margin-top:14px;">
+        Why does Option A (7 people) cost <em>less</em> than Current State (3 people)?
+        Because today's 3 workers include a lot of idle time — especially when bars are delayed.
+        More people staying busy beats fewer people waiting around.
+      </p>
+    </div>
+  </section>
+
+  <!-- KEY TAKEAWAYS -->
+  <section>
+    <h2>What This Actually Means — 4 Key Points</h2>
+    <div class="takeaways">
+
+      <div class="takeaway">
+        <div class="icon">📦</div>
+        <h4>The bar scheduling problem is the #1 issue</h4>
+        <p>
+          When bars are attached out of order, <span class="warning">you lose ~22 minutes of output</span>
+          from two people standing around. Fix the scheduling so bars are
+          always at the station before the chair arrives.
+        </p>
+      </div>
+
+      <div class="takeaway">
+        <div class="icon">⚡</div>
+        <h4>More people can mean lower cost</h4>
+        <p>
+          Option A uses 7 operators vs. today's 3 — but costs
+          <span class="highlight">$5.26 less per chair</span> because everyone stays
+          productive. Idle time is expensive even if it looks "free."
+        </p>
+      </div>
+
+      <div class="takeaway">
+        <div class="icon">🔩</div>
+        <h4>The supplier screw fix is low-hanging fruit</h4>
+        <p>
+          Wrong screws waste 3 min 15 sec on <em>every single sofa</em> at Step 2.
+          Option C fixes this for free (just a supplier conversation)
+          and saves <span class="highlight">$6.35/chair</span> vs. today.
+        </p>
+      </div>
+
+      <div class="takeaway">
+        <div class="icon">📊</div>
+        <h4>Measure the real bar delay rate ★</h4>
+        <p>
+          The 30% delay rate is an estimate. If it's actually 50%,
+          the case for fixing it gets <em>much stronger</em>.
+          Track how often bars aren't ready when a chair arrives — even 2 weeks of data would make this analysis real.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+</div><!-- /page -->
+
+<div class="footer">
+  TUUCI — Meritage 2-Seater Assembly Analysis &nbsp;|&nbsp; 1,000 simulated runs per scenario &nbsp;|&nbsp; ★ = placeholder estimate, needs real production data
+</div>
+
+<script>
+// ── Shared chart defaults ────────────────────────────────────────
+Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+Chart.defaults.font.size = 12;
+
+const LABELS = ['Current State', 'Option A\n(3+3 parallel)', 'Option B\n(1+1 seq)', 'Option C\n(A + supplier fix)'];
+const SHORT  = ['Current', 'Option A', 'Option B', 'Option C'];
+const COLORS = ['#e53935', '#43a047', '#fb8c00', '#1e88e5'];
+
+// ── Cycle time chart ─────────────────────────────────────────────
+new Chart(document.getElementById('cycleChart'), {
+  type: 'bar',
+  data: {
+    labels: SHORT,
+    datasets: [
+      {
+        label: 'Mean cycle time (min)',
+        data: [71.69, 68.61, 84.17, 65.36],
+        backgroundColor: COLORS.map(c => c + 'cc'),
+        borderColor: COLORS,
+        borderWidth: 2,
+        borderRadius: 5,
+      },
+      {
+        label: 'P90 — worst 10% of chairs (min)',
+        data: [91.35, 71.73, 90.40, 68.48],
+        backgroundColor: COLORS.map(c => c + '33'),
+        borderColor: COLORS,
+        borderWidth: 1,
+        borderDash: [4, 4],
+        borderRadius: 5,
+        type: 'bar',
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'bottom', labels: { boxWidth: 12 } },
+      tooltip: {
+        callbacks: {
+          label: ctx => ` ${ctx.dataset.label}: ${ctx.raw} min`
+        }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: false,
+        min: 55,
+        title: { display: true, text: 'Minutes' }
+      }
+    }
+  }
+});
+
+// ── Cost chart ───────────────────────────────────────────────────
+new Chart(document.getElementById('costChart'), {
+  type: 'bar',
+  data: {
+    labels: SHORT,
+    datasets: [
+      {
+        label: 'Active labor (min)',
+        data: [96.1, 96.1, 96.1, 92.8],   // op_minutes - idle
+        backgroundColor: ['#ef9a9a','#a5d6a7','#ffcc80','#90caf9'],
+        borderRadius: 5,
+        stack: 'ops',
+      },
+      {
+        label: 'Idle labor (min)',
+        data: [20.6, 4.9, 13.9, 4.9],
+        backgroundColor: ['#e5393555','#43a04755','#fb8c0055','#1e88e555'],
+        borderRadius: 5,
+        stack: 'ops',
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'bottom', labels: { boxWidth: 12 } },
+      tooltip: {
+        callbacks: {
+          label: ctx => ` ${ctx.dataset.label}: ${ctx.raw} min`,
+          footer: items => {
+            const total = items.reduce((s,i) => s + i.raw, 0);
+            return `Total: ${total.toFixed(0)} min = $${(total/60*20).toFixed(2)}/chair ★`;
+          }
+        }
+      }
+    },
+    scales: {
+      y: { title: { display: true, text: 'Worker-minutes per chair' }, stacked: true },
+      x: { stacked: true }
+    }
+  }
+});
+
+// ── Sensitivity chart ────────────────────────────────────────────
+const delayPcts = [0,10,20,30,40,50,60,70,80,90,100];
+
+// Current state: no-delay time + delayed portion
+// no-delay cycle = T_PRE_FULL + weave_2op = 52.45 + 11.9 = 64.35
+// delayed cycle  = T_PRE_FULL + bar_total + weave_2op = 64.35 + 23.2(avg with defects)
+// mean = p*87.55 + (1-p)*64.35
+const noDelay = 64.35;   // ~64.35 min (pre + 2-op weave, no bar delay)
+const delayed  = 87.55;  // ~87.55 min (pre + bars + weave, with average defects)
+
+const currentMeans = delayPcts.map(p => {
+  const pr = p / 100;
+  return (pr * delayed + (1 - pr) * noDelay).toFixed(1);
+});
+
+// Proposed A and C don't depend on bar_delay_prob (flat lines)
+const propA = delayPcts.map(() => 68.6);
+const propB = delayPcts.map(() => 84.2);
+const propC = delayPcts.map(() => 65.4);
+
+new Chart(document.getElementById('sensChart'), {
+  type: 'line',
+  data: {
+    labels: delayPcts.map(p => p + '%'),
+    datasets: [
+      {
+        label: 'Current State',
+        data: currentMeans,
+        borderColor: '#e53935',
+        backgroundColor: '#e5393520',
+        fill: true,
+        tension: 0.3,
+        borderWidth: 3,
+        pointRadius: 4,
+      },
+      {
+        label: 'Option A (3+3 parallel)',
+        data: propA,
+        borderColor: '#43a047',
+        borderWidth: 2,
+        borderDash: [6,3],
+        pointRadius: 3,
+        tension: 0,
+      },
+      {
+        label: 'Option B (1+1 sequential)',
+        data: propB,
+        borderColor: '#fb8c00',
+        borderWidth: 2,
+        borderDash: [6,3],
+        pointRadius: 3,
+        tension: 0,
+      },
+      {
+        label: 'Option C (A + supplier fix)',
+        data: propC,
+        borderColor: '#1e88e5',
+        borderWidth: 2,
+        borderDash: [6,3],
+        pointRadius: 3,
+        tension: 0,
+      },
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'bottom', labels: { boxWidth: 14 } },
+      tooltip: {
+        mode: 'index',
+        intersect: false,
+        callbacks: {
+          title: items => `Bar delay rate: ${items[0].label}  ★ estimate`,
+          label: ctx => ` ${ctx.dataset.label}: ${ctx.raw} min`
+        }
+      },
+      annotation: {}
+    },
+    scales: {
+      x: { title: { display: true, text: 'Bar Delay Rate  ★ (needs real measurement)' } },
+      y: {
+        beginAtZero: false,
+        min: 55,
+        title: { display: true, text: 'Mean Cycle Time (min)' }
+      }
+    }
+  }
+});
+</script>
+</body>
+</html>
