@@ -297,7 +297,7 @@
 <div class="header">
   <div class="tag">TUUCI Internal — Meritage 2-Seater</div>
   <h1>Assembly Line Analysis — Plain English Summary</h1>
-  <p>1,000 simulated chairs per scenario. Shows where time and money are being lost, and what each proposed fix actually does.</p>
+  <p>1,000 simulated chairs per scenario. Shows where time and money are being lost, and what each proposed fix actually does. Bar delay frequency is <strong>not yet measured</strong> — see the sensitivity section to dial in your real number.</p>
 </div>
 
 <div class="page">
@@ -305,20 +305,42 @@
   <!-- PLACEHOLDER WARNING -->
   <div class="placeholder-bar">
     <strong>⚠ Numbers marked with ★ are estimates, not measured data.</strong>
-    The 30% bar delay rate, defect rates, and $20/hr labor rate need to be verified with real production records before making staffing decisions.
+    The bar delay frequency has not been measured — one occurrence was recorded but the true rate is unknown. The defect rates and $20/hr labor rate are also placeholders. The per-occurrence cost figures (how much one delay event costs) are reliable regardless of frequency.
   </div>
 
   <!-- THE PROBLEM -->
   <section>
     <h2>The Problem in Plain English</h2>
     <div class="problem-banner">
-      <h3>Bars are showing up late — and it's costing you every single time it happens</h3>
+      <h3>When bars show up late, it costs a fixed amount — every single time</h3>
       <p>
-        Right now, about <strong>3 out of every 10 sofas</strong>★ arrive at the weaving table before their bars are attached.
-        When that happens, <strong>both weavers have to stand and wait</strong> — doing nothing — while one person attaches the bars.
-        That's roughly <strong>45 wasted worker-minutes per delayed sofa</strong> (close to the ~44 min documented by your team).
-        Meanwhile the other 70% of sofas flow through fine, so the problem feels random and is easy to overlook.
+        We don't know yet how often the bars arrive out of sequence. But we do know exactly what happens <em>when it does</em>:
+        <strong>both weavers have to stand at the table and wait</strong> — doing nothing — while one person attaches the bars.
+        Every single occurrence wastes roughly <strong>45 worker-minutes</strong> (close to the ~44 min your team documented)
+        and adds <strong>23 minutes to that chair's build time</strong>.
+        The question isn't whether it's worth fixing — it clearly is. The question is how often it's happening,
+        because that tells you how much you're currently losing per week.
       </p>
+    </div>
+
+    <!-- COST PER OCCURRENCE callout -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px;">
+      <div style="background:#fff;border-radius:10px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.06);border-top:4px solid #e53935;text-align:center;">
+        <div style="font-size:2rem;font-weight:800;color:#e53935">+23 min</div>
+        <div style="font-size:0.8rem;color:#555;margin-top:4px;">added to that chair's build time<br>every time bars are late</div>
+      </div>
+      <div style="background:#fff;border-radius:10px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.06);border-top:4px solid #fb8c00;text-align:center;">
+        <div style="font-size:2rem;font-weight:800;color:#fb8c00">45 min</div>
+        <div style="font-size:0.8rem;color:#555;margin-top:4px;">of paid idle time wasted<br>per occurrence (2 weavers × ~22.5 min)</div>
+      </div>
+      <div style="background:#fff;border-radius:10px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.06);border-top:4px solid #1e88e5;text-align:center;">
+        <div style="font-size:2rem;font-weight:800;color:#1e88e5">$15 ★</div>
+        <div style="font-size:0.8rem;color:#555;margin-top:4px;">in idle labor cost per occurrence<br>(45 min × $20/hr placeholder rate)</div>
+      </div>
+      <div style="background:#fff;border-radius:10px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.06);border-top:4px solid #43a047;text-align:center;">
+        <div style="font-size:2rem;font-weight:800;color:#43a047">?</div>
+        <div style="font-size:0.8rem;color:#555;margin-top:4px;">how often this happens<br><strong>this is what needs to be measured</strong></div>
+      </div>
     </div>
 
     <!-- TIMELINE VISUALIZATION -->
@@ -326,9 +348,9 @@
       <h3>What one sofa's time actually looks like for each scenario</h3>
       <p style="font-size:0.78rem;color:#888;margin-bottom:16px;">Each bar = one sofa from start to finish. Width = time spent. Total time shown in minutes.</p>
 
-      <!-- Current — no delay (70% of chairs) -->
+      <!-- Current — no delay -->
       <div class="tl-row">
-        <div class="tl-label">Current State<br><span style="color:#888;font-size:0.68rem;">No delay (70% of chairs)</span></div>
+        <div class="tl-label">Current State<br><span style="color:#888;font-size:0.68rem;">Normal run (bars on time)</span></div>
         <div class="tl-bar-wrap">
           <!-- Pre: 52.45, Bar (off-line): not shown on critical path, Weave: 11.9 — total ~64 -->
           <div class="tl-seg seg-pre"  style="width:81.9%">Pre-assembly 52 min</div>
@@ -337,9 +359,9 @@
         <div class="tl-time" style="color:#2e7d32">~64 min</div>
       </div>
 
-      <!-- Current — delayed (30% of chairs) -->
+      <!-- Current — delayed -->
       <div class="tl-row">
-        <div class="tl-label">Current State<br><span style="color:#e53935;font-size:0.68rem;">Bar delayed ★ (30% of chairs)</span></div>
+        <div class="tl-label">Current State<br><span style="color:#e53935;font-size:0.68rem;">When bars arrive late</span></div>
         <div class="tl-bar-wrap">
           <!-- Pre: 52.45, Bar at table: 22.5, Weave: 11.9 — total ~87 -->
           <div class="tl-seg seg-pre"   style="width:60.3%">Pre-assembly</div>
@@ -387,7 +409,7 @@
 
       <div class="legend">
         <div class="legend-item"><div class="legend-dot seg-pre"></div>Pre-assembly (Steps 2, 3, 5)</div>
-        <div class="legend-item"><div class="legend-dot seg-delay"></div>Weavers idle — waiting for late bars ★</div>
+        <div class="legend-item"><div class="legend-dot seg-delay"></div>Weavers idle — waiting for late bars (cost is fixed per occurrence; frequency unknown)</div>
         <div class="legend-item"><div class="legend-dot seg-bar"></div>Bar attachment (Step 12)</div>
         <div class="legend-item"><div class="legend-dot seg-weave"></div>Weaving (Step 13)</div>
       </div>
@@ -405,9 +427,10 @@
         <div class="big-num" style="color:#e53935">71.7</div>
         <div class="big-label">avg minutes per sofa</div>
         <p style="font-size:0.82rem;color:#555">
-          Looks okay on average — but that hides a big problem.
-          30%★ of sofas take <strong>87+ minutes</strong> because bars show up late.
-          The other 70% take ~64 min. You're essentially running two different processes.
+          On a normal run (bars on time): <strong>~64 min</strong> per sofa.
+          When bars arrive late: <strong>~87 min</strong> — 23 minutes longer, with two weavers
+          paid to stand around the whole time.
+          How often "late" happens is the number still to measure.
         </p>
         <div class="card-stats">
           <div class="stat-item">
@@ -415,19 +438,19 @@
             <div class="lbl">operators</div>
           </div>
           <div class="stat-item">
-            <div class="val">$38.91</div>
-            <div class="lbl">labor / chair ★</div>
+            <div class="val">$34–$45 ★</div>
+            <div class="lbl">labor range / chair</div>
           </div>
           <div class="stat-item">
-            <div class="val">91 min</div>
-            <div class="lbl">worst 10% of chairs</div>
+            <div class="val">64 / 87</div>
+            <div class="lbl">min (on-time / delayed)</div>
           </div>
           <div class="stat-item">
-            <div class="val">±11.8</div>
-            <div class="lbl">min variability (std)</div>
+            <div class="val">+45 min</div>
+            <div class="lbl">idle labor per delay event</div>
           </div>
         </div>
-        <span class="badge bad">Unpredictable — high variance</span>
+        <span class="badge bad">Outcome depends on bar scheduling</span>
       </div>
 
       <div class="card propA">
@@ -546,15 +569,21 @@
 
   <!-- SENSITIVITY -->
   <section>
-    <h2>What If the Bar Delay Problem Gets Better or Worse? ★</h2>
+    <h2>Once You Know the Real Delay Rate — Use This Chart</h2>
     <div class="sens-box">
-      <h3>How cycle time changes as the bar delay rate changes</h3>
+      <h3>How average cycle time changes depending on how often bars are late</h3>
       <div class="chart-note">
-        The red line is today's situation. As the delay rate climbs, today's approach gets worse fast.
-        The green/blue lines (Options A and C) don't move — the delay problem doesn't exist in those scenarios.
-        ★ The current 30% delay rate is an estimate — this chart shows why measuring the real rate matters.
+        <strong>How to use this:</strong> Once you've tracked the bar delay rate for a few weeks,
+        find that percentage on the x-axis and read up to the red line — that's your real average build time per sofa.
+        The green and blue lines are flat because Options A and C eliminate the problem entirely; they don't get worse no matter how bad the bar scheduling is.
+        Even if bar delays are rare (say 5%), the chart still shows you exactly what each occurrence is costing.
       </div>
       <canvas id="sensChart" height="200"></canvas>
+      <div style="margin-top:16px;padding:12px 16px;background:#f8f9fa;border-radius:6px;font-size:0.8rem;color:#555;">
+        <strong>Reading the gap:</strong> The vertical distance between the red line and the green/blue lines at any point
+        is how many minutes per chair you'd save by switching to Option A or C — regardless of how often delays happen.
+        The gap grows as delays get more frequent, but there's already a baseline gap even at 0% delay because the proposed scenarios are better organized overall.
+      </div>
     </div>
   </section>
 
@@ -656,12 +685,13 @@
       </div>
 
       <div class="takeaway">
-        <div class="icon">📊</div>
-        <h4>Measure the real bar delay rate ★</h4>
+        <div class="icon">📋</div>
+        <h4>Track the bar delay rate — it's the missing number</h4>
         <p>
-          The 30% delay rate is an estimate. If it's actually 50%,
-          the case for fixing it gets <em>much stronger</em>.
-          Track how often bars aren't ready when a chair arrives — even 2 weeks of data would make this analysis real.
+          One occurrence was recorded, but the true frequency is unknown.
+          Just tally it on a clipboard: did bars arrive before or after the chair?
+          <span class="highlight">Two to four weeks of data</span> would make
+          this whole analysis real. Then use the sensitivity chart above to read off the actual impact.
         </p>
       </div>
 
@@ -844,8 +874,14 @@ new Chart(document.getElementById('sensChart'), {
         mode: 'index',
         intersect: false,
         callbacks: {
-          title: items => `Bar delay rate: ${items[0].label}  ★ estimate`,
-          label: ctx => ` ${ctx.dataset.label}: ${ctx.raw} min`
+          title: items => `If bar delay rate = ${items[0].label}`,
+          label: ctx => ` ${ctx.dataset.label}: ${ctx.raw} min avg`,
+          footer: items => {
+            const current = parseFloat(items.find(i => i.dataset.label === 'Current State')?.raw ?? 0);
+            const optC    = parseFloat(items.find(i => i.dataset.label === 'Option C (A + supplier fix)')?.raw ?? 65.4);
+            const saving  = (current - optC).toFixed(1);
+            return saving > 0 ? `→ Option C saves ${saving} min/chair vs. Current State` : '';
+          }
         }
       },
       annotation: {}

@@ -63,8 +63,10 @@ T_PRE_FIXED = STEP2_VALUE + STEP3_TIME + STEP5_TIME   # 49.20 min (supplier fix,
 #  STOCHASTIC PARAMETERS  — ALL PLACEHOLDER, validate before use
 # ═══════════════════════════════════════════════════════════════════════════════
 
-BAR_DELAY_PROB   = 0.30   # PLACEHOLDER: fraction of chairs where bars arrive out of sequence
-                          #              (needs real shipment-delay / production scheduling data)
+BAR_DELAY_PROB   = 0.30   # PLACEHOLDER: fraction of chairs where bars arrive out of sequence.
+                          #              NOT a measured rate — one occurrence was observed.
+                          #              Track on clipboard (bars ready before/after chair arrives)
+                          #              for 2–4 weeks, then update this value.
 HOLE_DEFECT_PROB = 0.10   # PLACEHOLDER: fraction of bar insertions needing full removal + re-run (problem 03)
 HOLE_DEFECT_ADD  = 5.0    # PLACEHOLDER: minutes added per hole-sizing defect
 RUBBER_RING_PROB = 0.15   # PLACEHOLDER: fraction of bar insertions needing rubber ring re-seating (problem 02)
