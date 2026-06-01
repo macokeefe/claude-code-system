@@ -1,0 +1,5 @@
+scenario,n_ops,mean_cycle_time_min,median_cycle_time_min,p90_cycle_time_min,std_cycle_time_min,min_cycle_time_min,max_cycle_time_min,total_idle_operator_min,mean_op_minutes,labor_cost_per_chair_usd,labor_rate_per_hr_usd,bar_delay_prob,hole_defect_prob,rubber_ring_prob,n_simulation_runs
+1. Current State,3,71.69,64.35,91.35,11.82,64.35,102.35,20.62,116.72,38.91,20.0 PLACEHOLDER,0.3 PLACEHOLDER,0.1 PLACEHOLDER,0.15 PLACEHOLDER,1000
+2. Proposed A (3+3 parallel),7,68.61,66.73,71.73,2.64,65.73,77.73,4.87,100.94,33.65,20.0 PLACEHOLDER,0.3 PLACEHOLDER,0.1 PLACEHOLDER,0.15 PLACEHOLDER,1000
+3. Proposed B (1 bar + 1 weave),3,84.17,82.4,90.4,3.82,80.4,101.4,13.87,109.94,36.65,20.0 PLACEHOLDER,0.3 PLACEHOLDER,0.1 PLACEHOLDER,0.15 PLACEHOLDER,1000
+4. Proposed C (A + supplier fix),7,65.36,63.48,68.48,2.64,62.48,74.48,4.87,97.69,32.56,20.0 PLACEHOLDER,0.3 PLACEHOLDER,0.1 PLACEHOLDER,0.15 PLACEHOLDER,1000
