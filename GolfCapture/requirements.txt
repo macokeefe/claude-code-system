@@ -1,0 +1,6 @@
+# GolfCapture dependencies (Python 3.11+)
+bleak>=0.21.0          # asyncio-native BLE, macOS CoreBluetooth backend
+opencv-python>=4.8.0   # webcam capture + video writing
+mediapipe>=0.10.9      # post-session pose estimation
+pandas>=2.1.0          # session merging + CSV export
+numpy>=1.24.0          # numeric helpers (also a mediapipe/opencv dep)

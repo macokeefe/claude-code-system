@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+# Session captures live in ~/GolfCapture/sessions, never in the repo, but
+# ignore any local stray artifacts just in case.
+sessions/
+*.mp4
