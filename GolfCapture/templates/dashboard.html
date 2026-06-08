@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GolfCapture Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3348;
+    --text: #e2e8f0;
+    --text-muted: #8892a4;
+    --green: #22c55e;
+    --red: #ef4444;
+    --yellow: #eab308;
+    --blue: #3b82f6;
+    --accent: #6366f1;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  header h1 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.3px;
+  }
+
+  header h1 span { color: var(--green); }
+
+  #status-badge {
+    margin-left: auto;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    background: var(--surface2);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    transition: all 0.2s;
+  }
+
+  #status-badge.idle      { background: var(--surface2); color: var(--text-muted); }
+  #status-badge.scanning  { background: #1e3a5f; color: var(--blue); border-color: var(--blue); }
+  #status-badge.recording { background: #3f1e1e; color: var(--red); border-color: var(--red); }
+  #status-badge.analyzing { background: #2d2a0e; color: var(--yellow); border-color: var(--yellow); }
+
+  main {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-right: 1px solid var(--border);
+    padding: 16px;
+    gap: 14px;
+  }
+
+  .panel:last-child { border-right: none; }
+
+  .panel-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+
+  button {
+    padding: 8px 18px;
+    border-radius: 6px;
+    border: none;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    outline: none;
+  }
+
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-scan     { background: var(--blue); color: #fff; }
+  .btn-scan:hover:not(:disabled) { background: #2563eb; }
+
+  .btn-record   { background: var(--green); color: #111; }
+  .btn-record:hover:not(:disabled) { background: #16a34a; }
+  .btn-record.recording { background: var(--red); color: #fff; }
+  .btn-record.recording:hover:not(:disabled) { background: #dc2626; }
+
+  .btn-analyze  { background: var(--accent); color: #fff; }
+  .btn-analyze:hover:not(:disabled) { background: #4f46e5; }
+
+  #terminal {
+    flex: 1;
+    background: #0a0c12;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow-y: auto;
+    padding: 12px 14px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #a8c0d6;
+    min-height: 0;
+  }
+
+  #terminal .line { white-space: pre-wrap; word-break: break-all; }
+  #terminal .line.done { color: var(--green); font-weight: bold; }
+  #terminal .line.err  { color: var(--red); }
+
+  #session-list {
+    flex: 0 0 auto;
+    max-height: 240px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .session-row {
+    display: grid;
+    grid-template-columns: 1fr 60px 70px;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+
+  .session-row:last-child { border-bottom: none; }
+  .session-row:hover { background: var(--surface2); }
+  .session-row.selected { background: #1e2440; }
+
+  .session-id {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .session-shots {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+
+  .session-tag {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .session-tag.analyzed  { background: #14532d; color: var(--green); }
+  .session-tag.raw       { background: #312e00; color: var(--yellow); }
+  .session-tag.empty     { background: var(--surface2); color: var(--text-muted); }
+
+  #session-detail {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  .detail-placeholder {
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: 20px 0;
+    text-align: center;
+  }
+
+  .summary-cards {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+    flex-shrink: 0;
+  }
+
+  .card {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    text-align: center;
+  }
+
+  .card-val {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.2;
+  }
+
+  .card-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+  }
+
+  .shot-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  th {
+    background: var(--surface2);
+    padding: 7px 10px;
+    text-align: left;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    font-weight: 700;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+
+  .conf-high   { color: var(--green); font-weight: 600; }
+  .conf-medium { color: var(--yellow); font-weight: 600; }
+  .conf-low    { color: #f97316; font-weight: 600; }
+  .conf-none   { color: var(--red); font-weight: 600; }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Golf<span>Capture</span> Dashboard</h1>
+  <div id="status-badge" class="idle">Idle</div>
+</header>
+
+<main>
+  <!-- LEFT PANEL: Controls + Terminal -->
+  <div class="panel">
+    <div class="panel-title">Controls</div>
+    <div class="controls">
+      <button class="btn-scan" id="btn-scan" onclick="runScan()">Scan</button>
+      <button class="btn-record" id="btn-record" onclick="toggleRecord()">Start Recording</button>
+      <button class="btn-analyze" id="btn-analyze" onclick="runAnalyze()">Analyze</button>
+    </div>
+    <div class="panel-title" style="margin-top:4px;">Live Output</div>
+    <div id="terminal"></div>
+  </div>
+
+  <!-- RIGHT PANEL: Sessions + Detail -->
+  <div class="panel">
+    <div class="panel-title">
+      Sessions
+      <span onclick="loadSessions()" style="cursor:pointer;color:var(--blue);font-size:10px;margin-left:6px;">&#x21BB; Refresh</span>
+    </div>
+    <div id="session-list"><div class="detail-placeholder">Loading sessions&#x2026;</div></div>
+
+    <div class="panel-title">Session Detail</div>
+    <div id="session-detail"><div class="detail-placeholder">Select a session to view details</div></div>
+  </div>
+</main>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+var isRecording = false;
+var recordTimerInterval = null;
+var recordStartTime = null;
+var selectedSession = null;
+var currentController = null;
+
+// ── Status badge ───────────────────────────────────────────────────────────
+function setStatus(state, label) {
+  var el = document.getElementById('status-badge');
+  el.className = state;
+  el.textContent = label;
+}
+
+// ── Terminal ───────────────────────────────────────────────────────────────
+function termClear() { document.getElementById('terminal').innerHTML = ''; }
+
+function termLine(text, cls) {
+  var t = document.getElementById('terminal');
+  var d = document.createElement('div');
+  d.className = 'line' + (cls ? ' ' + cls : '');
+  d.textContent = text;
+  t.appendChild(d);
+  t.scrollTop = t.scrollHeight;
+}
+
+// ── SSE streaming ──────────────────────────────────────────────────────────
+function streamSSE(url, method, onDone) {
+  if (currentController) { currentController.abort(); currentController = null; }
+  var ctrl = new AbortController();
+  currentController = ctrl;
+  termClear();
+
+  fetch(url, { method: method, signal: ctrl.signal })
+    .then(function(resp) {
+      var reader = resp.body.getReader();
+      var decoder = new TextDecoder();
+      var buf = '';
+
+      function pump() {
+        reader.read().then(function(result) {
+          if (result.done) return;
+          buf += decoder.decode(result.value, { stream: true });
+          var parts = buf.split('\n\n');
+          buf = parts.pop();
+          for (var i = 0; i < parts.length; i++) {
+            var part = parts[i];
+            if (part.indexOf('data: ') === 0) {
+              var line = part.slice(6);
+              if (line === 'DONE') {
+                termLine('✓ Complete', 'done');
+                if (onDone) onDone();
+                return;
+              }
+              termLine(line);
+            }
+          }
+          pump();
+        }).catch(function(err) {
+          if (err.name !== 'AbortError') termLine('[stream error: ' + err.message + ']', 'err');
+        });
+      }
+      pump();
+    })
+    .catch(function(err) {
+      if (err.name !== 'AbortError') termLine('[fetch error: ' + err.message + ']', 'err');
+    });
+}
+
+// ── Scan ───────────────────────────────────────────────────────────────────
+function runScan() {
+  setStatus('scanning', 'Scanning…');
+  setBusy(true);
+  streamSSE('/api/scan', 'POST', function() {
+    setStatus('idle', 'Idle');
+    setBusy(false);
+    loadSessions();
+  });
+}
+
+// ── Record ─────────────────────────────────────────────────────────────────
+function toggleRecord() {
+  if (!isRecording) startRecording(); else stopRecording();
+}
+
+function startRecording() {
+  isRecording = true;
+  recordStartTime = Date.now();
+  var btn = document.getElementById('btn-record');
+  btn.textContent = 'Stop Recording';
+  btn.classList.add('recording');
+  setStatus('recording', 'Recording 0:00');
+
+  recordTimerInterval = setInterval(function() {
+    var secs = Math.floor((Date.now() - recordStartTime) / 1000);
+    var m = Math.floor(secs / 60);
+    var s = secs % 60;
+    setStatus('recording', 'Recording ' + m + ':' + (s < 10 ? '0' : '') + s);
+  }, 1000);
+
+  document.getElementById('btn-scan').disabled = true;
+  document.getElementById('btn-analyze').disabled = true;
+
+  streamSSE('/api/record/start', 'POST', function() {
+    if (isRecording) finishRecording(true);
+  });
+}
+
+function stopRecording() {
+  fetch('/api/record/stop', { method: 'POST' })
+    .then(function() { finishRecording(true); })
+    .catch(function() { finishRecording(false); });
+}
+
+function finishRecording(autoAnalyze) {
+  isRecording = false;
+  clearInterval(recordTimerInterval);
+  var btn = document.getElementById('btn-record');
+  btn.textContent = 'Start Recording';
+  btn.classList.remove('recording');
+  setStatus('idle', 'Idle');
+  document.getElementById('btn-scan').disabled = false;
+  document.getElementById('btn-analyze').disabled = false;
+  if (autoAnalyze) {
+    setTimeout(function() {
+      runAnalyze(null, function() { loadSessions(); });
+    }, 500);
+  }
+}
+
+// ── Analyze ────────────────────────────────────────────────────────────────
+function runAnalyze(session, onDone) {
+  var sess = session || selectedSession;
+  var url = '/api/analyze' + (sess ? '?session=' + encodeURIComponent(sess) : '');
+  setStatus('analyzing', 'Analyzing…');
+  setBusy(true);
+  streamSSE(url, 'POST', function() {
+    setStatus('idle', 'Idle');
+    setBusy(false);
+    loadSessions();
+    if (sess) loadSessionDetail(sess);
+    if (onDone) onDone();
+  });
+}
+
+// ── Busy state ─────────────────────────────────────────────────────────────
+function setBusy(busy) {
+  document.getElementById('btn-scan').disabled = busy;
+  document.getElementById('btn-analyze').disabled = busy;
+  if (!isRecording) document.getElementById('btn-record').disabled = busy;
+}
+
+// ── Sessions list ──────────────────────────────────────────────────────────
+function loadSessions() {
+  fetch('/api/sessions')
+    .then(function(r) { return r.json(); })
+    .then(function(sessions) { renderSessionList(sessions); })
+    .catch(function() {});
+}
+
+function formatSessionId(id) {
+  var m = id.match(/^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$/);
+  if (!m) return id;
+  return m[1] + '-' + m[2] + '-' + m[3] + '  ' + m[4] + ':' + m[5] + ':' + m[6];
+}
+
+function renderSessionList(sessions) {
+  var el = document.getElementById('session-list');
+  if (!sessions.length) {
+    el.innerHTML = '<div class="detail-placeholder">No sessions found</div>';
+    return;
+  }
+  var html = '';
+  for (var i = 0; i < sessions.length; i++) {
+    var s = sessions[i];
+    html += '<div class="session-row" id="srow-' + s + '" onclick="selectSession(\'' + s + '\')">'
+      + '<span class="session-id">' + formatSessionId(s) + '</span>'
+      + '<span class="session-shots" id="shots-' + s + '">…</span>'
+      + '<span class="session-tag empty" id="tag-' + s + '">…</span>'
+      + '</div>';
+  }
+  el.innerHTML = html;
+  if (selectedSession) markSelected(selectedSession);
+
+  sessions.forEach(function(s) {
+    fetch('/api/session/' + encodeURIComponent(s))
+      .then(function(r) { return r.json(); })
+      .then(function(info) {
+        var shots = document.getElementById('shots-' + info.session_id);
+        var tag = document.getElementById('tag-' + info.session_id);
+        if (shots) shots.textContent = info.shot_count + ' shots';
+        if (tag) {
+          if (info.analyzed) {
+            tag.textContent = 'Analyzed'; tag.className = 'session-tag analyzed';
+          } else if (info.shot_count > 0) {
+            tag.textContent = 'Raw'; tag.className = 'session-tag raw';
+          } else {
+            tag.textContent = 'Empty'; tag.className = 'session-tag empty';
+          }
+        }
+      }).catch(function() {});
+  });
+}
+
+function markSelected(id) {
+  document.querySelectorAll('.session-row').forEach(function(r) { r.classList.remove('selected'); });
+  var row = document.getElementById('srow-' + id);
+  if (row) row.classList.add('selected');
+}
+
+function selectSession(id) {
+  selectedSession = id;
+  markSelected(id);
+  loadSessionDetail(id);
+}
+
+// ── Session detail ─────────────────────────────────────────────────────────
+function loadSessionDetail(id) {
+  var el = document.getElementById('session-detail');
+  el.innerHTML = '<div class="detail-placeholder">Loading…</div>';
+  Promise.all([
+    fetch('/api/session/' + encodeURIComponent(id)).then(function(r) { return r.json(); }),
+    fetch('/api/session/' + encodeURIComponent(id) + '/summary')
+      .then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+    fetch('/api/session/' + encodeURIComponent(id) + '/csv')
+      .then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+  ]).then(function(res) {
+    renderSessionDetail(res[0], res[1], res[2]);
+  }).catch(function() {
+    document.getElementById('session-detail').innerHTML =
+      '<div class="detail-placeholder">Failed to load session</div>';
+  });
+}
+
+function renderSessionDetail(info, summary, rows) {
+  var el = document.getElementById('session-detail');
+  var shots = info.shot_count || 0;
+  var swings = info.swing_count || 0;
+  var matched = '—';
+  if (summary && summary.matched_shots != null) {
+    matched = summary.matched_shots;
+  } else if (rows) {
+    matched = rows.filter(function(r) {
+      return r.match_confidence && String(r.match_confidence).toLowerCase() !== 'unmatched';
+    }).length;
+  }
+  var duration = '—';
+  if (summary && summary.duration_seconds) duration = formatDuration(summary.duration_seconds);
+
+  var html = '<div class="summary-cards">'
+    + card(shots, 'Shots') + card(swings, 'Swings')
+    + card(matched, 'Matched') + card(duration, 'Duration')
+    + '</div>';
+
+  if (rows && rows.length) {
+    var cols = [
+      { key: 'shot_number',          label: 'Shot #' },
+      { key: 'club',                 label: 'Club' },
+      { key: 'ball_speed_mph',       label: 'Ball Speed' },
+      { key: 'carry_yards',          label: 'Carry (yd)' },
+      { key: 'launch_angle_deg',     label: 'Launch °' },
+      { key: 'backspin_rpm',         label: 'Spin' },
+      { key: 'lead_arm_angle_deg',   label: 'Lead Arm °' },
+      { key: 'backswing_duration_s', label: 'Backswing (s)' },
+      { key: 'match_confidence',     label: 'Confidence' },
+    ];
+    var existingKeys = Object.keys(rows[0]);
+    var displayCols = cols.filter(function(c) { return existingKeys.indexOf(c.key) !== -1; });
+    if (displayCols.length < 3) {
+      displayCols = cols.map(function(c) {
+        var prefix = c.key.split('_')[0].toLowerCase();
+        var found = existingKeys.find(function(k) { return k.toLowerCase().indexOf(prefix) !== -1; });
+        return { key: found || c.key, label: c.label };
+      }).filter(function(c) { return existingKeys.indexOf(c.key) !== -1; });
+    }
+    html += '<div class="shot-table-wrap"><table><thead><tr>';
+    displayCols.forEach(function(c) { html += '<th>' + c.label + '</th>'; });
+    html += '</tr></thead><tbody>';
+    rows.forEach(function(row) {
+      html += '<tr>';
+      displayCols.forEach(function(c) {
+        if (c.key === 'match_confidence') {
+          html += '<td>' + confCell(row[c.key]) + '</td>';
+        } else {
+          html += '<td>' + formatVal(row[c.key]) + '</td>';
+        }
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+  } else if (info.analyzed) {
+    html += '<div class="detail-placeholder">No shot data in CSV</div>';
+  } else {
+    html += '<div class="detail-placeholder">Not yet analyzed — click Analyze to process</div>';
+  }
+  el.innerHTML = html;
+}
+
+function card(val, label) {
+  return '<div class="card"><div class="card-val">' + val + '</div>'
+       + '<div class="card-label">' + label + '</div></div>';
+}
+
+function formatVal(v) {
+  if (v == null || v === '') return '—';
+  if (typeof v === 'number') return Number.isInteger(v) ? v : v.toFixed(1);
+  var n = parseFloat(v);
+  if (!isNaN(n) && v !== '') return Number.isInteger(n) ? n : n.toFixed(1);
+  return v;
+}
+
+function confCell(v) {
+  if (v == null || v === '') return '<span class="conf-none">—</span>';
+  var s = String(v).toLowerCase();
+  if (s === 'high') return '<span class="conf-high">High</span>';
+  if (s === 'medium' || s === 'med') return '<span class="conf-medium">Medium</span>';
+  if (s === 'low') return '<span class="conf-low">Low</span>';
+  if (s === 'unmatched' || s === 'none') return '<span class="conf-none">Unmatched</span>';
+  var n = parseFloat(v);
+  if (!isNaN(n)) {
+    if (n >= 0.8) return '<span class="conf-high">' + n.toFixed(2) + '</span>';
+    if (n >= 0.5) return '<span class="conf-medium">' + n.toFixed(2) + '</span>';
+    return '<span class="conf-low">' + n.toFixed(2) + '</span>';
+  }
+  return '<span class="conf-none">' + v + '</span>';
+}
+
+function formatDuration(secs) {
+  var m = Math.floor(secs / 60);
+  var s = Math.round(secs % 60);
+  return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+loadSessions();
+</script>
+</body>
+</html>

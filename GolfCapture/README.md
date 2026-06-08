@@ -5,6 +5,15 @@ the built-in webcam, logging Garmin Approach R10 ball-flight data over
 Bluetooth LE, and merging the two streams into a single analyzable dataset with
 per-swing pose biomechanics.
 
+## Quick start — web dashboard
+
+```bash
+source venv/bin/activate
+python dashboard.py
+```
+
+Then open http://localhost:5050 in your browser.
+
 No GUI — everything runs from the terminal.
 
 ```
@@ -146,4 +155,3 @@ after impact):
 | Passive mode only | Forget the R10 from the iPhone/Garmin app so GolfCapture can connect directly. |
 | No parsed shots | Expected if offsets are unknown — use `raw_ble_log.jsonl` to find offsets (see above). |
 | Pose metrics null for a swing | Poor lighting/occlusion; flagged in `merge_warnings.txt`. Improve framing/lighting. |
-```
