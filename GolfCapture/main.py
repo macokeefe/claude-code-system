@@ -3,13 +3,17 @@
 
 Subcommands
 -----------
-  scan      Discover the Garmin R10 and dump its BLE characteristics. Run this
-            first on initial setup to verify connectivity.
-  record    Run the BLE listener and webcam recorder concurrently until Ctrl+C.
-  analyze   Extract swing clips, run MediaPipe pose estimation, and merge BLE +
-            pose data into session_analysis.csv / session_summary.json.
-            Use --session YYYYMMDD_HHMMSS to target a specific past session;
-            defaults to the most recent session.
+  scan       Discover the Garmin R10 and dump its BLE characteristics. Run this
+             first on initial setup to verify connectivity.
+  record     Run the BLE listener and webcam recorder concurrently until Ctrl+C.
+  analyze    Extract swing clips, run MediaPipe pose estimation, and merge BLE +
+             pose data into session_analysis.csv / session_summary.json.
+             Use --session YYYYMMDD_HHMMSS to target a specific past session;
+             defaults to the most recent session.
+  debug-ble  Connect to the R10 and print every raw BLE notification in real
+             time (timestamp, UUID, hex, top-5 candidate floats). Useful for
+             discovering which characteristic carries shot data. Does NOT write
+             any session files. Runs until Ctrl+C.
 
 All session artifacts live under ~/GolfCapture/sessions/<SESSION_ID>/, with a
 `latest` symlink tracking the most recent session.
@@ -158,6 +162,25 @@ def cmd_analyze(args) -> int:
 
 
 # ---------------------------------------------------------------------------
+# debug-ble
+# ---------------------------------------------------------------------------
+
+def cmd_debug_ble(_args) -> int:
+    """Connect to the R10 and stream every raw BLE notification to the terminal.
+
+    Prints timestamp, UUID, hex dump, and the top-5 candidate LE float32 values
+    for each notification.  Does NOT write any session files.  Runs until Ctrl+C.
+    """
+    from ble_listener import debug_ble_live
+
+    try:
+        asyncio.run(debug_ble_live())
+    except KeyboardInterrupt:
+        print("\n[debug-ble] stopped.")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # argparse
 # ---------------------------------------------------------------------------
 
@@ -175,6 +198,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_analyze = sub.add_parser("analyze", help="Pose-analyze + merge a session.")
     p_analyze.add_argument("--session", default=None,
                            help="Session id YYYYMMDD_HHMMSS (default: most recent).")
+
+    sub.add_parser(
+        "debug-ble",
+        help=(
+            "Connect to the R10 and print every raw BLE notification in real time "
+            "(timestamp, UUID, hex, top-5 candidate floats). "
+            "Does NOT write session files. Runs until Ctrl+C."
+        ),
+    )
+
     return parser
 
 
@@ -186,6 +219,8 @@ def main(argv=None) -> int:
         return cmd_record(args)
     if args.command == "analyze":
         return cmd_analyze(args)
+    if args.command == "debug-ble":
+        return cmd_debug_ble(args)
     return 1
 
 

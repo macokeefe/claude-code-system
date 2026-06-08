@@ -36,6 +36,42 @@ R10_NAME_TOKENS = ("r10", "approach")
 SCAN_TIMEOUT_S = 30.0
 RECONNECT_INTERVAL_S = 5.0
 
+# ---------------------------------------------------------------------------
+# Shot timestamp correction
+# ---------------------------------------------------------------------------
+# BLE notifications arrive some milliseconds after the actual ball impact. This
+# constant is subtracted from the wall-clock arrival time to produce a corrected
+# `wall` timestamp that better reflects estimated actual impact time.
+# The raw arrival time is preserved as `notification_wall`.
+BLE_SHOT_DELAY_S = 1.5
+
+# ---------------------------------------------------------------------------
+# Known / suspected R10 service and characteristic UUIDs
+# (from community reverse-engineering efforts)
+# ---------------------------------------------------------------------------
+# 0000180a-0000-1000-8000-00805f9b34fb  — Device Information (standard GATT)
+# 6a4e2401-667b-11e3-949a-0800200c9a66  — suspected Garmin proprietary (shot data)
+# 6a4e2402-667b-11e3-949a-0800200c9a66  — suspected Garmin proprietary
+# 00001826-0000-1000-8000-00805f9b34fb  — Fitness Machine Service (standard GATT)
+KNOWN_R10_UUIDS: set[str] = {
+    "0000180a-0000-1000-8000-00805f9b34fb",
+    "6a4e2401-667b-11e3-949a-0800200c9a66",
+    "6a4e2402-667b-11e3-949a-0800200c9a66",
+    "00001826-0000-1000-8000-00805f9b34fb",
+}
+
+# Error message substrings (lowercased) that indicate the R10 is already
+# connected to another Bluetooth central (e.g. an iPhone).
+_ALREADY_CONNECTED_PATTERNS = (
+    "already connected",
+    "in use",
+    "busy",
+    "connection refused",
+    "connection attempt failed",
+    "org.bluez.error.connectionattemptfailed",
+    "org.bluez.error.alreadyconnected",
+)
+
 # Plausibility gates. Anything outside these ranges is treated as a mis-parse.
 BALL_SPEED_RANGE = (20.0, 220.0)      # mph
 CARRY_RANGE = (10.0, 400.0)           # yards
@@ -63,6 +99,12 @@ def is_r10_name(name: str | None) -> bool:
         return False
     lowered = name.lower()
     return any(token in lowered for token in R10_NAME_TOKENS)
+
+
+def _is_already_connected_error(exc: BleakError) -> bool:
+    """Return True if the error message looks like a 'device already connected' refusal."""
+    msg = str(exc).lower()
+    return any(pat in msg for pat in _ALREADY_CONNECTED_PATTERNS)
 
 
 # ---------------------------------------------------------------------------
@@ -137,12 +179,102 @@ async def dump_characteristics(session_dir: Path, timeout: float = SCAN_TIMEOUT_
     except BleakError as exc:
         catalog["connection_error"] = str(exc)
         print(f"[ble] connection failed: {exc}")
+
+        # Detect "already connected to another device" and give the user
+        # actionable guidance.
+        if _is_already_connected_error(exc):
+            diagnosis = (
+                "R10 appears to be connected to another device (likely your iPhone). "
+                "To connect directly: Settings → Bluetooth on your iPhone → "
+                "tap the R10 → Forget This Device, then re-run scan."
+            )
+            print(f"[ble] {diagnosis}")
+            catalog["connection_refused_diagnosis"] = diagnosis
+
         write_json(session_dir / "r10_characteristics.json", catalog)
         return False
 
     write_json(session_dir / "r10_characteristics.json", catalog)
     print(f"[ble] wrote {session_dir / 'r10_characteristics.json'}")
     return True
+
+
+# ---------------------------------------------------------------------------
+# debug-ble: raw notification printer (no session files written)
+# ---------------------------------------------------------------------------
+
+async def debug_ble_live(timeout: float = SCAN_TIMEOUT_S) -> None:
+    """Connect to the R10 and print every raw BLE notification in real time.
+
+    Formatted output: timestamp, UUID, hex dump, and the top-5 candidate LE
+    float32 values.  Runs until Ctrl+C.  Does NOT write any session files.
+    Useful for discovering which characteristic carries shot data and what byte
+    offsets contain meaningful floats.
+    """
+    device, _ = await find_r10(timeout)
+    if device is None:
+        print("[debug-ble] No R10 found. Cannot start live debug.")
+        return
+
+    notify_count = 0
+
+    def handle_notification(char_uuid: str, data: bytearray) -> None:
+        nonlocal notify_count
+        notify_count += 1
+        raw = bytes(data)
+        ts = datetime.now().isoformat(timespec="milliseconds")
+
+        known_marker = " *** KNOWN UUID ***" if char_uuid.lower() in KNOWN_R10_UUIDS else ""
+        print(f"\n[{ts}] #{notify_count}  uuid={char_uuid}{known_marker}")
+        print(f"  hex  : {raw.hex(' ')}")
+        print(f"  len  : {len(raw)} bytes")
+
+        # Top 5 candidate floats by absolute value proximity to golf ranges.
+        candidates = candidate_floats(raw)
+        top5 = candidates[:5]
+        if top5:
+            parts = "  ".join(f"@{c['offset']}={c['le_f32']}" for c in top5)
+            print(f"  f32s : {parts}")
+        else:
+            print("  f32s : (none in |x|<1e6)")
+
+    print("[debug-ble] connecting...")
+    try:
+        async with BleakClient(device) as client:
+            if not client.is_connected:
+                print("[debug-ble] Failed to connect.")
+                return
+            print(f"[debug-ble] connected to {device.address}. Subscribing to all notifiable characteristics...")
+            print("[debug-ble] Press Ctrl+C to stop.\n")
+
+            for service in client.services:
+                for char in service.characteristics:
+                    if "notify" in char.properties or "indicate" in char.properties:
+                        uuid = char.uuid
+
+                        def make_cb(u: str):
+                            return lambda _sender, data: handle_notification(u, data)
+
+                        try:
+                            await client.start_notify(char, make_cb(uuid))
+                            known = " [KNOWN]" if uuid.lower() in KNOWN_R10_UUIDS else ""
+                            print(f"  subscribed: {uuid}{known}")
+                        except BleakError as exc:
+                            print(f"  [warn] start_notify failed for {uuid}: {exc}")
+
+            # Keep alive until Ctrl+C.
+            while client.is_connected:
+                await asyncio.sleep(0.5)
+            print("[debug-ble] Connection dropped.")
+    except BleakError as exc:
+        if _is_already_connected_error(exc):
+            print(
+                "[debug-ble] R10 appears to be connected to another device (likely your "
+                "iPhone). To connect directly: Settings → Bluetooth on your iPhone "
+                "→ tap the R10 → Forget This Device, then re-run debug-ble."
+            )
+        else:
+            print(f"[debug-ble] BLE error: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -259,9 +391,15 @@ class R10Listener:
     # -- notification handling ------------------------------------------------
 
     def _handle_notification(self, char_uuid: str, data: bytearray):
+        import time
+        notification_wall = time.time()
         stamp = self.clock.stamp()
         raw = bytes(data)
         self._notify_count += 1
+
+        known_marker = " *** KNOWN UUID ***" if char_uuid.lower() in KNOWN_R10_UUIDS else ""
+        if known_marker:
+            print(f"[ble]{known_marker}  uuid={char_uuid}")
 
         # Human-readable raw record: hex (spaced), decimal bytes, and candidate
         # float decodes so byte patterns are identifiable by eye.
@@ -278,8 +416,18 @@ class R10Listener:
         shot = parse_shot(raw)
         if shot is not None:
             self.shot_count += 1
-            record = {**stamp, "char_uuid": char_uuid, "shot_index": self.shot_count,
-                      "hex": raw.hex(" "), **shot}
+            # Apply shot timestamp correction: store both the raw notification
+            # wall time and the corrected estimated impact time.
+            corrected_wall = notification_wall - BLE_SHOT_DELAY_S
+            record = {
+                **stamp,
+                "notification_wall": notification_wall,
+                "wall": corrected_wall,
+                "char_uuid": char_uuid,
+                "shot_index": self.shot_count,
+                "hex": raw.hex(" "),
+                **shot,
+            }
             append_jsonl(self.shots_log, record)
             carry = shot.get("carry_yards")
             print(f"[ble] SHOT #{self.shot_count}  carry={carry} yds  "
