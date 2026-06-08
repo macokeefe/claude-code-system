@@ -107,12 +107,11 @@ _ALREADY_CONNECTED_PATTERNS = (
 )
 
 # Pre-encoded protobuf payloads (hand-encoded, no protobuf library required).
-#   WakeUpRequest:     WrapperProto { request { wake_up {} } }
-#   SubscribeRequest:  WrapperProto { request { subscribe { alert_type: LaunchMonitor } } }
-#   StatusRequest:     WrapperProto { request { status {} } }
-_PROTO_WAKE_UP    = b'\x0a\x02\x0a\x00'
-_PROTO_SUBSCRIBE  = b'\x0a\x04\x22\x02\x08\x01'
-_PROTO_STATUS_REQ = b'\x0a\x02\x12\x00'
+#   WakeUpRequest:    WrapperProto { LaunchMonitorService(field38) { WakeUpRequest(field3) {} } }
+#   SubscribeRequest: WrapperProto { EventSharing(field30) { SubscribeRequest(field1) { alerts(field1) { type=8 } } } }
+#   AlertType 8 = LaunchMonitor (confirmed from gsp-r10-adapter)
+_PROTO_WAKE_UP   = b'\xB2\x02\x02\x1A\x00'
+_PROTO_SUBSCRIBE = b'\xF2\x01\x06\x0A\x04\x0A\x02\x08\x08'
 
 
 # ---------------------------------------------------------------------------
@@ -203,10 +202,29 @@ def build_frame(payload: bytes) -> bytes:
     return b'\x00' + encoded + b'\x00'
 
 
-def _handshake_frame() -> bytes:
-    """COBS-encoded frame of 24 null bytes with null prefix/suffix."""
-    encoded = cobs_encode(bytes(24))
-    return b'\x00' + encoded + b'\x00'
+def _handshake_frame(header: int = 0x00) -> bytes:
+    """Raw 13-byte handshake: mHeader + 12 known bytes. Written without COBS."""
+    return bytes([header]) + bytes.fromhex("000000000000000000010000")
+
+
+def build_b313_message(payload: bytes, counter: int, header: int = 0x00) -> list[bytes]:
+    """Wrap payload in B313 frame, COBS-encode, split into ≤19-byte chunks.
+
+    Each chunk is prefixed with mHeader so the R10 can reassemble multi-chunk
+    messages.  Returns a list of byte strings to write sequentially.
+    """
+    b313 = b'\xB3\x13' + struct.pack("<H", counter) + b'\x00\x00'
+    length = struct.pack("<I", len(payload))
+    full_msg = b313 + length + length + payload
+    length_prefix = struct.pack("<H", len(full_msg))
+    framed = length_prefix + full_msg
+    crc = crc16(framed)
+    framed += struct.pack("<H", crc)
+    encoded = b'\x00' + cobs_encode(framed) + b'\x00'
+    chunks = []
+    for i in range(0, len(encoded), 19):
+        chunks.append(bytes([header]) + encoded[i:i + 19])
+    return chunks
 
 
 # ---------------------------------------------------------------------------
@@ -609,20 +627,26 @@ async def debug_ble_live(timeout: float = SCAN_TIMEOUT_S) -> None:
                         except BleakError:
                             pass
 
-            print("[debug-ble] sending handshake...")
-            await client.write_gatt_char(UUID_CMD_TX, _handshake_frame(), response=False)
+            print("[debug-ble] sending handshake (raw, no COBS)...")
+            await client.write_gatt_char(UUID_CMD_TX, _handshake_frame(0x00), response=False)
 
+            mheader = 0x00
             try:
                 await asyncio.wait_for(handshake_done.wait(), timeout=HANDSHAKE_TIMEOUT_S)
                 print("[debug-ble] handshake response received")
             except asyncio.TimeoutError:
                 print("[debug-ble] handshake timed out — continuing anyway")
 
-            await client.write_gatt_char(UUID_CMD_TX, build_frame(_PROTO_WAKE_UP), response=False)
+            await asyncio.sleep(0.1)
+            for chunk in build_b313_message(_PROTO_WAKE_UP, counter=0, header=mheader):
+                await client.write_gatt_char(UUID_CMD_TX, chunk, response=False)
+                await asyncio.sleep(0.01)
             print("[debug-ble] sent WakeUpRequest")
-            await asyncio.sleep(0.2)
-            await client.write_gatt_char(UUID_CMD_TX, build_frame(_PROTO_SUBSCRIBE), response=False)
-            print("[debug-ble] sent SubscribeRequest (LaunchMonitor)")
+            await asyncio.sleep(0.3)
+            for chunk in build_b313_message(_PROTO_SUBSCRIBE, counter=1, header=mheader):
+                await client.write_gatt_char(UUID_CMD_TX, chunk, response=False)
+                await asyncio.sleep(0.01)
+            print("[debug-ble] sent SubscribeRequest (LaunchMonitor, AlertType=8)")
 
             while client.is_connected:
                 await asyncio.sleep(0.5)
@@ -874,15 +898,17 @@ class R10Listener:
                     except BleakError as exc:
                         self._log_gap(f"start_notify failed for {u}: {exc}")
 
-        # 4. Send handshake.
+        # 4. Send handshake (raw bytes — no COBS, no B313).
         print("[ble] sending handshake...")
         try:
-            await client.write_gatt_char(UUID_CMD_TX, _handshake_frame(), response=False)
+            await client.write_gatt_char(
+                UUID_CMD_TX, _handshake_frame(header=0x00), response=False
+            )
         except BleakError as exc:
             self._log_gap(f"handshake write failed: {exc}")
             print(f"[ble] handshake write failed: {exc}")
 
-        # 5. Wait for handshake response.
+        # 5. Wait for handshake response; extract mHeader from byte 12.
         if self._handshake_event is not None:
             try:
                 await asyncio.wait_for(
@@ -890,30 +916,34 @@ class R10Listener:
                 )
                 hdr = self._handshake_header
                 if hdr is not None:
-                    print(f"[ble] handshake response received (header byte at pos 12: 0x{hdr:02x})")
+                    print(f"[ble] handshake response received (mHeader=0x{hdr:02x})")
                 else:
-                    print("[ble] handshake response received")
+                    print("[ble] handshake response received (no mHeader extracted)")
             except asyncio.TimeoutError:
                 print("[ble] handshake timed out — continuing anyway")
 
-        # 6. Send WakeUpRequest.
+        mheader = self._handshake_header if self._handshake_header is not None else 0x00
+
+        # 6. Send WakeUpRequest via B313 framing, chunked, mHeader-prefixed.
         await asyncio.sleep(0.1)
         try:
-            await client.write_gatt_char(
-                UUID_CMD_TX, build_frame(_PROTO_WAKE_UP), response=False
-            )
-            print("[ble] sent WakeUpRequest")
+            chunks = build_b313_message(_PROTO_WAKE_UP, counter=0, header=mheader)
+            for chunk in chunks:
+                await client.write_gatt_char(UUID_CMD_TX, chunk, response=False)
+                await asyncio.sleep(0.01)
+            print(f"[ble] sent WakeUpRequest ({len(chunks)} chunk(s))")
         except BleakError as exc:
             self._log_gap(f"WakeUpRequest write failed: {exc}")
 
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(0.3)
 
-        # 7. Send SubscribeRequest for LaunchMonitor alerts.
+        # 7. Send SubscribeRequest for LaunchMonitor alerts (AlertType=8).
         try:
-            await client.write_gatt_char(
-                UUID_CMD_TX, build_frame(_PROTO_SUBSCRIBE), response=False
-            )
-            print("[ble] sent SubscribeRequest (LaunchMonitor)")
+            chunks = build_b313_message(_PROTO_SUBSCRIBE, counter=1, header=mheader)
+            for chunk in chunks:
+                await client.write_gatt_char(UUID_CMD_TX, chunk, response=False)
+                await asyncio.sleep(0.01)
+            print(f"[ble] sent SubscribeRequest LaunchMonitor ({len(chunks)} chunk(s))")
         except BleakError as exc:
             self._log_gap(f"SubscribeRequest write failed: {exc}")
 
