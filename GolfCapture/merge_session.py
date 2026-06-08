@@ -22,7 +22,8 @@ HIGH_CONFIDENCE_DELTA_S = 2.0
 
 BLE_COLUMNS = ["ball_speed_mph", "launch_angle_deg", "launch_direction_deg",
                "spin_rate_rpm", "carry_yards", "total_yards", "club_type",
-               "shot_timestamp"]
+               "club_head_speed_mph", "club_face_angle_deg", "club_path_deg",
+               "attack_angle_deg", "shot_timestamp"]
 POSE_COLUMNS = ["lead_arm_angle", "trail_arm_angle", "hip_shoulder_separation",
                 "wrist_hinge_angle", "spine_tilt_lateral", "spine_tilt_forward",
                 "swing_tempo_backswing_ms", "swing_tempo_downswing_ms",
@@ -31,7 +32,9 @@ META_COLUMNS = ["session_id", "shot_index", "swing_clip_filename", "match_confid
 ALL_COLUMNS = BLE_COLUMNS + POSE_COLUMNS + META_COLUMNS
 
 NUMERIC_METRICS = ["ball_speed_mph", "launch_angle_deg", "launch_direction_deg",
-                   "spin_rate_rpm", "carry_yards", "total_yards"] + \
+                   "spin_rate_rpm", "carry_yards", "total_yards",
+                   "club_head_speed_mph", "club_face_angle_deg", "club_path_deg",
+                   "attack_angle_deg"] + \
                   [c for c in POSE_COLUMNS if c != "club_type"]
 
 
