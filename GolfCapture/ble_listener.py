@@ -617,7 +617,7 @@ async def debug_ble_live(timeout: float = SCAN_TIMEOUT_S) -> None:
             for service in client.services:
                 for char in service.characteristics:
                     if ("notify" in char.properties or "indicate" in char.properties) \
-                            and char.uuid not in (UUID_CMD_RX, UUID_SHOT, UUID_STATUS):
+                            and char.uuid not in (UUID_CMD_RX, UUID_SHOT, UUID_STATUS, UUID_CTRL):
                         u = char.uuid
                         def make_cb2(uu: str):
                             return lambda _sender, data: handle_notification(uu, data)
@@ -885,7 +885,9 @@ class R10Listener:
             self._log_gap(f"start_notify failed for {UUID_STATUS}: {exc}")
 
         # Also subscribe to any other notifiable characteristics for raw logging.
-        known_subscribed = {UUID_CMD_RX, UUID_SHOT, UUID_STATUS}
+        # UUID_CTRL (6a4e3402) is "Write, Indicate" — subscribing to its indications
+        # causes the R10 to drop the connection immediately, so we skip it.
+        known_subscribed = {UUID_CMD_RX, UUID_SHOT, UUID_STATUS, UUID_CTRL}
         for service in client.services:
             for char in service.characteristics:
                 if ("notify" in char.properties or "indicate" in char.properties) \
@@ -898,11 +900,12 @@ class R10Listener:
                     except BleakError as exc:
                         self._log_gap(f"start_notify failed for {u}: {exc}")
 
-        # 4. Send handshake (raw bytes — no COBS, no B313).
+        # 4. Send handshake (raw bytes — no COBS, no B313). Use response=True so
+        #    CoreBluetooth waits for the write to be acknowledged before continuing.
         print("[ble] sending handshake...")
         try:
             await client.write_gatt_char(
-                UUID_CMD_TX, _handshake_frame(header=0x00), response=False
+                UUID_CMD_TX, _handshake_frame(header=0x00), response=True
             )
         except BleakError as exc:
             self._log_gap(f"handshake write failed: {exc}")
