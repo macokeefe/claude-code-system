@@ -46,18 +46,26 @@ RECONNECT_INTERVAL_S = 5.0
 BLE_SHOT_DELAY_S = 1.5
 
 # ---------------------------------------------------------------------------
-# Known / suspected R10 service and characteristic UUIDs
-# (from community reverse-engineering efforts)
+# Known R10 characteristic UUIDs confirmed from live scan of this device
 # ---------------------------------------------------------------------------
-# 0000180a-0000-1000-8000-00805f9b34fb  — Device Information (standard GATT)
-# 6a4e2401-667b-11e3-949a-0800200c9a66  — suspected Garmin proprietary (shot data)
-# 6a4e2402-667b-11e3-949a-0800200c9a66  — suspected Garmin proprietary
-# 00001826-0000-1000-8000-00805f9b34fb  — Fitness Machine Service (standard GATT)
+# 6a4e28xx  — Garmin proprietary service (confirmed on this device)
+# Notifiable characteristics (will send shot data):
+#   6a4e2820  props=write-without-response,write,notify
+#   6a4e2811  props=read,write-without-response,write,notify
+#   6a4e2812  props=read,write-without-response,write,notify
+#   6a4e3401  props=notify                          <- most likely shot data
+#   6a4e3403  props=read,notify
+# Standard GATT:
+#   00002a19  props=read,notify                     <- battery level
 KNOWN_R10_UUIDS: set[str] = {
-    "0000180a-0000-1000-8000-00805f9b34fb",
-    "6a4e2401-667b-11e3-949a-0800200c9a66",
-    "6a4e2402-667b-11e3-949a-0800200c9a66",
-    "00001826-0000-1000-8000-00805f9b34fb",
+    # Garmin proprietary notifiable — prime candidates for shot data
+    "6a4e2820-667b-11e3-949a-0800200c9a66",
+    "6a4e2811-667b-11e3-949a-0800200c9a66",
+    "6a4e2812-667b-11e3-949a-0800200c9a66",
+    "6a4e3401-667b-11e3-949a-0800200c9a66",
+    "6a4e3403-667b-11e3-949a-0800200c9a66",
+    # Standard GATT
+    "00002a19-0000-1000-8000-00805f9b34fb",  # battery
 }
 
 # Error message substrings (lowercased) that indicate the R10 is already
