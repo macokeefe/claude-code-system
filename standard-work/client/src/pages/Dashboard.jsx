@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { api, formatTime, formatLong } from '@backend';
+import { sizeLabel } from '../sizeLabel.js';
 
 export default function Dashboard() {
   const [skus, setSkus] = useState([]);
@@ -116,7 +117,7 @@ export default function Dashboard() {
               <div className="picker-row">
                 <span className="picker-label">Size</span>
                 {sizes.map(sz => (
-                  <button key={sz} className={`chip ${sz === activeSize ? 'active' : ''}`} onClick={() => setSelectedSize(sz)}>{sz}</button>
+                  <button key={sz} className={`chip ${sz === activeSize ? 'active' : ''}`} onClick={() => setSelectedSize(sz)}>{sizeLabel(sz)}</button>
                 ))}
                 <span className="muted" style={{ fontSize: 12 }}>affects {detail ? detail.steps.filter(s => s.size_times).length : 0} step(s)</span>
               </div>
@@ -131,7 +132,7 @@ export default function Dashboard() {
           <>
             <div className="muted" style={{ marginBottom: 8 }}>
               {detail.steps.length} steps · total <strong className="time">{formatTime(shownTotal)}</strong> ({formatLong(shownTotal)})
-              {activeSize ? <> · size <strong>{activeSize}</strong></> : null} ·{' '}
+              {activeSize ? <> · size <strong>{sizeLabel(activeSize)}</strong></> : null} ·{' '}
               <Link to={`/skus/${detail.id}`}>open / edit</Link>
             </div>
             <ResponsiveContainer width="100%" height={420}>

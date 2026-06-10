@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { api, formatTime, formatLong, photoSrc, downloadExcel, openPrint } from '@backend';
 import { criticalPath } from '../../../shared/precedence.js';
+import { sizeLabel } from '../sizeLabel.js';
 
 /* Build-order dependencies for a step (which earlier steps must finish first). */
 function DepsEditor({ step, allSteps, onSaved }) {
@@ -206,7 +207,7 @@ function SizeCell({ step, onSaved, activeSize }) {
           const on = activeSize === label;
           return (
             <div key={label} style={{ fontSize: 13, fontWeight: on ? 700 : 400, color: on ? 'var(--accent)' : undefined }}>
-              <strong>{label}</strong> <span className="time">{formatTime(secs)}</span>{on ? ' ◄' : ''}
+              <strong>{sizeLabel(label)}</strong> <span className="time">{formatTime(secs)}</span>{on ? ' ◄' : ''}
             </div>
           );
         })}
@@ -464,7 +465,7 @@ export default function SkuDetail() {
         <div className="picker-row" style={{ marginBottom: 16 }}>
           <span className="picker-label">Sofa size</span>
           {sizes.map(sz => (
-            <button key={sz} className={`chip ${sz === activeSize ? 'active' : ''}`} onClick={() => setSize(sz)}>{sz}</button>
+            <button key={sz} className={`chip ${sz === activeSize ? 'active' : ''}`} onClick={() => setSize(sz)}>{sizeLabel(sz)}</button>
           ))}
           <span className="muted" style={{ fontSize: 12 }}>changes {sku.steps.filter(s => s.size_times).length} size-dependent step(s) and the total</span>
         </div>
@@ -495,7 +496,7 @@ export default function SkuDetail() {
         const pct = viewTotal ? Math.round((cp.criticalSeconds / viewTotal) * 100) : 0;
         return (
           <div className="card">
-            <h2 style={{ marginTop: 0 }}>Critical path{activeSize ? ` — size ${activeSize}` : ''}</h2>
+            <h2 style={{ marginTop: 0 }}>Critical path{activeSize ? ` — size ${sizeLabel(activeSize)}` : ''}</h2>
             <div className="row" style={{ gap: 14 }}>
               <div className="stat" style={{ borderLeftColor: '#b3261e' }}>
                 <div className="stat-value">{formatLong(cp.criticalSeconds)}</div>
