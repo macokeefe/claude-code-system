@@ -3,3 +3,4 @@ client/dist/
 data/standard-work.db*
 data/photos/*
 !data/photos/.gitkeep
+client/dist-standalone/
