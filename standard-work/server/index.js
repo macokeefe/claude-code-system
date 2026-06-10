@@ -66,6 +66,7 @@ app.get('/api/skus/:id', (req, res) => {
   const steps = getSkuSteps(sku.id).map(s => ({
     ...s,
     size_times: s.size_times ? JSON.parse(s.size_times) : null,
+    depends_on: s.depends_on ? JSON.parse(s.depends_on) : [],
     photos: db.prepare("SELECT * FROM photos WHERE owner_type = 'sku_step' AND owner_id = ? ORDER BY sort_order").all(s.id),
   }));
   res.json({ ...sku, steps, total_seconds: getSkuTotal(sku.id) });
@@ -123,7 +124,28 @@ app.post('/api/skus/:id/steps', (req, res) => {
 app.put('/api/steps/:id', (req, res) => {
   const step = db.prepare('SELECT * FROM sku_steps WHERE id = ?').get(req.params.id);
   if (!step) return res.status(404).json({ error: 'Step not found' });
-  const { name, description, time, override_time, station, parallel_notes, tag_id, quantity, size_times, needs_review, note } = req.body;
+  const { name, description, time, override_time, station, parallel_notes, tag_id, quantity, size_times, depends_on, needs_review, note } = req.body;
+
+  // depends_on: array of step ids that must finish first. Guard self-ref and
+  // cycles using the SKU's current graph.
+  let dependsJson = step.depends_on;
+  if (depends_on !== undefined) {
+    const sibs = db.prepare('SELECT id, depends_on FROM sku_steps WHERE sku_id = ?').get
+      ? db.prepare('SELECT id, depends_on FROM sku_steps WHERE sku_id = ?').all(step.sku_id)
+      : [];
+    const graph = sibs.map(r => ({ id: r.id, depends_on: r.depends_on ? JSON.parse(r.depends_on) : [] }));
+    const clean = [...new Set((depends_on || []).map(Number))].filter(d => d !== step.id && graph.some(g => g.id === d));
+    // Apply tentatively and check for cycles from this step.
+    const gById = new Map(graph.map(g => [g.id, g]));
+    if (gById.has(step.id)) gById.get(step.id).depends_on = clean;
+    const reaches = (from, target) => {
+      const seen = new Set(); const stack = [...((gById.get(from)?.depends_on) || [])];
+      while (stack.length) { const c = stack.pop(); if (c === target) return true; if (seen.has(c)) continue; seen.add(c); stack.push(...((gById.get(c)?.depends_on) || [])); }
+      return false;
+    };
+    if (reaches(step.id, step.id)) return res.status(400).json({ error: 'That dependency would create a cycle' });
+    dependsJson = clean.length ? JSON.stringify(clean) : null;
+  }
 
   // size_times: object {label: "m:ss"|seconds} → stored as JSON of integer
   // seconds. A representative size also sets the step's own time_seconds so
@@ -167,13 +189,13 @@ app.put('/api/steps/:id', (req, res) => {
   }
 
   db.prepare(`UPDATE sku_steps SET name = ?, description = ?, time_seconds = ?, override_time_seconds = ?,
-              station = ?, parallel_notes = ?, tag_id = ?, quantity = ?, size_times = ?, needs_review = ?, updated_at = datetime('now')
+              station = ?, parallel_notes = ?, tag_id = ?, quantity = ?, size_times = ?, depends_on = ?, needs_review = ?, updated_at = datetime('now')
               WHERE id = ?`)
     .run(name ?? step.name, description ?? step.description, ownSeconds, override,
          station ?? step.station, parallel_notes ?? step.parallel_notes,
          tag_id !== undefined ? tag_id : step.tag_id,
          quantity !== undefined ? (quantity === null || quantity === '' ? null : Number(quantity)) : step.quantity,
-         sizeTimesJson,
+         sizeTimesJson, dependsJson,
          needs_review !== undefined ? (needs_review ? 1 : 0) : step.needs_review, step.id);
   res.json({ ok: true, total_seconds: getSkuTotal(step.sku_id) });
 });
@@ -185,6 +207,11 @@ app.delete('/api/steps/:id', (req, res) => {
     db.prepare('DELETE FROM sku_steps WHERE id = ?').run(step.id);
     db.prepare('UPDATE sku_steps SET sequence = sequence - 1 WHERE sku_id = ? AND sequence > ?')
       .run(step.sku_id, step.sequence);
+    // Prune the deleted step from siblings' dependency lists.
+    for (const sib of db.prepare('SELECT id, depends_on FROM sku_steps WHERE sku_id = ? AND depends_on IS NOT NULL').all(step.sku_id)) {
+      const deps = JSON.parse(sib.depends_on).filter(d => d !== step.id);
+      db.prepare('UPDATE sku_steps SET depends_on = ? WHERE id = ?').run(deps.length ? JSON.stringify(deps) : null, sib.id);
+    }
   })();
   res.json({ ok: true, total_seconds: getSkuTotal(step.sku_id) });
 });

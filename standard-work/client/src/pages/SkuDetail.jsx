@@ -2,6 +2,50 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { api, formatTime, formatLong, photoSrc, downloadExcel, openPrint } from '@backend';
+import { criticalPath } from '../../../shared/precedence.js';
+
+/* Build-order dependencies for a step (which earlier steps must finish first). */
+function DepsEditor({ step, allSteps, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [sel, setSel] = useState(step.depends_on || []);
+  const [error, setError] = useState('');
+  const seqOf = id => allSteps.find(s => s.id === id)?.sequence;
+  const depSeqs = (step.depends_on || []).map(seqOf).filter(Boolean).sort((a, b) => a - b);
+
+  async function save() {
+    try {
+      await api.put(`/api/steps/${step.id}`, { depends_on: sel });
+      setEditing(false); setError(''); onSaved();
+    } catch (e) { setError(e.message); }
+  }
+
+  if (!editing) {
+    return (
+      <div className="muted" style={{ fontSize: 12 }}>
+        After: {depSeqs.length ? depSeqs.join(', ') : '—'}{' '}
+        <button className="ghost small" onClick={() => { setSel(step.depends_on || []); setError(''); setEditing(true); }}>edit</button>
+      </div>
+    );
+  }
+  return (
+    <div className="deps-edit">
+      {error && <div className="inline-error">{error}</div>}
+      <div className="muted" style={{ fontSize: 12, marginBottom: 2 }}>Must finish before this step:</div>
+      {allSteps.filter(o => o.id !== step.id).map(o => (
+        <label key={o.id} style={{ display: 'block', fontWeight: 400, textTransform: 'none', fontSize: 12 }}>
+          <input type="checkbox" style={{ width: 'auto', marginRight: 6 }}
+            checked={sel.includes(o.id)}
+            onChange={e => setSel(e.target.checked ? [...sel, o.id] : sel.filter(x => x !== o.id))} />
+          {o.sequence}. {(o.tag_id ? o.tag_name : o.name) || ''}
+        </label>
+      ))}
+      <div style={{ marginTop: 4 }}>
+        <button className="small primary" onClick={save}>Save</button>{' '}
+        <button className="ghost small" onClick={() => setEditing(false)}>Cancel</button>
+      </div>
+    </div>
+  );
+}
 
 function TagSearch({ onSelect, autoFocus }) {
   const [q, setQ] = useState('');
@@ -341,6 +385,8 @@ export default function SkuDetail() {
 
   if (!sku) return null;
 
+  const cp = criticalPath(sku.steps);
+  const criticalSet = new Set(cp.criticalStepIds);
   const maxTime = Math.max(...sku.steps.map(s => s.effective_seconds || 0), 1);
   const chartData = sku.steps.map(s => ({
     name: `${s.sequence}. ${(s.tag_id ? s.tag_name : s.name) || ''}`.slice(0, 38),
@@ -411,6 +457,32 @@ export default function SkuDetail() {
           e.target.value = '';
         }} />
 
+      {sku.steps.length > 0 && (() => {
+        const pct = sku.total_seconds ? Math.round((cp.criticalSeconds / sku.total_seconds) * 100) : 0;
+        return (
+          <div className="card">
+            <h2 style={{ marginTop: 0 }}>Critical path</h2>
+            <div className="row" style={{ gap: 14 }}>
+              <div className="stat" style={{ borderLeftColor: '#b3261e' }}>
+                <div className="stat-value">{formatLong(cp.criticalSeconds)}</div>
+                <div className="stat-label">Fastest possible (unlimited people)</div>
+              </div>
+              <div className="stat">
+                <div className="stat-value">{formatLong(sku.total_seconds)}</div>
+                <div className="stat-label">One person, start to finish</div>
+              </div>
+              <div className="stat" style={{ borderLeftColor: '#1c7c3c' }}>
+                <div className="stat-value">{pct}%</div>
+                <div className="stat-label">Critical path as % of total</div>
+              </div>
+            </div>
+            <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+              The critical path is the longest chain of dependent steps — no matter how many people you add, the build can't finish faster than this. Steps on it are marked <span className="badge" style={{ background: '#fceeee', color: '#b3261e' }}>critical</span> below; shortening one of those is the only way to lower the floor.
+            </p>
+          </div>
+        );
+      })()}
+
       {sku.steps.length > 0 && (
         <div className="card">
           <h2 style={{ marginTop: 0 }}>Step times <span className="muted" style={{ fontWeight: 400 }}>(red = longest step / bottleneck)</span></h2>
@@ -441,8 +513,10 @@ export default function SkuDetail() {
                 </td>
                 <td>
                   <InlineStepText step={step} isTagged={!!step.tag_id} onSaved={load} />
+                  {criticalSet.has(step.id) && <span className="badge" style={{ background: '#fceeee', color: '#b3261e' }}>critical</span>}
                   {step.station && <div className="muted">Station: {step.station}</div>}
                   {step.parallel_notes && <div className="muted">Parallel: {step.parallel_notes}</div>}
+                  <DepsEditor step={step} allSteps={sku.steps} onSaved={load} />
                 </td>
                 <td><TimeCell step={step} onSaved={load} /></td>
                 <td><TagActions step={step} onSaved={load} /></td>

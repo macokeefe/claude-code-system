@@ -49,8 +49,8 @@ export const seedSkus = [
       { tag: 'PPE', parallel: 'No' },
       {
         name: 'Rivet Nut Installation',
-        description: 'Inspect each pre-drilled hole on the component to confirm the correct diameter for rivet nut installation. If holes are undersized, use the drill to open each hole to the correct size before proceeding, adding approximately 30 seconds per piece. Secure the component into the clamp fixture. Using the pneumatic rivet nut tool, insert a rivet nut into each hole and pull the trigger to fully set and seat the insert. Install (4) rivnuts into each of the (4) leg pieces. Install rivnuts into the long bars based on sofa size: (4) small, (5) medium, (6) large. Base cycle time of 1 min 20 sec covers one 4-rivnut long bar and all leg pieces; add 10 sec per additional rivnut beyond 4.',
-        raw: '1:36:40/piece', needsReview: true, parallel: 'No',
+        description: 'Rear legs: 4× item #14 (40528, 3/8-16) into the rear-left leg and 4× into the rear-right leg; front-left and front-right take none — 8 leg rivnuts at ~0:32 (0.531 min) each. Front & back beams: by sofa size — small (3.5) = 4 per beam (8 total), medium (4.5–6.5) = 5 per beam (10 total), large (7.5) = 6 per beam (12 total). Total 16 / 18 / 20 rivnuts. Secure each extrusion in the clamp fixture and set each insert with the pneumatic rivnut tool.',
+        seconds: 573, sizeTimes: { '3.5': 510, '4.5–6.5': 573, '7.5': 637 }, parallel: 'No',
       },
       { tag: 'Connector Pre-Assembly', quantity: 16, // 16 × 0:50 = 13:20
         parallel: 'Yes but inefficient' },
@@ -85,8 +85,8 @@ export const seedSkus = [
       { tag: 'PPE', parallel: 'No' },
       {
         name: 'Rivet Nut Installation',
-        description: 'Inspect each pre-drilled hole on the component to confirm the correct diameter. If holes are undersized, use the drill to open each hole to the correct size before proceeding, adding approximately 30 seconds per piece. Secure each extrusion into the clamp fixture. Using the pneumatic rivet nut tool, insert item #13 (40462) 1/4-20 large flange ribbed nutsert into each hole on the (2) middle arm extrusions and (2) beams. Then repeat using item #14 (40528) 3/8-16 large flange ribbed nutsert for each of the 4 holes on the (2) rear legs. Pass all completed components to the cart for the next station. Time varies by sofa size.',
-        seconds: 510, sizeTimes: { '3.5': 490, '4.5–6.5': 510, '7.5': 520 }, parallel: 'Not enough space',
+        description: 'Rear legs: 4× item #14 (40528, 3/8-16) into the rear-left leg and 4× into the rear-right leg; front-left and front-right take none — 8 leg rivnuts at ~0:32 (0.531 min) each. Front & back beams: by sofa size — small (3.5) = 4 per beam (8 total), medium (4.5–6.5) = 5 per beam (10 total), large (7.5) = 6 per beam (12 total). Total 16 / 18 / 20 rivnuts. Secure each extrusion in the clamp fixture and set each insert with the pneumatic rivnut tool.',
+        seconds: 573, sizeTimes: { '3.5': 510, '4.5–6.5': 573, '7.5': 637 }, parallel: 'Not enough space',
       },
       { tag: 'Connector Pre-Assembly', quantity: 14, // 14 × 0:50 = 11:40
         parallel: 'Yes but inefficient + unnecessary' },
@@ -123,3 +123,13 @@ export const seedSkus = [
     ],
   },
 ];
+
+// Starting-point build-order dependencies, keyed by SKU number then by step
+// sequence → the step sequences that must finish first. Drawn from the sheet
+// text (e.g. frame sub-assembly uses the pre-installed connectors); the prep
+// branches (rivnut, connector pre-assembly, seat support) run in parallel.
+// Editable in the app — treat as a sensible default, not gospel.
+export const seedDeps = {
+  'SOLA-RA': { 2: [1], 3: [1], 4: [3], 5: [3], 6: [2, 4, 5], 7: [6], 8: [1], 9: [7], 10: [8, 9] },
+  'SOLA-NA': { 2: [1], 3: [1], 4: [3], 5: [3], 6: [2, 4, 5], 7: [6], 8: [7], 9: [8], 10: [1], 11: [9], 12: [10, 11] },
+};

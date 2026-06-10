@@ -2,7 +2,7 @@
 // the two Sola Lounge SWI workbooks). The standalone browser build seeds
 // itself from the same module on first run.
 import db, { getSkuTotal } from '../server/db.js';
-import { seedTags, seedSkus } from '../shared/seedData.js';
+import { seedTags, seedSkus, seedDeps } from '../shared/seedData.js';
 
 const existing = db.prepare('SELECT COUNT(*) AS n FROM skus').get().n;
 if (existing > 0) {
@@ -26,8 +26,9 @@ db.transaction(() => {
 
   for (const sku of seedSkus) {
     const skuId = insertSku.run(sku.sku_number, sku.name, sku.family, sku.description, 1).lastInsertRowid;
+    const seqToId = {};
     sku.steps.forEach((step, i) => {
-      insertStep.run(skuId, i + 1,
+      const info = insertStep.run(skuId, i + 1,
         step.tag ? tagIds[step.tag] : null,
         step.name || null, step.description || null,
         step.seconds ?? null, step.raw || null,
@@ -35,7 +36,15 @@ db.transaction(() => {
         step.sizeTimes ? JSON.stringify(step.sizeTimes) : null,
         step.parallel || null,
         step.needsReview ? 1 : 0);
+      seqToId[i + 1] = info.lastInsertRowid;
     });
+    const deps = seedDeps[sku.sku_number];
+    if (deps) {
+      for (const [seq, prereqs] of Object.entries(deps)) {
+        const ids = prereqs.map(p => seqToId[p]).filter(Boolean);
+        if (ids.length) db.prepare('UPDATE sku_steps SET depends_on = ? WHERE id = ?').run(JSON.stringify(ids), seqToId[seq]);
+      }
+    }
   }
 
   const insertOp = db.prepare('INSERT INTO operators (name, active, sort_order) VALUES (?, 1, ?)');

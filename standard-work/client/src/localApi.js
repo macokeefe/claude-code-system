@@ -5,7 +5,7 @@ import ExcelJS from 'exceljs';
 import { parseTime, formatTime } from '../../shared/timeParse.js';
 import { parseSwiWorkbook } from '../../shared/swiParse.js';
 import { buildPrintableHtml, buildSkuWorkbook } from '../../shared/printTemplate.js';
-import { seedTags, seedSkus } from '../../shared/seedData.js';
+import { seedTags, seedSkus, seedDeps } from '../../shared/seedData.js';
 
 export { formatTime };
 export const isLocal = true;
@@ -92,19 +92,27 @@ function freshStateFromSeed() {
   for (const sku of seedSkus) {
     const skuId = s.nextId++;
     s.skus.push({ id: skuId, sku_number: sku.sku_number, name: sku.name, family: sku.family, description: sku.description, version: 1, status: 'active', photo_path: null, created_at: now(), updated_at: now() });
+    const seqToId = {};
     sku.steps.forEach((step, i) => {
+      const id = s.nextId++;
+      seqToId[i + 1] = id;
       s.steps.push({
-        id: s.nextId++, sku_id: skuId, sequence: i + 1,
+        id, sku_id: skuId, sequence: i + 1,
         tag_id: step.tag ? tagIds[step.tag] : null,
         name: step.name || null, description: step.description || null,
         time_seconds: step.seconds ?? null, time_raw_text: step.raw || null,
         override_time_seconds: step.override ?? null, quantity: step.quantity ?? null,
-        size_times: step.sizeTimes ?? null,
+        size_times: step.sizeTimes ?? null, depends_on: [],
         station: null, parallel_notes: step.parallel || null,
         photo_path: null, needs_review: step.needsReview ? 1 : 0,
         created_at: now(), updated_at: now(),
       });
     });
+    const deps = seedDeps[sku.sku_number];
+    if (deps) for (const [seq, prereqs] of Object.entries(deps)) {
+      const st = s.steps.find(x => x.id === seqToId[seq]);
+      if (st) st.depends_on = prereqs.map(p => seqToId[p]).filter(Boolean);
+    }
   }
   return s;
 }
@@ -292,7 +300,7 @@ async function handle(method, url, body) {
     }
     const seq = Math.max(0, ...state.steps.filter(s => s.sku_id === sku.id).map(s => s.sequence)) + 1;
     const qty = body.quantity !== undefined && body.quantity !== null && body.quantity !== '' ? Number(body.quantity) : null;
-    const step = { id: nextId(), sku_id: sku.id, sequence: seq, tag_id: tag_id || null, name: name || null, description: description || null, time_seconds: ownSeconds, time_raw_text: null, override_time_seconds: override, quantity: qty, station: station || null, parallel_notes: parallel_notes || null, photo_path: null, needs_review: 0, created_at: now(), updated_at: now() };
+    const step = { id: nextId(), sku_id: sku.id, sequence: seq, tag_id: tag_id || null, name: name || null, description: description || null, time_seconds: ownSeconds, time_raw_text: null, override_time_seconds: override, quantity: qty, size_times: null, depends_on: [], station: station || null, parallel_notes: parallel_notes || null, photo_path: null, needs_review: 0, created_at: now(), updated_at: now() };
     state.steps.push(step);
     await persist();
     return { id: step.id, total_seconds: skuTotal(sku.id) };
@@ -320,6 +328,21 @@ async function handle(method, url, body) {
       }
       // size_times: object {label: "m:ss"|seconds} → integer seconds; middle
       // bucket becomes the representative time_seconds. null/empty clears it.
+      // depends_on: array of step ids; guard self-ref + cycles.
+      let nextDepends = step.depends_on;
+      if (body.depends_on !== undefined) {
+        const sibs = state.steps.filter(s => s.sku_id === step.sku_id);
+        const clean = [...new Set((body.depends_on || []).map(Number))]
+          .filter(d => d !== step.id && sibs.some(s => s.id === d));
+        const depsOf = id => id === step.id ? clean : (sibs.find(s => s.id === id)?.depends_on || []);
+        const reaches = (from, target) => {
+          const seen = new Set(); const stack = [...depsOf(from)];
+          while (stack.length) { const c = stack.pop(); if (c === target) return true; if (seen.has(c)) continue; seen.add(c); stack.push(...depsOf(c)); }
+          return false;
+        };
+        if (reaches(step.id, step.id)) httpError(400, { error: 'That dependency would create a cycle' });
+        nextDepends = clean;
+      }
       let nextSizeTimes = step.size_times;
       let nextOwn = step.time_seconds;
       if (body.size_times !== undefined) {
@@ -342,7 +365,7 @@ async function handle(method, url, body) {
         station: station ?? step.station, parallel_notes: parallel_notes ?? step.parallel_notes,
         tag_id: tag_id !== undefined ? tag_id : step.tag_id,
         quantity: quantity !== undefined ? (quantity === null || quantity === '' ? null : Number(quantity)) : step.quantity,
-        size_times: nextSizeTimes, time_seconds: nextOwn,
+        size_times: nextSizeTimes, time_seconds: nextOwn, depends_on: nextDepends,
         needs_review: needs_review !== undefined ? (needs_review ? 1 : 0) : step.needs_review,
         updated_at: now(),
       });
@@ -353,6 +376,9 @@ async function handle(method, url, body) {
       state.steps = state.steps.filter(s => s.id !== step.id);
       state.steps.filter(s => s.sku_id === step.sku_id && s.sequence > step.sequence)
         .forEach(s => { s.sequence -= 1; });
+      // Prune the deleted step from siblings' dependencies.
+      state.steps.filter(s => s.sku_id === step.sku_id && Array.isArray(s.depends_on))
+        .forEach(s => { s.depends_on = s.depends_on.filter(d => d !== step.id); });
       await persist();
       return { ok: true, total_seconds: skuTotal(step.sku_id) };
     }
