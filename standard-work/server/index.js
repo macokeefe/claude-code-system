@@ -169,7 +169,9 @@ app.put('/api/steps/:id', (req, res) => {
   }
 
   let ownSeconds = step.time_seconds;
-  if (size_times !== undefined && sizeDefault !== null && time === undefined) ownSeconds = sizeDefault;
+  // Representative (middle) size feeds the stored time: own time for unique
+  // steps, a per-SKU override for tagged steps.
+  if (size_times !== undefined && sizeDefault !== null && time === undefined && !step.tag_id) ownSeconds = sizeDefault;
   if (time !== undefined) {
     const t = timeInput(time);
     if (t.ambiguous) return res.status(400).json({ error: `Could not parse time "${time}"` });
@@ -179,6 +181,9 @@ app.put('/api/steps/:id', (req, res) => {
     }
   }
   let override = step.override_time_seconds;
+  if (size_times !== undefined && step.tag_id && override_time === undefined) {
+    override = sizeDefault; // null clears the override when the size table is removed
+  }
   if (override_time !== undefined) {
     const t = timeInput(override_time);
     if (t.ambiguous) return res.status(400).json({ error: `Could not parse override time "${override_time}"` });

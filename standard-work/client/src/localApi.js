@@ -357,8 +357,14 @@ async function handle(method, url, body) {
           }
           nextSizeTimes = parsed;
           const vals = Object.values(parsed);
-          if (vals.length && time === undefined) nextOwn = vals[Math.floor((vals.length - 1) / 2)];
+          // Representative (middle) size feeds the stored time: own time for
+          // unique steps, a per-SKU override for tagged steps.
+          if (vals.length && time === undefined && !step.tag_id) nextOwn = vals[Math.floor((vals.length - 1) / 2)];
+          if (vals.length && step.tag_id && override_time === undefined) {
+            step.override_time_seconds = vals[Math.floor((vals.length - 1) / 2)];
+          }
         }
+        if (!nextSizeTimes && step.tag_id && override_time === undefined) step.override_time_seconds = null;
       }
       Object.assign(step, {
         name: name ?? step.name, description: description ?? step.description,

@@ -240,7 +240,14 @@ function TimeCell({ step, onSaved, size }) {
   const isTagged = !!step.tag_id;
   const usesQuantity = isTagged && step.tag_unit_seconds != null;
 
-  if (!isTagged && step.size_times) return <SizeCell step={step} onSaved={onSaved} activeSize={size} />;
+  if (step.size_times && !usesQuantity) {
+    return (
+      <div>
+        <SizeCell step={step} onSaved={onSaved} activeSize={size} />
+        {isTagged && <div className="muted" style={{ fontSize: 11 }}>per-SKU sizes (overrides tag time)</div>}
+      </div>
+    );
+  }
 
   if (usesQuantity) {
     const label = step.tag_unit_label || 'unit';
@@ -288,14 +295,15 @@ function TimeCell({ step, onSaved, size }) {
         </button>
       )}
       {step.needs_review && step.time_raw_text ? <div className="muted" style={{ fontSize: 11 }}>was: “{step.time_raw_text}”</div> : null}
-      {!isTagged && (
-        <button className="ghost small" title="Give this step different times per sofa size"
-          onClick={async () => {
-            const base = step.effective_seconds != null ? formatTime(step.effective_seconds) : '';
-            await api.put(`/api/steps/${step.id}`, { size_times: { 'small': base, 'medium': base, 'large': base } });
-            onSaved();
-          }}>± varies by size</button>
-      )}
+      <button className="ghost small"
+        title={isTagged
+          ? 'Give this step different times per sofa size on this SKU (overrides the tag time)'
+          : 'Give this step different times per sofa size'}
+        onClick={async () => {
+          const base = step.effective_seconds != null ? formatTime(step.effective_seconds) : '0:00';
+          await api.put(`/api/steps/${step.id}`, { size_times: { '3.5': base, '4.5–6.5': base, '7.5': base } });
+          onSaved();
+        }}>± varies by size</button>
     </div>
   );
 }
@@ -392,8 +400,11 @@ export default function SkuDetail() {
   if (!sku) return null;
 
   // Sizes that affect this SKU's step times, and a size-aware effective time.
+  // There is no "standard" sofa — one of the sizes is always selected
+  // (default: the middle bucket, which matches the stored representative).
   const sizes = [...new Set(sku.steps.flatMap(s => s.size_times ? Object.keys(s.size_times) : []))];
-  const effFor = s => (size && s.size_times && s.size_times[size] != null) ? s.size_times[size] : (s.effective_seconds || 0);
+  const activeSize = size ?? (sizes.length ? sizes[Math.floor((sizes.length - 1) / 2)] : null);
+  const effFor = s => (activeSize && s.size_times && s.size_times[activeSize] != null) ? s.size_times[activeSize] : (s.effective_seconds || 0);
   // Steps with size applied — feeds the chart, total, and critical path.
   const viewSteps = sku.steps.map(s => ({ ...s, effective_seconds: effFor(s) }));
   const viewTotal = viewSteps.reduce((a, s) => a + (s.effective_seconds || 0), 0);
@@ -452,9 +463,8 @@ export default function SkuDetail() {
       {sizes.length > 0 && (
         <div className="picker-row" style={{ marginBottom: 16 }}>
           <span className="picker-label">Sofa size</span>
-          <button className={`chip ${size === null ? 'active' : ''}`} onClick={() => setSize(null)}>Standard</button>
           {sizes.map(sz => (
-            <button key={sz} className={`chip ${sz === size ? 'active' : ''}`} onClick={() => setSize(sz)}>{sz}</button>
+            <button key={sz} className={`chip ${sz === activeSize ? 'active' : ''}`} onClick={() => setSize(sz)}>{sz}</button>
           ))}
           <span className="muted" style={{ fontSize: 12 }}>changes {sku.steps.filter(s => s.size_times).length} size-dependent step(s) and the total</span>
         </div>
@@ -485,7 +495,7 @@ export default function SkuDetail() {
         const pct = viewTotal ? Math.round((cp.criticalSeconds / viewTotal) * 100) : 0;
         return (
           <div className="card">
-            <h2 style={{ marginTop: 0 }}>Critical path{size ? ` — size ${size}` : ''}</h2>
+            <h2 style={{ marginTop: 0 }}>Critical path{activeSize ? ` — size ${activeSize}` : ''}</h2>
             <div className="row" style={{ gap: 14 }}>
               <div className="stat" style={{ borderLeftColor: '#b3261e' }}>
                 <div className="stat-value">{formatLong(cp.criticalSeconds)}</div>
@@ -542,7 +552,7 @@ export default function SkuDetail() {
                   {step.parallel_notes && <div className="muted">Parallel: {step.parallel_notes}</div>}
                   <DepsEditor step={step} allSteps={sku.steps} onSaved={load} />
                 </td>
-                <td><TimeCell step={step} onSaved={load} size={size} /></td>
+                <td><TimeCell step={step} onSaved={load} size={activeSize} /></td>
                 <td><TagActions step={step} onSaved={load} /></td>
                 <td>
                   {step.photos?.length

@@ -67,10 +67,13 @@ export default function Dashboard() {
     return out;
   }, [detail]);
 
+  // No "standard" sofa — a size is always active (default: middle bucket).
+  const activeSize = selectedSize ?? (sizes.length ? sizes[Math.floor((sizes.length - 1) / 2)] : null);
+
   // A step's time for the chosen size (size-variant steps switch; others fixed).
   const effFor = s =>
-    (selectedSize && s.size_times && s.size_times[selectedSize] != null)
-      ? s.size_times[selectedSize] : (s.effective_seconds || 0);
+    (activeSize && s.size_times && s.size_times[activeSize] != null)
+      ? s.size_times[activeSize] : (s.effective_seconds || 0);
 
   const stepData = useMemo(() => {
     if (!detail) return [];
@@ -112,9 +115,8 @@ export default function Dashboard() {
             {sizes.length > 0 && (
               <div className="picker-row">
                 <span className="picker-label">Size</span>
-                <button className={`chip ${selectedSize === null ? 'active' : ''}`} onClick={() => setSelectedSize(null)}>Standard</button>
                 {sizes.map(sz => (
-                  <button key={sz} className={`chip ${sz === selectedSize ? 'active' : ''}`} onClick={() => setSelectedSize(sz)}>{sz}</button>
+                  <button key={sz} className={`chip ${sz === activeSize ? 'active' : ''}`} onClick={() => setSelectedSize(sz)}>{sz}</button>
                 ))}
                 <span className="muted" style={{ fontSize: 12 }}>affects {detail ? detail.steps.filter(s => s.size_times).length : 0} step(s)</span>
               </div>
@@ -129,7 +131,7 @@ export default function Dashboard() {
           <>
             <div className="muted" style={{ marginBottom: 8 }}>
               {detail.steps.length} steps · total <strong className="time">{formatTime(shownTotal)}</strong> ({formatLong(shownTotal)})
-              {selectedSize ? <> · size <strong>{selectedSize}</strong></> : null} ·{' '}
+              {activeSize ? <> · size <strong>{activeSize}</strong></> : null} ·{' '}
               <Link to={`/skus/${detail.id}`}>open / edit</Link>
             </div>
             <ResponsiveContainer width="100%" height={420}>
