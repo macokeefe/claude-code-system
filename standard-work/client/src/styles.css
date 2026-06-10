@@ -132,6 +132,12 @@ label { display: block; font-weight: 600; font-size: 12px; margin-bottom: 4px; c
 .muted { color: var(--text-soft); }
 .empty { text-align: center; color: var(--text-soft); padding: 40px 0; }
 
+.picker-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.picker-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-soft); width: 96px; flex-shrink: 0; }
+.chip { font: inherit; font-weight: 600; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+.chip:hover { background: #f0f2f5; }
+.chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
 .stat { border-left: 4px solid var(--accent); padding: 4px 0 4px 12px; }
 .stat-value { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .stat-label { font-size: 12px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.4px; }

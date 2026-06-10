@@ -7,16 +7,35 @@ export default function Dashboard() {
   const [skus, setSkus] = useState([]);
   const [tagImpact, setTagImpact] = useState([]);
   const [family, setFamily] = useState('');
+  const [pickFamily, setPickFamily] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
 
+  const famOf = s => s.family || 'Other';
+  // Configuration label = product name with the family prefix stripped
+  // ("Sola Lounge Right Arm" → "Right Arm").
+  const configLabel = s => {
+    const fam = s.family || '';
+    const stripped = s.name.replace(fam, '').trim();
+    return stripped || s.name;
+  };
+
   useEffect(() => {
-    api.get('/api/skus').then(list => {
-      setSkus(list);
-      if (list.length) setSelectedId(prev => prev ?? list[0].id);
-    });
+    api.get('/api/skus').then(setSkus);
     api.get('/api/stats/tag-impact').then(setTagImpact);
   }, []);
+
+  // Default the family once products load.
+  useEffect(() => {
+    if (skus.length && pickFamily == null) setPickFamily(famOf(skus[0]));
+  }, [skus]); // eslint-disable-line
+
+  // When the family changes (or products load), pick the first configuration in it.
+  useEffect(() => {
+    if (!pickFamily) return;
+    const inFam = skus.filter(s => famOf(s) === pickFamily);
+    if (inFam.length && !inFam.some(s => s.id === selectedId)) setSelectedId(inFam[0].id);
+  }, [pickFamily, skus]); // eslint-disable-line
 
   // Load the selected SKU's full step detail for the per-step breakdown.
   useEffect(() => {
@@ -25,6 +44,8 @@ export default function Dashboard() {
     api.get(`/api/skus/${selectedId}`).then(setDetail);
   }, [selectedId]);
 
+  const pickFamilies = [...new Set(skus.map(famOf))];
+  const configs = skus.filter(s => famOf(s) === pickFamily);
   const families = [...new Set(skus.map(s => s.family).filter(Boolean))];
   const filtered = family ? skus.filter(s => s.family === family) : skus;
   const skuData = filtered
@@ -52,13 +73,23 @@ export default function Dashboard() {
       <p className="subtitle">Labor time across SKUs and the shared steps with the biggest improvement potential.</p>
 
       <div className="card">
-        <div className="toolbar">
-          <h2 style={{ margin: 0 }}>Step times for a product <span className="muted" style={{ fontWeight: 400 }}>(red = longest step / bottleneck)</span></h2>
-          <div className="spacer" />
-          <select style={{ width: 280 }} value={selectedId || ''} onChange={e => setSelectedId(Number(e.target.value))}>
-            {skus.map(s => <option key={s.id} value={s.id}>{s.name} ({s.sku_number})</option>)}
-          </select>
-        </div>
+        <h2 style={{ marginTop: 0 }}>Step times for a product <span className="muted" style={{ fontWeight: 400 }}>(red = longest step / bottleneck)</span></h2>
+        {skus.length > 0 && (
+          <>
+            <div className="picker-row">
+              <span className="picker-label">Family</span>
+              {pickFamilies.map(f => (
+                <button key={f} className={`chip ${f === pickFamily ? 'active' : ''}`} onClick={() => setPickFamily(f)}>{f}</button>
+              ))}
+            </div>
+            <div className="picker-row">
+              <span className="picker-label">Configuration</span>
+              {configs.map(s => (
+                <button key={s.id} className={`chip ${s.id === selectedId ? 'active' : ''}`} onClick={() => setSelectedId(s.id)}>{configLabel(s)}</button>
+              ))}
+            </div>
+          </>
+        )}
         {!detail ? (
           <div className="empty">{skus.length ? 'Loading…' : 'No products yet — create one or import a spreadsheet.'}</div>
         ) : detail.steps.length === 0 ? (
