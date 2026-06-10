@@ -41,3 +41,12 @@ export function formatLong(seconds) {
   if (min >= 60) return `${Math.floor(min / 60)}h ${min % 60}m`;
   return sec ? `${min}m ${sec}s` : `${min}m`;
 }
+
+// Same interface as localApi.js (the standalone browser backend) so pages
+// can import either via the @backend alias.
+export const isLocal = false;
+export const photoSrc = filePath => `/photos/${encodeURIComponent(filePath)}`;
+export const downloadExcel = skuId => { window.location.href = `/api/skus/${skuId}/export.xlsx`; };
+export const openPrint = skuId => { window.open(`/api/skus/${skuId}/print`, '_blank'); };
+export const backupData = null;
+export const restoreData = null;

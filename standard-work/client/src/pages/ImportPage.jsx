@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, formatTime } from '../api.js';
+import { api, formatTime } from '@backend';
 
 export default function ImportPage() {
   const [preview, setPreview] = useState(null);

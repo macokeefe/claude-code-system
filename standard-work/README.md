@@ -4,7 +4,21 @@ Local web app that replaces the SWI Excel spreadsheets: log, organize, and
 visualize labor time per SKU, with shared steps (tags) as a single source of
 truth across SKUs.
 
-## Quick start
+## No-install version (locked-down work computers)
+
+`standalone/StandardWork.html` is the entire app in one file — no Node.js, no
+install, no admin rights. Copy it anywhere (email it to yourself, USB, etc.),
+double-click, and it opens in Chrome/Edge. It comes pre-loaded with the Sola
+Lounge data, and the Excel importer/exports/charts all run inside the page.
+
+Notes for the standalone version:
+- Data is saved in that browser on that machine (IndexedDB). Use the
+  **Backup data** button in the sidebar regularly — the backup is a single
+  JSON file (photos included) that **Restore backup** loads on any machine.
+- Clearing the browser's site data deletes the app's data; keep backups.
+- Rebuild after code changes with `npm run build:standalone`.
+
+## Quick start (server version)
 
 ```bash
 cd standard-work

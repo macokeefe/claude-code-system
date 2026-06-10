@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { api, formatTime, formatLong } from '../api.js';
+import { api, formatTime, formatLong, photoSrc, downloadExcel, openPrint } from '@backend';
 
 function TagSearch({ onSelect }) {
   const [q, setQ] = useState('');
@@ -293,14 +293,14 @@ export default function SkuDetail() {
 
       <div className="toolbar">
         {sku.photo_path
-          ? <img className="photo-thumb" style={{ width: 96, height: 72 }} src={`/photos/${sku.photo_path}`} alt="" />
+          ? <img className="photo-thumb" style={{ width: 96, height: 72 }} src={photoSrc(sku.photo_path)} alt="" />
           : null}
         <button className="small" onClick={() => { stepPhotoFor.current = null; photoInput.current.click(); }}>
           {sku.photo_path ? 'Replace product photo' : 'Add product photo'}
         </button>
         <div className="spacer" />
-        <a className="btn small" href={`/api/skus/${sku.id}/print`} target="_blank" rel="noreferrer">Print / PDF</a>
-        <a className="btn small" href={`/api/skus/${sku.id}/export.xlsx`}>Export Excel</a>
+        <button className="small" onClick={() => openPrint(sku.id)}>Print / PDF</button>
+        <button className="small" onClick={() => downloadExcel(sku.id)}>Export Excel</button>
         <button className="small danger" onClick={removeSku}>Delete SKU</button>
       </div>
       <input type="file" accept="image/*" hidden ref={photoInput}
@@ -356,7 +356,7 @@ export default function SkuDetail() {
                   <td className="time">{formatTime(step.effective_seconds)}</td>
                   <td>
                     {step.photos?.length
-                      ? step.photos.map(p => <img key={p.id} className="photo-thumb" src={`/photos/${p.file_path}`} alt="" style={{ marginRight: 4 }} />)
+                      ? step.photos.map(p => <img key={p.id} className="photo-thumb" src={photoSrc(p.file_path)} alt="" style={{ marginRight: 4 }} />)
                       : null}
                     <button className="ghost small" onClick={() => { stepPhotoFor.current = step.id; photoInput.current.click(); }}>+ photo</button>
                   </td>

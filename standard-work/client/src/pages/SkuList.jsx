@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, formatTime } from '../api.js';
+import { api, formatTime, photoSrc } from '@backend';
 
 export default function SkuList() {
   const [skus, setSkus] = useState([]);
@@ -45,7 +45,7 @@ export default function SkuList() {
           <tbody>
             {filtered.map(s => (
               <tr key={s.id} className="clickable" onClick={() => navigate(`/skus/${s.id}`)}>
-                <td>{s.photo_path ? <img className="photo-thumb" src={`/photos/${s.photo_path}`} alt="" /> : <span className="muted">—</span>}</td>
+                <td>{s.photo_path ? <img className="photo-thumb" src={photoSrc(s.photo_path)} alt="" /> : <span className="muted">—</span>}</td>
                 <td>{s.sku_number}</td>
                 <td><Link to={`/skus/${s.id}`} onClick={e => e.stopPropagation()}>{s.name}</Link></td>
                 <td>{s.family || '—'}</td>

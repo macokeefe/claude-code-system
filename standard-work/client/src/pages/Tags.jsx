@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, formatTime } from '../api.js';
+import { api, formatTime } from '@backend';
 
 function EditTagModal({ tag, onClose, onSaved }) {
   const [form, setForm] = useState({

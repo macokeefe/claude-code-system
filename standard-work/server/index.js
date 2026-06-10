@@ -6,7 +6,7 @@ import os from 'os';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import db, { PHOTOS_DIR, EFFECTIVE_TIME_SQL, getSkuSteps, getSkuTotal, recordTimeHistory } from './db.js';
-import { parseTime } from './timeParse.js';
+import { parseTime } from '../shared/timeParse.js';
 import { parseWorkbook, commitImport } from './importer.js';
 import { exportSkuToExcel, printableHtml } from './exporter.js';
 
