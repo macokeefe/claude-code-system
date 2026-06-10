@@ -36,6 +36,9 @@ db.transaction(() => {
     });
   }
 
+  const insertOp = db.prepare('INSERT INTO operators (name, active, sort_order) VALUES (?, 1, ?)');
+  for (let i = 1; i <= 8; i++) insertOp.run(`Operator ${i}`, i);
+
   console.log('Seeded:');
   for (const sku of db.prepare('SELECT * FROM skus').all()) {
     const total = getSkuTotal(sku.id);

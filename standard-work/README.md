@@ -65,6 +65,17 @@ Requirements: an Anthropic API key (console.anthropic.com → API Keys; pasted
 once, stored only in that browser) and network access to `api.anthropic.com`.
 Questions and the data the assistant reads are sent to Anthropic's API.
 
+## Day Planner
+
+The **Day Planner** is the first step toward whole-process optimization. Define
+your operators (8 flexible by default), build the day's order list (e.g. 4
+Meritage + 4 Sola), and it levels the work across operators and reports the
+idle time (waste) — comparing **cells** (one builder per unit) against
+**stations** (work split across people) so you can see which organization
+wastes less for a given order mix. Uses a longest-processing-time balancer on
+the labor data you already maintain. Precedence-aware sequencing and
+simulation build on this foundation next.
+
 ## Importing existing spreadsheets
 
 Import page → upload an SWI `.xlsx`. The importer finds the step table by its

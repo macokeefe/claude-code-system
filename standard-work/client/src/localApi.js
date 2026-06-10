@@ -79,7 +79,10 @@ const now = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
 const nextId = () => state.nextId++;
 
 function freshStateFromSeed() {
-  const s = { skus: [], tags: [], steps: [], photos: [], history: [], nextId: 1 };
+  const s = { skus: [], tags: [], steps: [], photos: [], history: [], operators: [], nextId: 1 };
+  for (let i = 1; i <= 8; i++) {
+    s.operators.push({ id: s.nextId++, name: `Operator ${i}`, skills: null, active: 1, sort_order: i, created_at: now() });
+  }
   const tagIds = {};
   for (const t of seedTags) {
     const id = s.nextId++;
@@ -112,6 +115,13 @@ async function ensureInit() {
       state = await idbGet('kv', 'data');
       if (!state) {
         state = freshStateFromSeed();
+        await persist();
+      } else if (!state.operators) {
+        // Older database predates operators — seed 8 flexible operators in place.
+        state.operators = [];
+        for (let i = 1; i <= 8; i++) {
+          state.operators.push({ id: state.nextId++, name: `Operator ${i}`, skills: null, active: 1, sort_order: i, created_at: now() });
+        }
         await persist();
       }
       for (const [key, blob] of await idbAllEntries('blobs')) {
@@ -493,6 +503,37 @@ async function handle(method, url, body) {
       const aggregate = links.reduce((sum, s) => sum + (effectiveSeconds(s) ?? 0), 0);
       return { id: t.id, name: t.name, canonical_time_seconds: t.canonical_time_seconds, unit_seconds: t.unit_seconds, unit_label: t.unit_label, usage_count: links.length, aggregate_seconds: aggregate };
     }).sort((a, b) => b.aggregate_seconds - a.aggregate_seconds);
+  }
+
+  /* ----- Operators ----- */
+  if (path === '/api/operators') {
+    if (method === 'GET') return [...state.operators].sort((a, b) => (a.sort_order - b.sort_order) || (a.id - b.id));
+    if (method === 'POST') {
+      if (!body.name) httpError(400, { error: 'Operator name is required' });
+      const order = Math.max(0, ...state.operators.map(o => o.sort_order)) + 1;
+      const op = { id: nextId(), name: body.name.trim(), skills: body.skills || null, active: 1, sort_order: order, created_at: now() };
+      state.operators.push(op);
+      await persist();
+      return op;
+    }
+  }
+  if ((m = path.match(/^\/api\/operators\/(\d+)$/))) {
+    const op = state.operators.find(o => o.id === Number(m[1]));
+    if (!op) httpError(404, { error: 'Operator not found' });
+    if (method === 'PUT') {
+      Object.assign(op, {
+        name: body.name ?? op.name,
+        skills: body.skills !== undefined ? (body.skills || null) : op.skills,
+        active: body.active !== undefined ? (body.active ? 1 : 0) : op.active,
+      });
+      await persist();
+      return op;
+    }
+    if (method === 'DELETE') {
+      state.operators = state.operators.filter(o => o.id !== op.id);
+      await persist();
+      return { ok: true };
+    }
   }
 
   /* ----- Photos ----- */

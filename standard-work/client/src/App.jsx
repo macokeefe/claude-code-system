@@ -6,6 +6,7 @@ import SkuList from './pages/SkuList.jsx';
 import SkuDetail from './pages/SkuDetail.jsx';
 import Tags from './pages/Tags.jsx';
 import ImportPage from './pages/ImportPage.jsx';
+import Planner from './pages/Planner.jsx';
 import Assistant from './pages/Assistant.jsx';
 
 export default function App() {
@@ -18,6 +19,7 @@ export default function App() {
         <NavLink to="/" end>Dashboard</NavLink>
         <NavLink to="/skus">SKUs</NavLink>
         <NavLink to="/tags">Shared Steps</NavLink>
+        <NavLink to="/planner">Day Planner</NavLink>
         <NavLink to="/import">Import</NavLink>
         <NavLink to="/assistant">Assistant</NavLink>
         {isLocal && (
@@ -46,6 +48,7 @@ export default function App() {
           <Route path="/skus/:id" element={<SkuDetail />} />
           <Route path="/tags" element={<Tags />} />
           <Route path="/import" element={<ImportPage />} />
+          <Route path="/planner" element={<Planner />} />
           <Route path="/assistant" element={<Assistant />} />
         </Routes>
       </main>

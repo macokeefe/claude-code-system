@@ -75,6 +75,15 @@ CREATE TABLE IF NOT EXISTS time_history (
   changed_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS operators (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  skills TEXT,
+  active INTEGER DEFAULT 1,
+  sort_order INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_steps_sku ON sku_steps(sku_id, sequence);
 CREATE INDEX IF NOT EXISTS idx_steps_tag ON sku_steps(tag_id);
 CREATE INDEX IF NOT EXISTS idx_history ON time_history(entity_type, entity_id);

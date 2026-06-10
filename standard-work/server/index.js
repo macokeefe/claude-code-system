@@ -380,6 +380,36 @@ app.get('/api/stats/tag-impact', (req, res) => {
   `).all());
 });
 
+/* ---------------- Operators ---------------- */
+
+app.get('/api/operators', (req, res) => {
+  res.json(db.prepare('SELECT * FROM operators ORDER BY sort_order, id').all());
+});
+
+app.post('/api/operators', (req, res) => {
+  const { name, skills } = req.body;
+  if (!name) return res.status(400).json({ error: 'Operator name is required' });
+  const next = db.prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM operators').get().n;
+  const info = db.prepare('INSERT INTO operators (name, skills, sort_order) VALUES (?, ?, ?)')
+    .run(name.trim(), skills || null, next);
+  res.json(db.prepare('SELECT * FROM operators WHERE id = ?').get(info.lastInsertRowid));
+});
+
+app.put('/api/operators/:id', (req, res) => {
+  const op = db.prepare('SELECT * FROM operators WHERE id = ?').get(req.params.id);
+  if (!op) return res.status(404).json({ error: 'Operator not found' });
+  const { name, skills, active } = req.body;
+  db.prepare('UPDATE operators SET name = ?, skills = ?, active = ? WHERE id = ?')
+    .run(name ?? op.name, skills !== undefined ? (skills || null) : op.skills,
+         active !== undefined ? (active ? 1 : 0) : op.active, op.id);
+  res.json(db.prepare('SELECT * FROM operators WHERE id = ?').get(op.id));
+});
+
+app.delete('/api/operators/:id', (req, res) => {
+  db.prepare('DELETE FROM operators WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
 /* ---------------- Photos ---------------- */
 
 app.post('/api/photos', photoUpload.single('photo'), (req, res) => {

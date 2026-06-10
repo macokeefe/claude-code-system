@@ -132,6 +132,17 @@ label { display: block; font-weight: 600; font-size: 12px; margin-bottom: 4px; c
 .muted { color: var(--text-soft); }
 .empty { text-align: center; color: var(--text-soft); padding: 40px 0; }
 
+.stat { border-left: 4px solid var(--accent); padding: 4px 0 4px 12px; }
+.stat-value { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat-label { font-size: 12px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.4px; }
+.compare { display: flex; gap: 16px; }
+.compare-col { flex: 1; border: 2px solid var(--border); border-radius: 10px; padding: 16px; cursor: pointer; }
+.compare-col:hover { border-color: var(--accent); }
+.compare-col.win { border-color: var(--ok); background: #f1f9f3; }
+.compare-col h3 { margin: 0 0 8px; font-size: 14px; }
+.compare-col .big-time { font-size: 26px; font-weight: 800; }
+.compare-col.win .big-time { color: var(--ok); }
+
 .inline-edit { text-align: left; padding: 2px 4px; font-weight: inherit; }
 .inline-edit .pencil, .step-text .pencil { visibility: hidden; margin-left: 6px; color: var(--text-soft); font-size: 12px; }
 .inline-edit:hover .pencil, .step-text:hover .pencil { visibility: visible; }
