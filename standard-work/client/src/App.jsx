@@ -6,6 +6,7 @@ import SkuList from './pages/SkuList.jsx';
 import SkuDetail from './pages/SkuDetail.jsx';
 import Tags from './pages/Tags.jsx';
 import ImportPage from './pages/ImportPage.jsx';
+import Assistant from './pages/Assistant.jsx';
 
 export default function App() {
   const restoreInput = useRef();
@@ -18,6 +19,7 @@ export default function App() {
         <NavLink to="/skus">SKUs</NavLink>
         <NavLink to="/tags">Shared Steps</NavLink>
         <NavLink to="/import">Import</NavLink>
+        <NavLink to="/assistant">Assistant</NavLink>
         {isLocal && (
           <div style={{ position: 'absolute', bottom: 20, left: 12, right: 12 }}>
             <div style={{ fontSize: 11, color: '#7d8aa0', padding: '0 12px 8px' }}>
@@ -44,6 +46,7 @@ export default function App() {
           <Route path="/skus/:id" element={<SkuDetail />} />
           <Route path="/tags" element={<Tags />} />
           <Route path="/import" element={<ImportPage />} />
+          <Route path="/assistant" element={<Assistant />} />
         </Routes>
       </main>
     </div>

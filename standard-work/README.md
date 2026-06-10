@@ -44,6 +44,18 @@ For development with hot reload: `npm run dev` (UI at http://localhost:5173).
 - **History** — every time change (tag or step) is recorded with an optional
   note, so before/after improvements can be shown.
 
+## Assistant (built-in Claude)
+
+The **Assistant** page is a chat that can answer questions about your data
+("which SKU has the most labor time?", "what's our best improvement target?")
+and make changes for you ("update Connector Pre-Assembly to 10:30") — it reads
+and writes through the same data layer as the UI, confirms in chat before
+changing anything, and every time change lands in the audit history.
+
+Requirements: an Anthropic API key (console.anthropic.com → API Keys; pasted
+once, stored only in that browser) and network access to `api.anthropic.com`.
+Questions and the data the assistant reads are sent to Anthropic's API.
+
 ## Importing existing spreadsheets
 
 Import page → upload an SWI `.xlsx`. The importer finds the step table by its
