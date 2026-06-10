@@ -69,12 +69,12 @@ export default function Dashboard() {
               {detail.steps.length} steps · total <strong className="time">{formatTime(detail.total_seconds)}</strong> ({formatLong(detail.total_seconds)}) ·{' '}
               <Link to={`/skus/${detail.id}`}>open / edit</Link>
             </div>
-            <ResponsiveContainer width="100%" height={Math.max(140, stepData.length * 38)}>
-              <BarChart data={stepData} layout="vertical" margin={{ left: 40, right: 50 }}>
-                <XAxis type="number" unit=" min" />
-                <YAxis type="category" dataKey="name" width={280} tick={{ fontSize: 12 }} />
+            <ResponsiveContainer width="100%" height={420}>
+              <BarChart data={stepData} margin={{ top: 10, right: 20, left: 10, bottom: 130 }}>
+                <XAxis type="category" dataKey="name" interval={0} angle={-40} textAnchor="end" height={130} tick={{ fontSize: 11 }} />
+                <YAxis type="number" unit=" min" />
                 <Tooltip formatter={(v, n, p) => [`${v} min${p.payload.shared ? ' · shared step' : ''}`, 'Time']} />
-                <Bar dataKey="minutes" radius={[0, 4, 4, 0]} barSize={20}>
+                <Bar dataKey="minutes" radius={[4, 4, 0, 0]} maxBarSize={56}>
                   {stepData.map((d, i) => <Cell key={i} fill={d.isMax ? '#b3261e' : d.shared ? '#5b8def' : '#1a56b0'} />)}
                 </Bar>
               </BarChart>
