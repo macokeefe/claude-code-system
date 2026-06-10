@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { normalizeSizeTimes } from '../shared/sizeKeys.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DATA_DIR = path.join(__dirname, '..', 'data');
@@ -115,6 +116,14 @@ for (const stmt of [
   'ALTER TABLE sku_steps ADD COLUMN depends_on TEXT',
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
+}
+
+// One-time cleanup: collapse legacy size labels (small/medium/large, hyphen
+// variants) to the three canonical keys so pickers never show duplicates.
+for (const row of db.prepare('SELECT id, size_times FROM sku_steps WHERE size_times IS NOT NULL').all()) {
+  const normalized = normalizeSizeTimes(JSON.parse(row.size_times));
+  const json = normalized ? JSON.stringify(normalized) : null;
+  if (json !== row.size_times) db.prepare('UPDATE sku_steps SET size_times = ? WHERE id = ?').run(json, row.id);
 }
 
 // Effective time for a step:

@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import db, { PHOTOS_DIR, EFFECTIVE_TIME_SQL, getSkuSteps, getSkuTotal, recordTimeHistory } from './db.js';
 import { parseTime } from '../shared/timeParse.js';
+import { canonicalSizeKey } from '../shared/sizeKeys.js';
 import { parseWorkbook, commitImport } from './importer.js';
 import { exportSkuToExcel, printableHtml } from './exporter.js';
 
@@ -160,7 +161,7 @@ app.put('/api/steps/:id', (req, res) => {
       for (const [label, val] of Object.entries(size_times)) {
         const t = timeInput(val);
         if (t.ambiguous) return res.status(400).json({ error: `Could not parse time "${val}" for size "${label}"` });
-        if (t.seconds !== null) parsed[label] = t.seconds;
+        if (t.seconds !== null) parsed[canonicalSizeKey(label)] = t.seconds;
       }
       sizeTimesJson = JSON.stringify(parsed);
       const vals = Object.values(parsed);

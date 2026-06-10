@@ -6,6 +6,7 @@ import { parseTime, formatTime } from '../../shared/timeParse.js';
 import { parseSwiWorkbook } from '../../shared/swiParse.js';
 import { buildPrintableHtml, buildSkuWorkbook } from '../../shared/printTemplate.js';
 import { seedTags, seedSkus, seedDeps } from '../../shared/seedData.js';
+import { canonicalSizeKey, normalizeSizeTimes } from '../../shared/sizeKeys.js';
 
 export { formatTime };
 export const isLocal = true;
@@ -132,6 +133,18 @@ async function ensureInit() {
           state.operators.push({ id: state.nextId++, name: `Operator ${i}`, skills: null, active: 1, sort_order: i, created_at: now() });
         }
         await persist();
+      }
+      // Collapse legacy size labels (small/medium/large, hyphen variants) to
+      // the three canonical keys so pickers never show duplicates.
+      {
+        let changed = false;
+        for (const s of state.steps) {
+          if (s.size_times) {
+            const normalized = normalizeSizeTimes(s.size_times);
+            if (JSON.stringify(normalized) !== JSON.stringify(s.size_times)) { s.size_times = normalized; changed = true; }
+          }
+        }
+        if (changed) await persist();
       }
       for (const [key, blob] of await idbAllEntries('blobs')) {
         blobUrls.set(key, URL.createObjectURL(blob));
@@ -353,7 +366,7 @@ async function handle(method, url, body) {
           for (const [label, val] of Object.entries(body.size_times)) {
             const t = timeInput(val);
             if (t.ambiguous) httpError(400, { error: `Could not parse time "${val}" for size "${label}"` });
-            if (t.seconds !== null) parsed[label] = t.seconds;
+            if (t.seconds !== null) parsed[canonicalSizeKey(label)] = t.seconds;
           }
           nextSizeTimes = parsed;
           const vals = Object.values(parsed);
