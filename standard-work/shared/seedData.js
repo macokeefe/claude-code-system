@@ -88,7 +88,7 @@ export const seedSkus = [
         description: 'Rear legs: 4× item #14 (40528, 3/8-16) into the rear-left leg and 4× into the rear-right leg; front-left and front-right take none — 8 leg rivnuts at ~0:32 (0.531 min) each. Front & back beams: by sofa size — small (3.5) = 4 per beam (8 total), medium (4.5–6.5) = 5 per beam (10 total), large (7.5) = 6 per beam (12 total). Total 16 / 18 / 20 rivnuts. Secure each extrusion in the clamp fixture and set each insert with the pneumatic rivnut tool.',
         seconds: 573, sizeTimes: { '3.5': 510, '4.5–6.5': 573, '7.5': 637 }, parallel: 'Not enough space',
       },
-      { tag: 'Connector Pre-Assembly', quantity: 14, // 14 × 0:50 = 11:40
+      { tag: 'Connector Pre-Assembly', quantity: 18, // base 14 + middle leg 4 = 18 × 0:50 = 15:00
         parallel: 'Yes but inefficient + unnecessary' },
       { tag: 'Connector Plate Installation',
         parallel: '2-connector piece could be done in parallel but seems extremely inefficient' }, // 13:04 = canonical
