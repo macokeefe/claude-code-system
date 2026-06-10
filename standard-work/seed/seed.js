@@ -10,17 +10,18 @@ if (existing > 0) {
   process.exit(0);
 }
 
-const insertTag = db.prepare('INSERT INTO tags (name, description, canonical_time_seconds) VALUES (?, ?, ?)');
+const insertTag = db.prepare('INSERT INTO tags (name, description, canonical_time_seconds, unit_seconds, unit_label) VALUES (?, ?, ?, ?, ?)');
 const insertSku = db.prepare('INSERT INTO skus (sku_number, name, family, description, version) VALUES (?, ?, ?, ?, ?)');
 const insertStep = db.prepare(`
   INSERT INTO sku_steps (sku_id, sequence, tag_id, name, description, time_seconds, time_raw_text,
-                         override_time_seconds, parallel_notes, needs_review)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+                         override_time_seconds, quantity, parallel_notes, needs_review)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
 db.transaction(() => {
   const tagIds = {};
   for (const tag of seedTags) {
-    tagIds[tag.name] = insertTag.run(tag.name, tag.description, tag.seconds).lastInsertRowid;
+    tagIds[tag.name] = insertTag.run(tag.name, tag.description, tag.seconds,
+      tag.unitSeconds ?? null, tag.unitLabel ?? null).lastInsertRowid;
   }
 
   for (const sku of seedSkus) {
@@ -30,7 +31,7 @@ db.transaction(() => {
         step.tag ? tagIds[step.tag] : null,
         step.name || null, step.description || null,
         step.seconds ?? null, step.raw || null,
-        step.override ?? null, step.parallel || null,
+        step.override ?? null, step.quantity ?? null, step.parallel || null,
         step.needsReview ? 1 : 0);
     });
   }

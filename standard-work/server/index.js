@@ -91,7 +91,7 @@ app.delete('/api/skus/:id', (req, res) => {
 app.post('/api/skus/:id/steps', (req, res) => {
   const sku = db.prepare('SELECT id FROM skus WHERE id = ?').get(req.params.id);
   if (!sku) return res.status(404).json({ error: 'SKU not found' });
-  const { name, description, time, tag_id, override_time, station, parallel_notes } = req.body;
+  const { name, description, time, tag_id, override_time, quantity, station, parallel_notes } = req.body;
 
   let ownSeconds = null, override = null;
   if (tag_id) {
@@ -111,16 +111,18 @@ app.post('/api/skus/:id/steps', (req, res) => {
 
   const seq = db.prepare('SELECT COALESCE(MAX(sequence), 0) + 1 AS next FROM sku_steps WHERE sku_id = ?').get(sku.id).next;
   const info = db.prepare(`
-    INSERT INTO sku_steps (sku_id, sequence, tag_id, name, description, time_seconds, override_time_seconds, station, parallel_notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(sku.id, seq, tag_id || null, name || null, description || null, ownSeconds, override, station || null, parallel_notes || null);
+    INSERT INTO sku_steps (sku_id, sequence, tag_id, name, description, time_seconds, override_time_seconds, quantity, station, parallel_notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(sku.id, seq, tag_id || null, name || null, description || null, ownSeconds, override,
+         quantity !== undefined && quantity !== null && quantity !== '' ? Number(quantity) : null,
+         station || null, parallel_notes || null);
   res.json({ id: info.lastInsertRowid, total_seconds: getSkuTotal(sku.id) });
 });
 
 app.put('/api/steps/:id', (req, res) => {
   const step = db.prepare('SELECT * FROM sku_steps WHERE id = ?').get(req.params.id);
   if (!step) return res.status(404).json({ error: 'Step not found' });
-  const { name, description, time, override_time, station, parallel_notes, tag_id, needs_review, note } = req.body;
+  const { name, description, time, override_time, station, parallel_notes, tag_id, quantity, needs_review, note } = req.body;
 
   let ownSeconds = step.time_seconds;
   if (time !== undefined) {
@@ -142,11 +144,12 @@ app.put('/api/steps/:id', (req, res) => {
   }
 
   db.prepare(`UPDATE sku_steps SET name = ?, description = ?, time_seconds = ?, override_time_seconds = ?,
-              station = ?, parallel_notes = ?, tag_id = ?, needs_review = ?, updated_at = datetime('now')
+              station = ?, parallel_notes = ?, tag_id = ?, quantity = ?, needs_review = ?, updated_at = datetime('now')
               WHERE id = ?`)
     .run(name ?? step.name, description ?? step.description, ownSeconds, override,
          station ?? step.station, parallel_notes ?? step.parallel_notes,
          tag_id !== undefined ? tag_id : step.tag_id,
+         quantity !== undefined ? (quantity === null || quantity === '' ? null : Number(quantity)) : step.quantity,
          needs_review !== undefined ? (needs_review ? 1 : 0) : step.needs_review, step.id);
   res.json({ ok: true, total_seconds: getSkuTotal(step.sku_id) });
 });
@@ -160,6 +163,71 @@ app.delete('/api/steps/:id', (req, res) => {
       .run(step.sku_id, step.sequence);
   })();
   res.json({ ok: true, total_seconds: getSkuTotal(step.sku_id) });
+});
+
+// Convert an existing unique step into a new shared step (tag), keeping the
+// step linked to it. Duplicate tag names warn (409) unless force is set.
+app.post('/api/steps/:id/make-tag', (req, res) => {
+  const step = db.prepare(`
+    SELECT s.*, ${EFFECTIVE_TIME_SQL} AS effective_seconds
+    FROM sku_steps s LEFT JOIN tags t ON t.id = s.tag_id WHERE s.id = ?
+  `).get(req.params.id);
+  if (!step) return res.status(404).json({ error: 'Step not found' });
+  if (step.tag_id) return res.status(400).json({ error: 'Step is already attached to a shared step' });
+  if (!step.name) return res.status(400).json({ error: 'Step needs a name before it can become a shared step' });
+
+  const existing = db.prepare('SELECT * FROM tags WHERE lower(trim(name)) = lower(trim(?))').get(step.name);
+  if (existing && !req.body?.force) {
+    const usage = db.prepare(`SELECT k.id, k.sku_number, k.name FROM sku_steps s JOIN skus k ON k.id = s.sku_id WHERE s.tag_id = ?`).all(existing.id);
+    return res.status(409).json({
+      error: 'A shared step with this name already exists',
+      existing: { ...existing, usage_count: usage.length, used_by: usage },
+    });
+  }
+  const info = db.prepare('INSERT INTO tags (name, description, canonical_time_seconds) VALUES (?, ?, ?)')
+    .run(step.name.trim(), step.description || null, step.time_seconds);
+  db.prepare(`UPDATE sku_steps SET tag_id = ?, time_seconds = NULL, updated_at = datetime('now') WHERE id = ?`)
+    .run(info.lastInsertRowid, step.id);
+  res.json({ ok: true, tag_id: info.lastInsertRowid });
+});
+
+// Attach an existing tag to an existing step. If the step's own time differs
+// from the canonical time, it is kept as a per-SKU override.
+app.post('/api/steps/:id/attach-tag', (req, res) => {
+  const step = db.prepare('SELECT * FROM sku_steps WHERE id = ?').get(req.params.id);
+  if (!step) return res.status(404).json({ error: 'Step not found' });
+  if (step.tag_id) return res.status(400).json({ error: 'Step is already attached to a shared step' });
+  const tag = db.prepare('SELECT * FROM tags WHERE id = ?').get(req.body?.tag_id);
+  if (!tag) return res.status(400).json({ error: 'Tag not found' });
+  const quantity = req.body?.quantity !== undefined && req.body.quantity !== null && req.body.quantity !== ''
+    ? Number(req.body.quantity) : null;
+  // With a quantity on a per-unit tag, the time comes from quantity × unit
+  // time; otherwise keep the step's own time as an override if it differs.
+  const usesQuantity = tag.unit_seconds !== null && quantity !== null;
+  const override = (!usesQuantity && step.time_seconds !== null && step.time_seconds !== tag.canonical_time_seconds)
+    ? step.time_seconds : null;
+  db.prepare(`UPDATE sku_steps SET tag_id = ?, time_seconds = NULL, override_time_seconds = ?, quantity = ?,
+              updated_at = datetime('now') WHERE id = ?`).run(tag.id, override, quantity, step.id);
+  res.json({ ok: true, became_override: override !== null });
+});
+
+// Detach a step from its tag: the step keeps a copy of the effective
+// definition and time as a unique step.
+app.post('/api/steps/:id/detach-tag', (req, res) => {
+  const step = db.prepare('SELECT * FROM sku_steps WHERE id = ?').get(req.params.id);
+  if (!step) return res.status(404).json({ error: 'Step not found' });
+  if (!step.tag_id) return res.status(400).json({ error: 'Step is not attached to a shared step' });
+  // The step keeps whatever its effective time was (override, quantity × unit, or canonical)
+  const effective = db.prepare(`
+    SELECT ${EFFECTIVE_TIME_SQL} AS eff FROM sku_steps s LEFT JOIN tags t ON t.id = s.tag_id WHERE s.id = ?
+  `).get(step.id).eff;
+  const tag = db.prepare('SELECT * FROM tags WHERE id = ?').get(step.tag_id);
+  db.prepare(`UPDATE sku_steps SET tag_id = NULL,
+              name = COALESCE(name, ?), description = COALESCE(description, ?),
+              time_seconds = ?, override_time_seconds = NULL, quantity = NULL,
+              updated_at = datetime('now') WHERE id = ?`)
+    .run(tag?.name ?? null, tag?.description ?? null, effective, step.id);
+  res.json({ ok: true });
 });
 
 app.post('/api/skus/:id/steps/reorder', (req, res) => {
@@ -176,7 +244,7 @@ app.post('/api/skus/:id/steps/reorder', (req, res) => {
 
 function tagWithUsage(tag) {
   const usage = db.prepare(`
-    SELECT k.id, k.sku_number, k.name, s.override_time_seconds
+    SELECT k.id, k.sku_number, k.name, s.override_time_seconds, s.quantity
     FROM sku_steps s JOIN skus k ON k.id = s.sku_id WHERE s.tag_id = ?`).all(tag.id);
   return { ...tag, usage_count: usage.length, used_by: usage };
 }
@@ -189,10 +257,12 @@ app.get('/api/tags', (req, res) => {
 });
 
 app.post('/api/tags', (req, res) => {
-  const { name, description, time, force } = req.body;
+  const { name, description, time, unit_time, unit_label, force } = req.body;
   if (!name) return res.status(400).json({ error: 'Tag name is required' });
   const t = timeInput(time);
   if (t.ambiguous) return res.status(400).json({ error: `Could not parse time "${time}"` });
+  const u = timeInput(unit_time);
+  if (u.ambiguous) return res.status(400).json({ error: `Could not parse per-unit time "${unit_time}"` });
 
   // Same-name guard: suggest the existing tag, allow creating anyway with force
   const existing = db.prepare('SELECT * FROM tags WHERE lower(trim(name)) = lower(trim(?))').get(name);
@@ -203,8 +273,8 @@ app.post('/api/tags', (req, res) => {
       hint: 'Attach the existing tag instead, or pass force=true to create a separate tag with the same name.',
     });
   }
-  const info = db.prepare('INSERT INTO tags (name, description, canonical_time_seconds) VALUES (?, ?, ?)')
-    .run(name.trim(), description || null, t.seconds);
+  const info = db.prepare('INSERT INTO tags (name, description, canonical_time_seconds, unit_seconds, unit_label) VALUES (?, ?, ?, ?, ?)')
+    .run(name.trim(), description || null, t.seconds, u.seconds, unit_label || null);
   res.json(tagWithUsage(db.prepare('SELECT * FROM tags WHERE id = ?').get(info.lastInsertRowid)));
 });
 
@@ -236,7 +306,7 @@ app.get('/api/tags/:id/impact', (req, res) => {
 app.put('/api/tags/:id', (req, res) => {
   const tag = db.prepare('SELECT * FROM tags WHERE id = ?').get(req.params.id);
   if (!tag) return res.status(404).json({ error: 'Tag not found' });
-  const { name, description, time, note } = req.body;
+  const { name, description, time, unit_time, unit_label, note } = req.body;
   let seconds = tag.canonical_time_seconds;
   if (time !== undefined) {
     const t = timeInput(time);
@@ -246,8 +316,20 @@ app.put('/api/tags/:id', (req, res) => {
       seconds = t.seconds;
     }
   }
-  db.prepare(`UPDATE tags SET name = ?, description = ?, canonical_time_seconds = ?, updated_at = datetime('now') WHERE id = ?`)
-    .run(name ?? tag.name, description ?? tag.description, seconds, tag.id);
+  let unitSeconds = tag.unit_seconds;
+  if (unit_time !== undefined) {
+    const u = timeInput(unit_time);
+    if (u.ambiguous) return res.status(400).json({ error: `Could not parse per-unit time "${unit_time}"` });
+    if (u.seconds !== tag.unit_seconds) {
+      recordTimeHistory('tag', tag.id, tag.unit_seconds, u.seconds,
+        `${note ? note + ' ' : ''}[per-unit time]`);
+      unitSeconds = u.seconds;
+    }
+  }
+  db.prepare(`UPDATE tags SET name = ?, description = ?, canonical_time_seconds = ?,
+              unit_seconds = ?, unit_label = ?, updated_at = datetime('now') WHERE id = ?`)
+    .run(name ?? tag.name, description ?? tag.description, seconds,
+         unitSeconds, unit_label !== undefined ? (unit_label || null) : tag.unit_label, tag.id);
   const updated = tagWithUsage(db.prepare('SELECT * FROM tags WHERE id = ?').get(tag.id));
   res.json({ ...updated, affected_skus: updated.used_by.filter(u => u.override_time_seconds === null) });
 });
@@ -287,8 +369,12 @@ app.get('/api/history/:entityType/:id', (req, res) => {
 // Aggregate labor time per tag across all SKUs — the best-improvement-target view
 app.get('/api/stats/tag-impact', (req, res) => {
   res.json(db.prepare(`
-    SELECT t.id, t.name, t.canonical_time_seconds, COUNT(s.id) AS usage_count,
-           COALESCE(SUM(COALESCE(s.override_time_seconds, t.canonical_time_seconds)), 0) AS aggregate_seconds
+    SELECT t.id, t.name, t.canonical_time_seconds, t.unit_seconds, t.unit_label,
+           COUNT(s.id) AS usage_count,
+           COALESCE(SUM(COALESCE(s.override_time_seconds,
+             CASE WHEN t.unit_seconds IS NOT NULL AND s.quantity IS NOT NULL
+                  THEN CAST(ROUND(t.unit_seconds * s.quantity) AS INTEGER)
+                  ELSE t.canonical_time_seconds END)), 0) AS aggregate_seconds
     FROM tags t LEFT JOIN sku_steps s ON s.tag_id = t.id
     GROUP BY t.id ORDER BY aggregate_seconds DESC
   `).all());

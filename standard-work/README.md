@@ -37,8 +37,17 @@ For development with hot reload: `npm run dev` (UI at http://localhost:5173).
 - **Shared step (tag)** — canonical definition + time stored once. SKUs attach
   the tag; updating the canonical time updates every SKU that inherits it
   (with a confirmation showing exactly which SKUs move).
+- **Per-unit shared step** — a tag can carry a per-unit time instead of a
+  fixed one (e.g. Connector Pre-Assembly at 0:50/connector). Each SKU's step
+  stores its own quantity (Right Arm ×16, No-Arms ×14) and its time is
+  quantity × unit time. Re-time the unit once and every SKU updates
+  proportionally to its own count.
 - **Override** — a tagged step that takes a different time on one SKU. Flagged
   with an orange "override" badge; not affected by canonical time changes.
+- **Inline editing** — on the SKU page, click any step's text, time, or
+  quantity to edit it in place. Per-step actions convert a unique step into a
+  shared one ("make shared"), link it to an existing tag ("attach tag"), or
+  detach it back to a unique step.
 - **Time entry** accepts `4:30`, `12` (minutes), or `3 minutes 20 seconds`.
   Everything is stored as integer seconds.
 - **History** — every time change (tag or step) is recorded with an optional

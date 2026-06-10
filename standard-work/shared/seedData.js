@@ -12,8 +12,9 @@ export const seedTags = [
   },
   {
     name: 'Connector Pre-Assembly',
-    description: 'Place washer onto screw and hand-thread screw lightly into connector. Secure connector in clamp fixture and drive screw fully until seated using drill. Repeat for all remaining screws on connector. Approximately 50 seconds per connector — total time scales with connector count.',
-    seconds: 700, // 11.66 min (14 connectors, No Arms baseline)
+    description: 'Place washer onto screw and hand-thread screw lightly into connector. Secure connector in clamp fixture and drive screw fully until seated using drill. Repeat for all remaining screws on connector. Total time scales with connector count.',
+    seconds: null,
+    unitSeconds: 50, unitLabel: 'connector', // each SKU sets its own connector count
   },
   {
     name: 'Connector Plate Installation',
@@ -22,8 +23,9 @@ export const seedTags = [
   },
   {
     name: 'Attach Connectors to Leg Pieces',
-    description: 'Attach the connectors to the side of each leg piece using a wrench. Place the connector onto the extrusion and hand-tighten the bolts into the pre-drilled holes. Slide the outer casing over the connector for alignment. Use the wrench to fully tighten the bolts. Repeat for all 4 connectors. ~55 seconds per connector.',
-    seconds: 220, // 3 min 40 sec
+    description: 'Attach the connectors to the side of each leg piece using a wrench. Place the connector onto the extrusion and hand-tighten the bolts into the pre-drilled holes. Slide the outer casing over the connector for alignment. Use the wrench to fully tighten the bolts. Repeat for all connectors.',
+    seconds: null,
+    unitSeconds: 55, unitLabel: 'connector',
   },
   {
     name: 'Seat Support Frame Assembly',
@@ -50,11 +52,11 @@ export const seedSkus = [
         description: 'Inspect each pre-drilled hole on the component to confirm the correct diameter for rivet nut installation. If holes are undersized, use the drill to open each hole to the correct size before proceeding, adding approximately 30 seconds per piece. Secure the component into the clamp fixture. Using the pneumatic rivet nut tool, insert a rivet nut into each hole and pull the trigger to fully set and seat the insert. Install (4) rivnuts into each of the (4) leg pieces. Install rivnuts into the long bars based on sofa size: (4) small, (5) medium, (6) large. Base cycle time of 1 min 20 sec covers one 4-rivnut long bar and all leg pieces; add 10 sec per additional rivnut beyond 4.',
         raw: '1:36:40/piece', needsReview: true, parallel: 'No',
       },
-      { tag: 'Connector Pre-Assembly', override: 800, // 13:20 — 16 connectors vs the 14-connector canonical
+      { tag: 'Connector Pre-Assembly', quantity: 16, // 16 × 0:50 = 13:20
         parallel: 'Yes but inefficient' },
       { tag: 'Connector Plate Installation', override: 892, // 14:52
         parallel: '2-connector piece could be done in parallel but seems extremely inefficient' },
-      { tag: 'Attach Connectors to Leg Pieces' },
+      { tag: 'Attach Connectors to Leg Pieces', quantity: 4 }, // 4 × 0:55 = 3:40
       {
         name: 'Frame Sub-Assembly',
         description: 'Lay both frame sections flat on the work surface — the 3/4-leg section and the 5-piece section. Apply a bar clamp to each section to hold extrusions flush and aligned. Drive screws into each leg joint using the pre-installed connectors from the previous step until fully seated. Repeat for all joints on both sections. 8:30 for 4-legged piece + 10:30 for 5-legged.',
@@ -86,10 +88,11 @@ export const seedSkus = [
         description: 'Inspect each pre-drilled hole on the component to confirm the correct diameter. If holes are undersized, use the drill to open each hole to the correct size before proceeding, adding approximately 30 seconds per piece. Secure each extrusion into the clamp fixture. Using the pneumatic rivet nut tool, insert item #13 (40462) 1/4-20 large flange ribbed nutsert into each hole on the (2) middle arm extrusions and (2) beams. Then repeat using item #14 (40528) 3/8-16 large flange ribbed nutsert for each of the 4 holes on the (2) rear legs. Pass all completed components to the cart for the next station. Size-dependent: 3.5 → 8:10, 4.5–6.5 → 8:30, 7.5 → 8:40.',
         raw: '3.5: 8:10 / 4.5-6.5: 8:30 / 7.5: 8:40', needsReview: true, parallel: 'Not enough space',
       },
-      { tag: 'Connector Pre-Assembly', parallel: 'Yes but inefficient + unnecessary' }, // 14 connectors = canonical
+      { tag: 'Connector Pre-Assembly', quantity: 14, // 14 × 0:50 = 11:40
+        parallel: 'Yes but inefficient + unnecessary' },
       { tag: 'Connector Plate Installation',
         parallel: '2-connector piece could be done in parallel but seems extremely inefficient' }, // 13:04 = canonical
-      { tag: 'Attach Connectors to Leg Pieces' }, // 3 min 40 sec = canonical
+      { tag: 'Attach Connectors to Leg Pieces', quantity: 4 }, // 4 × 0:55 = 3:40
       {
         name: 'Frame Sub-Assembly',
         description: 'Lay both frame sections flat on the work surface — the 3/4-leg section and the 5-piece section. Apply a bar clamp to each section to hold extrusions flush and aligned. Drive screws into each leg joint using the pre-installed connectors from the previous step until fully seated. Repeat for all joints on both sections. 2x (8:30 for 4-legged piece).',

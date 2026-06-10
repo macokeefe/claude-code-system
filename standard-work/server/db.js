@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS tags (
   name TEXT NOT NULL,
   description TEXT,
   canonical_time_seconds INTEGER,
+  unit_seconds INTEGER,
+  unit_label TEXT,
   photo_path TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
@@ -46,6 +48,7 @@ CREATE TABLE IF NOT EXISTS sku_steps (
   time_seconds INTEGER,
   time_raw_text TEXT,
   override_time_seconds INTEGER,
+  quantity REAL,
   station TEXT,
   parallel_notes TEXT,
   photo_path TEXT,
@@ -77,16 +80,31 @@ CREATE INDEX IF NOT EXISTS idx_steps_tag ON sku_steps(tag_id);
 CREATE INDEX IF NOT EXISTS idx_history ON time_history(entity_type, entity_id);
 `);
 
-// Effective time for a step: per-SKU override beats tag canonical beats own time.
+// Older databases predate the quantity/per-unit columns — add them in place.
+for (const stmt of [
+  'ALTER TABLE tags ADD COLUMN unit_seconds INTEGER',
+  'ALTER TABLE tags ADD COLUMN unit_label TEXT',
+  'ALTER TABLE sku_steps ADD COLUMN quantity REAL',
+]) {
+  try { db.exec(stmt); } catch { /* column already exists */ }
+}
+
+// Effective time for a step:
+//   per-SKU override → quantity × tag unit time → tag canonical → own time.
 export const EFFECTIVE_TIME_SQL = `
   COALESCE(s.override_time_seconds,
-           CASE WHEN s.tag_id IS NOT NULL THEN t.canonical_time_seconds ELSE s.time_seconds END)
+           CASE WHEN s.tag_id IS NOT NULL THEN
+             CASE WHEN t.unit_seconds IS NOT NULL AND s.quantity IS NOT NULL
+                  THEN CAST(ROUND(t.unit_seconds * s.quantity) AS INTEGER)
+                  ELSE t.canonical_time_seconds END
+           ELSE s.time_seconds END)
 `;
 
 export function getSkuSteps(skuId) {
   return db.prepare(`
     SELECT s.*, t.name AS tag_name, t.description AS tag_description,
            t.canonical_time_seconds AS tag_time_seconds,
+           t.unit_seconds AS tag_unit_seconds, t.unit_label AS tag_unit_label,
            ${EFFECTIVE_TIME_SQL} AS effective_seconds,
            (s.tag_id IS NOT NULL AND s.override_time_seconds IS NOT NULL) AS is_override
     FROM sku_steps s LEFT JOIN tags t ON t.id = s.tag_id

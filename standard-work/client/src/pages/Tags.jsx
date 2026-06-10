@@ -6,6 +6,8 @@ function EditTagModal({ tag, onClose, onSaved }) {
   const [form, setForm] = useState({
     name: tag.name, description: tag.description || '',
     time: tag.canonical_time_seconds !== null ? formatTime(tag.canonical_time_seconds) : '',
+    unit_time: tag.unit_seconds != null ? formatTime(tag.unit_seconds) : '',
+    unit_label: tag.unit_label || '',
     note: '',
   });
   const [impact, setImpact] = useState(null);
@@ -14,7 +16,9 @@ function EditTagModal({ tag, onClose, onSaved }) {
 
   useEffect(() => { api.get(`/api/tags/${tag.id}/impact`).then(setImpact); }, [tag.id]);
 
-  const timeChanged = form.time !== (tag.canonical_time_seconds !== null ? formatTime(tag.canonical_time_seconds) : '');
+  const timeChanged =
+    form.time !== (tag.canonical_time_seconds !== null ? formatTime(tag.canonical_time_seconds) : '') ||
+    form.unit_time !== (tag.unit_seconds != null ? formatTime(tag.unit_seconds) : '');
 
   async function save(e) {
     e.preventDefault();
@@ -42,10 +46,27 @@ function EditTagModal({ tag, onClose, onSaved }) {
               <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
             </div>
             <div className="field">
-              <label>Canonical time (e.g. 4:30)</label>
-              <input value={form.time} onChange={e => { setForm({ ...form, time: e.target.value }); setConfirming(false); }} />
+              <label>Fixed time (e.g. 4:30)</label>
+              <input value={form.time} onChange={e => { setForm({ ...form, time: e.target.value }); setConfirming(false); }}
+                placeholder={form.unit_time ? 'not used — per-unit time is set' : ''} />
             </div>
           </div>
+          <div className="row">
+            <div className="field">
+              <label>Per-unit time (e.g. 0:50 per connector)</label>
+              <input value={form.unit_time} onChange={e => { setForm({ ...form, unit_time: e.target.value }); setConfirming(false); }}
+                placeholder="leave blank for a fixed time" />
+            </div>
+            <div className="field">
+              <label>Unit name</label>
+              <input value={form.unit_label} onChange={e => setForm({ ...form, unit_label: e.target.value })} placeholder="e.g. connector" />
+            </div>
+          </div>
+          {form.unit_time && (
+            <div className="alert info" style={{ padding: '6px 10px' }}>
+              With a per-unit time, each SKU sets its own quantity on the step — its time becomes quantity × {form.unit_time || 'unit time'}.
+            </div>
+          )}
           <div className="field">
             <label>Description</label>
             <textarea rows={5} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
@@ -58,7 +79,7 @@ function EditTagModal({ tag, onClose, onSaved }) {
           )}
           {confirming && impact && (
             <div className="alert warn">
-              <strong>Confirm: changing the canonical time from {formatTime(tag.canonical_time_seconds)} to “{form.time}” will update:</strong>
+              <strong>Confirm: this time change will update:</strong>
               <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
                 {impact.affected.map(a => (
                   <li key={a.id}>
@@ -166,11 +187,18 @@ export default function Tags() {
                   <strong>{t.name}</strong>
                   <div className="step-desc">{t.description}</div>
                 </td>
-                <td className="time">{formatTime(t.canonical_time_seconds)}</td>
+                <td className="time">
+                  {t.unit_seconds != null
+                    ? <>{formatTime(t.unit_seconds)}<span className="muted" style={{ fontWeight: 400 }}> / {t.unit_label || 'unit'}</span></>
+                    : formatTime(t.canonical_time_seconds)}
+                </td>
                 <td>
                   {t.usage_count === 0 ? <span className="muted">unused</span> : t.used_by.map(u => (
                     <div key={`${u.id}-${u.override_time_seconds}`}>
                       <Link to={`/skus/${u.id}`}>{u.sku_number}</Link>
+                      {t.unit_seconds != null && u.quantity != null && (
+                        <span className="muted"> · {u.quantity} {t.unit_label || 'unit'}{u.quantity === 1 ? '' : 's'} = {formatTime(Math.round(t.unit_seconds * u.quantity))}</span>
+                      )}
                       {u.override_time_seconds !== null && (
                         <> <span className="badge override">override {formatTime(u.override_time_seconds)}</span></>
                       )}

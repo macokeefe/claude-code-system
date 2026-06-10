@@ -132,6 +132,14 @@ label { display: block; font-weight: 600; font-size: 12px; margin-bottom: 4px; c
 .muted { color: var(--text-soft); }
 .empty { text-align: center; color: var(--text-soft); padding: 40px 0; }
 
+.inline-edit { text-align: left; padding: 2px 4px; font-weight: inherit; }
+.inline-edit .pencil, .step-text .pencil { visibility: hidden; margin-left: 6px; color: var(--text-soft); font-size: 12px; }
+.inline-edit:hover .pencil, .step-text:hover .pencil { visibility: visible; }
+.step-text { cursor: pointer; border-radius: 6px; padding: 2px 4px; margin: -2px -4px; }
+.step-text:hover { background: #f4f6f9; }
+.inline-form { display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.inline-error { color: var(--danger); font-size: 12px; display: block; }
+
 .chat-box {
   display: flex; flex-direction: column; gap: 10px;
   min-height: 320px; max-height: 60vh; overflow-y: auto;

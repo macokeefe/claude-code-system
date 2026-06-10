@@ -84,7 +84,7 @@ function freshStateFromSeed() {
   for (const t of seedTags) {
     const id = s.nextId++;
     tagIds[t.name] = id;
-    s.tags.push({ id, name: t.name, description: t.description, canonical_time_seconds: t.seconds, photo_path: null, created_at: now(), updated_at: now() });
+    s.tags.push({ id, name: t.name, description: t.description, canonical_time_seconds: t.seconds, unit_seconds: t.unitSeconds ?? null, unit_label: t.unitLabel ?? null, photo_path: null, created_at: now(), updated_at: now() });
   }
   for (const sku of seedSkus) {
     const skuId = s.nextId++;
@@ -95,7 +95,7 @@ function freshStateFromSeed() {
         tag_id: step.tag ? tagIds[step.tag] : null,
         name: step.name || null, description: step.description || null,
         time_seconds: step.seconds ?? null, time_raw_text: step.raw || null,
-        override_time_seconds: step.override ?? null,
+        override_time_seconds: step.override ?? null, quantity: step.quantity ?? null,
         station: null, parallel_notes: step.parallel || null,
         photo_path: null, needs_review: step.needsReview ? 1 : 0,
         created_at: now(), updated_at: now(),
@@ -142,7 +142,15 @@ const skuById = id => state.skus.find(s => s.id === Number(id));
 
 function effectiveSeconds(step) {
   if (step.override_time_seconds !== null && step.override_time_seconds !== undefined) return step.override_time_seconds;
-  if (step.tag_id) return tagById(step.tag_id)?.canonical_time_seconds ?? null;
+  if (step.tag_id) {
+    const tag = tagById(step.tag_id);
+    if (!tag) return null;
+    if (tag.unit_seconds !== null && tag.unit_seconds !== undefined &&
+        step.quantity !== null && step.quantity !== undefined) {
+      return Math.round(tag.unit_seconds * step.quantity);
+    }
+    return tag.canonical_time_seconds;
+  }
   return step.time_seconds;
 }
 
@@ -160,6 +168,8 @@ function stepRows(skuId) {
         tag_name: tag?.name ?? null,
         tag_description: tag?.description ?? null,
         tag_time_seconds: tag?.canonical_time_seconds ?? null,
+        tag_unit_seconds: tag?.unit_seconds ?? null,
+        tag_unit_label: tag?.unit_label ?? null,
         effective_seconds: effectiveSeconds(s),
         is_override: !!(s.tag_id && s.override_time_seconds !== null) ? 1 : 0,
         photos: state.photos.filter(p => p.owner_type === 'sku_step' && p.owner_id === s.id)
@@ -171,7 +181,7 @@ function stepRows(skuId) {
 function tagWithUsage(tag) {
   const usage = state.steps.filter(s => s.tag_id === tag.id).map(s => {
     const sku = skuById(s.sku_id);
-    return { id: sku.id, sku_number: sku.sku_number, name: sku.name, override_time_seconds: s.override_time_seconds };
+    return { id: sku.id, sku_number: sku.sku_number, name: sku.name, override_time_seconds: s.override_time_seconds, quantity: s.quantity ?? null };
   });
   return { ...tag, usage_count: usage.length, used_by: usage };
 }
@@ -270,7 +280,8 @@ async function handle(method, url, body) {
       ownSeconds = t.seconds;
     }
     const seq = Math.max(0, ...state.steps.filter(s => s.sku_id === sku.id).map(s => s.sequence)) + 1;
-    const step = { id: nextId(), sku_id: sku.id, sequence: seq, tag_id: tag_id || null, name: name || null, description: description || null, time_seconds: ownSeconds, time_raw_text: null, override_time_seconds: override, station: station || null, parallel_notes: parallel_notes || null, photo_path: null, needs_review: 0, created_at: now(), updated_at: now() };
+    const qty = body.quantity !== undefined && body.quantity !== null && body.quantity !== '' ? Number(body.quantity) : null;
+    const step = { id: nextId(), sku_id: sku.id, sequence: seq, tag_id: tag_id || null, name: name || null, description: description || null, time_seconds: ownSeconds, time_raw_text: null, override_time_seconds: override, quantity: qty, station: station || null, parallel_notes: parallel_notes || null, photo_path: null, needs_review: 0, created_at: now(), updated_at: now() };
     state.steps.push(step);
     await persist();
     return { id: step.id, total_seconds: skuTotal(sku.id) };
@@ -279,7 +290,7 @@ async function handle(method, url, body) {
     const step = state.steps.find(s => s.id === Number(m[1]));
     if (!step) httpError(404, { error: 'Step not found' });
     if (method === 'PUT') {
-      const { name, description, time, override_time, station, parallel_notes, tag_id, needs_review, note } = body;
+      const { name, description, time, override_time, station, parallel_notes, tag_id, quantity, needs_review, note } = body;
       if (time !== undefined) {
         const t = timeInput(time);
         if (t.ambiguous) httpError(400, { error: `Could not parse time "${time}"` });
@@ -300,6 +311,7 @@ async function handle(method, url, body) {
         name: name ?? step.name, description: description ?? step.description,
         station: station ?? step.station, parallel_notes: parallel_notes ?? step.parallel_notes,
         tag_id: tag_id !== undefined ? tag_id : step.tag_id,
+        quantity: quantity !== undefined ? (quantity === null || quantity === '' ? null : Number(quantity)) : step.quantity,
         needs_review: needs_review !== undefined ? (needs_review ? 1 : 0) : step.needs_review,
         updated_at: now(),
       });
@@ -314,6 +326,55 @@ async function handle(method, url, body) {
       return { ok: true, total_seconds: skuTotal(step.sku_id) };
     }
   }
+  /* ----- Step ↔ tag conversions ----- */
+  if (method === 'POST' && (m = path.match(/^\/api\/steps\/(\d+)\/make-tag$/))) {
+    const step = state.steps.find(s => s.id === Number(m[1]));
+    if (!step) httpError(404, { error: 'Step not found' });
+    if (step.tag_id) httpError(400, { error: 'Step is already attached to a shared step' });
+    if (!step.name) httpError(400, { error: 'Step needs a name before it can become a shared step' });
+    const existing = state.tags.find(x => x.name.trim().toLowerCase() === step.name.trim().toLowerCase());
+    if (existing && !body?.force) {
+      httpError(409, { error: 'A shared step with this name already exists', existing: tagWithUsage(existing) });
+    }
+    const tag = { id: nextId(), name: step.name.trim(), description: step.description || null, canonical_time_seconds: step.time_seconds, unit_seconds: null, unit_label: null, photo_path: null, created_at: now(), updated_at: now() };
+    state.tags.push(tag);
+    step.tag_id = tag.id;
+    step.time_seconds = null;
+    step.updated_at = now();
+    await persist();
+    return { ok: true, tag_id: tag.id };
+  }
+  if (method === 'POST' && (m = path.match(/^\/api\/steps\/(\d+)\/attach-tag$/))) {
+    const step = state.steps.find(s => s.id === Number(m[1]));
+    if (!step) httpError(404, { error: 'Step not found' });
+    if (step.tag_id) httpError(400, { error: 'Step is already attached to a shared step' });
+    const tag = tagById(body?.tag_id);
+    if (!tag) httpError(400, { error: 'Tag not found' });
+    const qty = body?.quantity !== undefined && body.quantity !== null && body.quantity !== '' ? Number(body.quantity) : null;
+    // With a quantity on a per-unit tag, the time comes from quantity × unit
+    // time; otherwise keep the step's own time as an override if it differs.
+    const usesQuantity = tag.unit_seconds !== null && qty !== null;
+    const override = (!usesQuantity && step.time_seconds !== null && step.time_seconds !== tag.canonical_time_seconds)
+      ? step.time_seconds : null;
+    Object.assign(step, { tag_id: tag.id, time_seconds: null, override_time_seconds: override, quantity: qty, updated_at: now() });
+    await persist();
+    return { ok: true, became_override: override !== null };
+  }
+  if (method === 'POST' && (m = path.match(/^\/api\/steps\/(\d+)\/detach-tag$/))) {
+    const step = state.steps.find(s => s.id === Number(m[1]));
+    if (!step) httpError(404, { error: 'Step not found' });
+    if (!step.tag_id) httpError(400, { error: 'Step is not attached to a shared step' });
+    const tag = tagById(step.tag_id);
+    Object.assign(step, {
+      time_seconds: effectiveSeconds(step),
+      name: step.name ?? tag?.name ?? null,
+      description: step.description ?? tag?.description ?? null,
+      tag_id: null, override_time_seconds: null, quantity: null, updated_at: now(),
+    });
+    await persist();
+    return { ok: true };
+  }
+
   if (method === 'POST' && (m = path.match(/^\/api\/skus\/(\d+)\/steps\/reorder$/))) {
     const skuId = Number(m[1]);
     body.orderedIds.forEach((id, i) => {
@@ -333,10 +394,12 @@ async function handle(method, url, body) {
       .map(tagWithUsage);
   }
   if (method === 'POST' && path === '/api/tags') {
-    const { name, description, time, force } = body;
+    const { name, description, time, unit_time, unit_label, force } = body;
     if (!name) httpError(400, { error: 'Tag name is required' });
     const t = timeInput(time);
     if (t.ambiguous) httpError(400, { error: `Could not parse time "${time}"` });
+    const u = timeInput(unit_time);
+    if (u.ambiguous) httpError(400, { error: `Could not parse per-unit time "${unit_time}"` });
     const existing = state.tags.find(x => x.name.trim().toLowerCase() === name.trim().toLowerCase());
     if (existing && !force) {
       httpError(409, {
@@ -345,7 +408,7 @@ async function handle(method, url, body) {
         hint: 'Attach the existing tag instead, or pass force=true to create a separate tag with the same name.',
       });
     }
-    const tag = { id: nextId(), name: name.trim(), description: description || null, canonical_time_seconds: t.seconds, photo_path: null, created_at: now(), updated_at: now() };
+    const tag = { id: nextId(), name: name.trim(), description: description || null, canonical_time_seconds: t.seconds, unit_seconds: u.seconds, unit_label: unit_label || null, photo_path: null, created_at: now(), updated_at: now() };
     state.tags.push(tag);
     await persist();
     return tagWithUsage(tag);
@@ -369,7 +432,7 @@ async function handle(method, url, body) {
     if (!tag) httpError(404, { error: 'Tag not found' });
     if (method === 'GET') return tagWithUsage(tag);
     if (method === 'PUT') {
-      const { name, description, time, note } = body;
+      const { name, description, time, unit_time, unit_label, note } = body;
       if (time !== undefined) {
         const t = timeInput(time);
         if (t.ambiguous) httpError(400, { error: `Could not parse time "${time}"` });
@@ -378,7 +441,19 @@ async function handle(method, url, body) {
           tag.canonical_time_seconds = t.seconds;
         }
       }
-      Object.assign(tag, { name: name ?? tag.name, description: description ?? tag.description, updated_at: now() });
+      if (unit_time !== undefined) {
+        const u = timeInput(unit_time);
+        if (u.ambiguous) httpError(400, { error: `Could not parse per-unit time "${unit_time}"` });
+        if (u.seconds !== tag.unit_seconds) {
+          recordHistory('tag', tag.id, tag.unit_seconds, u.seconds, `${note ? note + ' ' : ''}[per-unit time]`);
+          tag.unit_seconds = u.seconds;
+        }
+      }
+      Object.assign(tag, {
+        name: name ?? tag.name, description: description ?? tag.description,
+        unit_label: unit_label !== undefined ? (unit_label || null) : tag.unit_label,
+        updated_at: now(),
+      });
       await persist();
       const updated = tagWithUsage(tag);
       return { ...updated, affected_skus: updated.used_by.filter(x => x.override_time_seconds === null) };
@@ -395,8 +470,9 @@ async function handle(method, url, body) {
       for (const s of links) {
         s.name = s.name ?? tag.name;
         s.description = s.description ?? tag.description;
-        s.time_seconds = s.override_time_seconds ?? tag.canonical_time_seconds;
+        s.time_seconds = effectiveSeconds(s);
         s.override_time_seconds = null;
+        s.quantity = null;
         s.tag_id = null;
       }
       state.tags = state.tags.filter(t => t.id !== tag.id);
@@ -414,8 +490,8 @@ async function handle(method, url, body) {
   if (method === 'GET' && path === '/api/stats/tag-impact') {
     return state.tags.map(t => {
       const links = state.steps.filter(s => s.tag_id === t.id);
-      const aggregate = links.reduce((sum, s) => sum + (s.override_time_seconds ?? t.canonical_time_seconds ?? 0), 0);
-      return { id: t.id, name: t.name, canonical_time_seconds: t.canonical_time_seconds, usage_count: links.length, aggregate_seconds: aggregate };
+      const aggregate = links.reduce((sum, s) => sum + (effectiveSeconds(s) ?? 0), 0);
+      return { id: t.id, name: t.name, canonical_time_seconds: t.canonical_time_seconds, unit_seconds: t.unit_seconds, unit_label: t.unit_label, usage_count: links.length, aggregate_seconds: aggregate };
     }).sort((a, b) => b.aggregate_seconds - a.aggregate_seconds);
   }
 
