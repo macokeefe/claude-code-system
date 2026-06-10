@@ -9,6 +9,7 @@ export default function Dashboard() {
   const [family, setFamily] = useState('');
   const [pickFamily, setPickFamily] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
+  const [selectedSize, setSelectedSize] = useState(null);
   const [detail, setDetail] = useState(null);
 
   const famOf = s => s.family || 'Other';
@@ -41,6 +42,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (selectedId == null) return;
     setDetail(null);
+    setSelectedSize(null);
     api.get(`/api/skus/${selectedId}`).then(setDetail);
   }, [selectedId]);
 
@@ -55,17 +57,36 @@ export default function Dashboard() {
     .filter(t => t.aggregate_seconds > 0)
     .map(t => ({ name: t.name, minutes: +(t.aggregate_seconds / 60).toFixed(1), usage: t.usage_count }));
 
+  // Sizes that affect this product's step times (union across its steps).
+  const sizes = useMemo(() => {
+    if (!detail) return [];
+    const out = [];
+    for (const s of detail.steps) {
+      if (s.size_times) for (const k of Object.keys(s.size_times)) if (!out.includes(k)) out.push(k);
+    }
+    return out;
+  }, [detail]);
+
+  // A step's time for the chosen size (size-variant steps switch; others fixed).
+  const effFor = s =>
+    (selectedSize && s.size_times && s.size_times[selectedSize] != null)
+      ? s.size_times[selectedSize] : (s.effective_seconds || 0);
+
   const stepData = useMemo(() => {
     if (!detail) return [];
-    const max = Math.max(...detail.steps.map(s => s.effective_seconds || 0), 1);
-    return detail.steps.map(s => ({
+    const vals = detail.steps.map(effFor);
+    const max = Math.max(...vals, 1);
+    return detail.steps.map((s, i) => ({
       name: `${s.sequence}. ${(s.tag_id ? s.tag_name : s.name) || ''}`,
-      minutes: +((s.effective_seconds || 0) / 60).toFixed(1),
-      seconds: s.effective_seconds || 0,
+      minutes: +(vals[i] / 60).toFixed(1),
+      seconds: vals[i],
       shared: !!s.tag_id,
-      isMax: (s.effective_seconds || 0) === max,
+      sized: !!s.size_times,
+      isMax: vals[i] === max,
     }));
-  }, [detail]);
+  }, [detail, selectedSize]); // eslint-disable-line
+
+  const shownTotal = detail ? detail.steps.reduce((a, s) => a + effFor(s), 0) : 0;
 
   return (
     <>
@@ -88,6 +109,16 @@ export default function Dashboard() {
                 <button key={s.id} className={`chip ${s.id === selectedId ? 'active' : ''}`} onClick={() => setSelectedId(s.id)}>{configLabel(s)}</button>
               ))}
             </div>
+            {sizes.length > 0 && (
+              <div className="picker-row">
+                <span className="picker-label">Size</span>
+                <button className={`chip ${selectedSize === null ? 'active' : ''}`} onClick={() => setSelectedSize(null)}>Standard</button>
+                {sizes.map(sz => (
+                  <button key={sz} className={`chip ${sz === selectedSize ? 'active' : ''}`} onClick={() => setSelectedSize(sz)}>{sz}</button>
+                ))}
+                <span className="muted" style={{ fontSize: 12 }}>affects {detail ? detail.steps.filter(s => s.size_times).length : 0} step(s)</span>
+              </div>
+            )}
           </>
         )}
         {!detail ? (
@@ -97,7 +128,8 @@ export default function Dashboard() {
         ) : (
           <>
             <div className="muted" style={{ marginBottom: 8 }}>
-              {detail.steps.length} steps · total <strong className="time">{formatTime(detail.total_seconds)}</strong> ({formatLong(detail.total_seconds)}) ·{' '}
+              {detail.steps.length} steps · total <strong className="time">{formatTime(shownTotal)}</strong> ({formatLong(shownTotal)})
+              {selectedSize ? <> · size <strong>{selectedSize}</strong></> : null} ·{' '}
               <Link to={`/skus/${detail.id}`}>open / edit</Link>
             </div>
             <ResponsiveContainer width="100%" height={420}>

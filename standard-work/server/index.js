@@ -65,6 +65,7 @@ app.get('/api/skus/:id', (req, res) => {
   if (!sku) return res.status(404).json({ error: 'SKU not found' });
   const steps = getSkuSteps(sku.id).map(s => ({
     ...s,
+    size_times: s.size_times ? JSON.parse(s.size_times) : null,
     photos: db.prepare("SELECT * FROM photos WHERE owner_type = 'sku_step' AND owner_id = ? ORDER BY sort_order").all(s.id),
   }));
   res.json({ ...sku, steps, total_seconds: getSkuTotal(sku.id) });
@@ -122,9 +123,31 @@ app.post('/api/skus/:id/steps', (req, res) => {
 app.put('/api/steps/:id', (req, res) => {
   const step = db.prepare('SELECT * FROM sku_steps WHERE id = ?').get(req.params.id);
   if (!step) return res.status(404).json({ error: 'Step not found' });
-  const { name, description, time, override_time, station, parallel_notes, tag_id, quantity, needs_review, note } = req.body;
+  const { name, description, time, override_time, station, parallel_notes, tag_id, quantity, size_times, needs_review, note } = req.body;
+
+  // size_times: object {label: "m:ss"|seconds} → stored as JSON of integer
+  // seconds. A representative size also sets the step's own time_seconds so
+  // the stored SKU total stays sensible. null/empty clears it.
+  let sizeTimesJson = step.size_times;
+  let sizeDefault = null;
+  if (size_times !== undefined) {
+    if (!size_times || Object.keys(size_times).length === 0) {
+      sizeTimesJson = null;
+    } else {
+      const parsed = {};
+      for (const [label, val] of Object.entries(size_times)) {
+        const t = timeInput(val);
+        if (t.ambiguous) return res.status(400).json({ error: `Could not parse time "${val}" for size "${label}"` });
+        if (t.seconds !== null) parsed[label] = t.seconds;
+      }
+      sizeTimesJson = JSON.stringify(parsed);
+      const vals = Object.values(parsed);
+      if (vals.length) sizeDefault = vals[Math.floor((vals.length - 1) / 2)]; // middle bucket
+    }
+  }
 
   let ownSeconds = step.time_seconds;
+  if (size_times !== undefined && sizeDefault !== null && time === undefined) ownSeconds = sizeDefault;
   if (time !== undefined) {
     const t = timeInput(time);
     if (t.ambiguous) return res.status(400).json({ error: `Could not parse time "${time}"` });
@@ -144,12 +167,13 @@ app.put('/api/steps/:id', (req, res) => {
   }
 
   db.prepare(`UPDATE sku_steps SET name = ?, description = ?, time_seconds = ?, override_time_seconds = ?,
-              station = ?, parallel_notes = ?, tag_id = ?, quantity = ?, needs_review = ?, updated_at = datetime('now')
+              station = ?, parallel_notes = ?, tag_id = ?, quantity = ?, size_times = ?, needs_review = ?, updated_at = datetime('now')
               WHERE id = ?`)
     .run(name ?? step.name, description ?? step.description, ownSeconds, override,
          station ?? step.station, parallel_notes ?? step.parallel_notes,
          tag_id !== undefined ? tag_id : step.tag_id,
          quantity !== undefined ? (quantity === null || quantity === '' ? null : Number(quantity)) : step.quantity,
+         sizeTimesJson,
          needs_review !== undefined ? (needs_review ? 1 : 0) : step.needs_review, step.id);
   res.json({ ok: true, total_seconds: getSkuTotal(step.sku_id) });
 });

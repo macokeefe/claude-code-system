@@ -14,8 +14,8 @@ const insertTag = db.prepare('INSERT INTO tags (name, description, canonical_tim
 const insertSku = db.prepare('INSERT INTO skus (sku_number, name, family, description, version) VALUES (?, ?, ?, ?, ?)');
 const insertStep = db.prepare(`
   INSERT INTO sku_steps (sku_id, sequence, tag_id, name, description, time_seconds, time_raw_text,
-                         override_time_seconds, quantity, parallel_notes, needs_review)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+                         override_time_seconds, quantity, size_times, parallel_notes, needs_review)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
 db.transaction(() => {
   const tagIds = {};
@@ -31,7 +31,9 @@ db.transaction(() => {
         step.tag ? tagIds[step.tag] : null,
         step.name || null, step.description || null,
         step.seconds ?? null, step.raw || null,
-        step.override ?? null, step.quantity ?? null, step.parallel || null,
+        step.override ?? null, step.quantity ?? null,
+        step.sizeTimes ? JSON.stringify(step.sizeTimes) : null,
+        step.parallel || null,
         step.needsReview ? 1 : 0);
     });
   }

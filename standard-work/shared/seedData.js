@@ -85,8 +85,8 @@ export const seedSkus = [
       { tag: 'PPE', parallel: 'No' },
       {
         name: 'Rivet Nut Installation',
-        description: 'Inspect each pre-drilled hole on the component to confirm the correct diameter. If holes are undersized, use the drill to open each hole to the correct size before proceeding, adding approximately 30 seconds per piece. Secure each extrusion into the clamp fixture. Using the pneumatic rivet nut tool, insert item #13 (40462) 1/4-20 large flange ribbed nutsert into each hole on the (2) middle arm extrusions and (2) beams. Then repeat using item #14 (40528) 3/8-16 large flange ribbed nutsert for each of the 4 holes on the (2) rear legs. Pass all completed components to the cart for the next station. Size-dependent: 3.5 → 8:10, 4.5–6.5 → 8:30, 7.5 → 8:40.',
-        raw: '3.5: 8:10 / 4.5-6.5: 8:30 / 7.5: 8:40', needsReview: true, parallel: 'Not enough space',
+        description: 'Inspect each pre-drilled hole on the component to confirm the correct diameter. If holes are undersized, use the drill to open each hole to the correct size before proceeding, adding approximately 30 seconds per piece. Secure each extrusion into the clamp fixture. Using the pneumatic rivet nut tool, insert item #13 (40462) 1/4-20 large flange ribbed nutsert into each hole on the (2) middle arm extrusions and (2) beams. Then repeat using item #14 (40528) 3/8-16 large flange ribbed nutsert for each of the 4 holes on the (2) rear legs. Pass all completed components to the cart for the next station. Time varies by sofa size.',
+        seconds: 510, sizeTimes: { '3.5': 490, '4.5–6.5': 510, '7.5': 520 }, parallel: 'Not enough space',
       },
       { tag: 'Connector Pre-Assembly', quantity: 14, // 14 × 0:50 = 11:40
         parallel: 'Yes but inefficient + unnecessary' },

@@ -99,6 +99,7 @@ function freshStateFromSeed() {
         name: step.name || null, description: step.description || null,
         time_seconds: step.seconds ?? null, time_raw_text: step.raw || null,
         override_time_seconds: step.override ?? null, quantity: step.quantity ?? null,
+        size_times: step.sizeTimes ?? null,
         station: null, parallel_notes: step.parallel || null,
         photo_path: null, needs_review: step.needsReview ? 1 : 0,
         created_at: now(), updated_at: now(),
@@ -317,11 +318,31 @@ async function handle(method, url, body) {
           step.override_time_seconds = t.seconds;
         }
       }
+      // size_times: object {label: "m:ss"|seconds} → integer seconds; middle
+      // bucket becomes the representative time_seconds. null/empty clears it.
+      let nextSizeTimes = step.size_times;
+      let nextOwn = step.time_seconds;
+      if (body.size_times !== undefined) {
+        if (!body.size_times || Object.keys(body.size_times).length === 0) {
+          nextSizeTimes = null;
+        } else {
+          const parsed = {};
+          for (const [label, val] of Object.entries(body.size_times)) {
+            const t = timeInput(val);
+            if (t.ambiguous) httpError(400, { error: `Could not parse time "${val}" for size "${label}"` });
+            if (t.seconds !== null) parsed[label] = t.seconds;
+          }
+          nextSizeTimes = parsed;
+          const vals = Object.values(parsed);
+          if (vals.length && time === undefined) nextOwn = vals[Math.floor((vals.length - 1) / 2)];
+        }
+      }
       Object.assign(step, {
         name: name ?? step.name, description: description ?? step.description,
         station: station ?? step.station, parallel_notes: parallel_notes ?? step.parallel_notes,
         tag_id: tag_id !== undefined ? tag_id : step.tag_id,
         quantity: quantity !== undefined ? (quantity === null || quantity === '' ? null : Number(quantity)) : step.quantity,
+        size_times: nextSizeTimes, time_seconds: nextOwn,
         needs_review: needs_review !== undefined ? (needs_review ? 1 : 0) : step.needs_review,
         updated_at: now(),
       });

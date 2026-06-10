@@ -133,10 +133,65 @@ function InlineStepText({ step, isTagged, onSaved }) {
   );
 }
 
+/* Size-dependent times editor (e.g. rivnut: 3.5 / 4.5–6.5 / 7.5). */
+function SizeCell({ step, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [rows, setRows] = useState([]);
+  const [error, setError] = useState('');
+
+  function open() {
+    setRows(Object.entries(step.size_times).map(([label, secs]) => ({ label, time: formatTime(secs) })));
+    setError('');
+    setEditing(true);
+  }
+  async function save() {
+    const obj = {};
+    for (const r of rows) if (r.label.trim()) obj[r.label.trim()] = r.time;
+    try {
+      await api.put(`/api/steps/${step.id}`, { size_times: Object.keys(obj).length ? obj : null });
+      setEditing(false);
+      onSaved();
+    } catch (err) { setError(err.message); }
+  }
+
+  if (!editing) {
+    return (
+      <div>
+        <div className="muted" style={{ fontSize: 11, marginBottom: 2 }}>varies by size:</div>
+        {Object.entries(step.size_times).map(([label, secs]) => (
+          <div key={label} style={{ fontSize: 13 }}><strong>{label}</strong> <span className="time">{formatTime(secs)}</span></div>
+        ))}
+        <button className="ghost small" onClick={open}>edit sizes</button>
+      </div>
+    );
+  }
+  return (
+    <div className="inline-form" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+      {error && <div className="inline-error">{error}</div>}
+      {rows.map((r, i) => (
+        <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+          <input style={{ width: 80 }} placeholder="size" value={r.label}
+            onChange={e => setRows(rows.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} />
+          <input style={{ width: 70 }} placeholder="m:ss" value={r.time}
+            onChange={e => setRows(rows.map((x, j) => j === i ? { ...x, time: e.target.value } : x))} />
+          <button className="ghost small" onClick={() => setRows(rows.filter((_, j) => j !== i))}>✕</button>
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 4 }}>
+        <button className="ghost small" onClick={() => setRows([...rows, { label: '', time: '' }])}>+ size</button>
+        <button className="small primary" onClick={save}>Save</button>
+        <button className="ghost small" onClick={() => setEditing(false)}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 /* Time / quantity cell: edits the right thing depending on the step kind. */
 function TimeCell({ step, onSaved }) {
   const isTagged = !!step.tag_id;
   const usesQuantity = isTagged && step.tag_unit_seconds != null;
+
+  if (!isTagged && step.size_times) return <SizeCell step={step} onSaved={onSaved} />;
 
   if (usesQuantity) {
     const label = step.tag_unit_label || 'unit';
@@ -184,6 +239,14 @@ function TimeCell({ step, onSaved }) {
         </button>
       )}
       {step.needs_review && step.time_raw_text ? <div className="muted" style={{ fontSize: 11 }}>was: “{step.time_raw_text}”</div> : null}
+      {!isTagged && (
+        <button className="ghost small" title="Give this step different times per sofa size"
+          onClick={async () => {
+            const base = step.effective_seconds != null ? formatTime(step.effective_seconds) : '';
+            await api.put(`/api/steps/${step.id}`, { size_times: { 'small': base, 'medium': base, 'large': base } });
+            onSaved();
+          }}>± varies by size</button>
+      )}
     </div>
   );
 }

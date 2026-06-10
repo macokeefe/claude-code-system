@@ -94,6 +94,7 @@ for (const stmt of [
   'ALTER TABLE tags ADD COLUMN unit_seconds INTEGER',
   'ALTER TABLE tags ADD COLUMN unit_label TEXT',
   'ALTER TABLE sku_steps ADD COLUMN quantity REAL',
+  'ALTER TABLE sku_steps ADD COLUMN size_times TEXT',
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }
