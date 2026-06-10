@@ -178,7 +178,7 @@ function InlineStepText({ step, isTagged, onSaved }) {
 }
 
 /* Size-dependent times editor (e.g. rivnut: 3.5 / 4.5–6.5 / 7.5). */
-function SizeCell({ step, onSaved }) {
+function SizeCell({ step, onSaved, activeSize }) {
   const [editing, setEditing] = useState(false);
   const [rows, setRows] = useState([]);
   const [error, setError] = useState('');
@@ -202,9 +202,14 @@ function SizeCell({ step, onSaved }) {
     return (
       <div>
         <div className="muted" style={{ fontSize: 11, marginBottom: 2 }}>varies by size:</div>
-        {Object.entries(step.size_times).map(([label, secs]) => (
-          <div key={label} style={{ fontSize: 13 }}><strong>{label}</strong> <span className="time">{formatTime(secs)}</span></div>
-        ))}
+        {Object.entries(step.size_times).map(([label, secs]) => {
+          const on = activeSize === label;
+          return (
+            <div key={label} style={{ fontSize: 13, fontWeight: on ? 700 : 400, color: on ? 'var(--accent)' : undefined }}>
+              <strong>{label}</strong> <span className="time">{formatTime(secs)}</span>{on ? ' ◄' : ''}
+            </div>
+          );
+        })}
         <button className="ghost small" onClick={open}>edit sizes</button>
       </div>
     );
@@ -231,11 +236,11 @@ function SizeCell({ step, onSaved }) {
 }
 
 /* Time / quantity cell: edits the right thing depending on the step kind. */
-function TimeCell({ step, onSaved }) {
+function TimeCell({ step, onSaved, size }) {
   const isTagged = !!step.tag_id;
   const usesQuantity = isTagged && step.tag_unit_seconds != null;
 
-  if (!isTagged && step.size_times) return <SizeCell step={step} onSaved={onSaved} />;
+  if (!isTagged && step.size_times) return <SizeCell step={step} onSaved={onSaved} activeSize={size} />;
 
   if (usesQuantity) {
     const label = step.tag_unit_label || 'unit';
@@ -377,18 +382,26 @@ export default function SkuDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [sku, setSku] = useState(null);
+  const [size, setSize] = useState(null); // selected sofa size (null = Standard/representative)
   const photoInput = useRef();
   const stepPhotoFor = useRef(null);
 
   const load = useCallback(() => api.get(`/api/skus/${id}`).then(setSku), [id]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); setSize(null); }, [load]);
 
   if (!sku) return null;
 
-  const cp = criticalPath(sku.steps);
+  // Sizes that affect this SKU's step times, and a size-aware effective time.
+  const sizes = [...new Set(sku.steps.flatMap(s => s.size_times ? Object.keys(s.size_times) : []))];
+  const effFor = s => (size && s.size_times && s.size_times[size] != null) ? s.size_times[size] : (s.effective_seconds || 0);
+  // Steps with size applied — feeds the chart, total, and critical path.
+  const viewSteps = sku.steps.map(s => ({ ...s, effective_seconds: effFor(s) }));
+  const viewTotal = viewSteps.reduce((a, s) => a + (s.effective_seconds || 0), 0);
+
+  const cp = criticalPath(viewSteps);
   const criticalSet = new Set(cp.criticalStepIds);
-  const maxTime = Math.max(...sku.steps.map(s => s.effective_seconds || 0), 1);
-  const chartData = sku.steps.map(s => ({
+  const maxTime = Math.max(...viewSteps.map(s => s.effective_seconds || 0), 1);
+  const chartData = viewSteps.map(s => ({
     name: `${s.sequence}. ${(s.tag_id ? s.tag_name : s.name) || ''}`.slice(0, 38),
     minutes: +((s.effective_seconds || 0) / 60).toFixed(1),
     isMax: s.effective_seconds === maxTime,
@@ -433,8 +446,19 @@ export default function SkuDetail() {
           <div className="muted">SKU {sku.sku_number} · {sku.family || 'no family'} · v{sku.version}</div>
         </div>
         <div className="spacer" />
-        <span className="total-chip">Total: {formatTime(sku.total_seconds)} <span style={{ fontWeight: 400 }}>({formatLong(sku.total_seconds)})</span></span>
+        <span className="total-chip">Total: {formatTime(viewTotal)} <span style={{ fontWeight: 400 }}>({formatLong(viewTotal)})</span></span>
       </div>
+
+      {sizes.length > 0 && (
+        <div className="picker-row" style={{ marginBottom: 16 }}>
+          <span className="picker-label">Sofa size</span>
+          <button className={`chip ${size === null ? 'active' : ''}`} onClick={() => setSize(null)}>Standard</button>
+          {sizes.map(sz => (
+            <button key={sz} className={`chip ${sz === size ? 'active' : ''}`} onClick={() => setSize(sz)}>{sz}</button>
+          ))}
+          <span className="muted" style={{ fontSize: 12 }}>changes {sku.steps.filter(s => s.size_times).length} size-dependent step(s) and the total</span>
+        </div>
+      )}
 
       <div className="toolbar">
         {sku.photo_path
@@ -458,17 +482,17 @@ export default function SkuDetail() {
         }} />
 
       {sku.steps.length > 0 && (() => {
-        const pct = sku.total_seconds ? Math.round((cp.criticalSeconds / sku.total_seconds) * 100) : 0;
+        const pct = viewTotal ? Math.round((cp.criticalSeconds / viewTotal) * 100) : 0;
         return (
           <div className="card">
-            <h2 style={{ marginTop: 0 }}>Critical path</h2>
+            <h2 style={{ marginTop: 0 }}>Critical path{size ? ` — size ${size}` : ''}</h2>
             <div className="row" style={{ gap: 14 }}>
               <div className="stat" style={{ borderLeftColor: '#b3261e' }}>
                 <div className="stat-value">{formatLong(cp.criticalSeconds)}</div>
                 <div className="stat-label">Fastest possible (unlimited people)</div>
               </div>
               <div className="stat">
-                <div className="stat-value">{formatLong(sku.total_seconds)}</div>
+                <div className="stat-value">{formatLong(viewTotal)}</div>
                 <div className="stat-label">One person, start to finish</div>
               </div>
               <div className="stat" style={{ borderLeftColor: '#1c7c3c' }}>
@@ -518,7 +542,7 @@ export default function SkuDetail() {
                   {step.parallel_notes && <div className="muted">Parallel: {step.parallel_notes}</div>}
                   <DepsEditor step={step} allSteps={sku.steps} onSaved={load} />
                 </td>
-                <td><TimeCell step={step} onSaved={load} /></td>
+                <td><TimeCell step={step} onSaved={load} size={size} /></td>
                 <td><TagActions step={step} onSaved={load} /></td>
                 <td>
                   {step.photos?.length

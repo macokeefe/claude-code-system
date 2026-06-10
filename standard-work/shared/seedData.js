@@ -122,6 +122,50 @@ export const seedSkus = [
       },
     ],
   },
+  {
+    // Base configuration: built from the No-Arms config minus the middle-leg
+    // sub-assembly, with base connector count 14 (no arms, no middle leg).
+    // Constructed from the documented rules — verify on the floor.
+    sku_number: 'SOLA-BASE',
+    name: 'Sola Lounge No Arms No Middle Leg',
+    family: 'Sola Lounge',
+    description: 'Base configuration — no arms, no middle leg. Connector count = base 14 (no arm +2 each, no middle leg +4). Constructed from the documented rules; please verify.',
+    steps: [
+      { tag: 'PPE', parallel: 'No' },
+      {
+        name: 'Rivet Nut Installation',
+        description: 'Rear legs: 4× item #14 (40528, 3/8-16) into the rear-left leg and 4× into the rear-right leg; front-left and front-right take none — 8 leg rivnuts at ~0:32 (0.531 min) each. Front & back beams: by sofa size — small (3.5) = 4 per beam (8 total), medium (4.5–6.5) = 5 per beam (10 total), large (7.5) = 6 per beam (12 total). Total 16 / 18 / 20 rivnuts.',
+        seconds: 573, sizeTimes: { '3.5': 510, '4.5–6.5': 573, '7.5': 637 }, parallel: 'No',
+      },
+      { tag: 'Connector Pre-Assembly', quantity: 14, // base 14 × 0:50 = 11:40
+        parallel: 'Yes but inefficient + unnecessary' },
+      { tag: 'Connector Plate Installation',
+        parallel: '2-connector piece could be done in parallel but seems extremely inefficient' },
+      { tag: 'Attach Connectors to Leg Pieces', quantity: 4 }, // 4 × 0:55 = 3:40
+      {
+        name: 'Frame Sub-Assembly',
+        description: 'Lay both frame sections flat on the work surface. Apply a bar clamp to each section to hold extrusions flush and aligned. Drive screws into each leg joint using the pre-installed connectors from the previous step until fully seated. Repeat for all joints on both sections.',
+        seconds: 1020, raw: '17',
+      },
+      {
+        name: 'Frame Connection Assembly',
+        description: 'Gather both side assemblies and long connecting pieces. Hammer any rivnuts sticking out into designated locations until fully flush. Wipe down and spray all mating surfaces. Insert back bar into both side assemblies, drive connector screws from the side, hammer into place and tighten with wrench until flush. Flip and attach back piece to the same side. Repeat for opposite side.',
+        seconds: 637, raw: '10:37',
+      },
+      {
+        name: 'Corner Cap & End Cap Installation',
+        description: 'Touch up any unpainted corner edges. Verify connectors are tight and legs aligned. Insert black triangular interior cap into each open corner joint, hammer flush, fill with super glue, press exterior cap on top until seated. Repeat for all corners. ~100 seconds/corner.',
+        seconds: 400, raw: '6.66 minutes',
+      },
+      { tag: 'Seat Support Frame Assembly' },
+      { tag: 'Frame Prep' },
+      {
+        name: 'Seat Frame Installation',
+        description: 'Align seat support frame to the corresponding mounting points on the back and front bars, and drive screws until fully seated. Use hammer to adjust to be fully flush. Screw the crucial corner screws first, then the rest. Use drill.',
+        seconds: 795, raw: '13 minutes 15 seconds',
+      },
+    ],
+  },
 ];
 
 // Starting-point build-order dependencies, keyed by SKU number then by step
@@ -132,4 +176,5 @@ export const seedSkus = [
 export const seedDeps = {
   'SOLA-RA': { 2: [1], 3: [1], 4: [3], 5: [3], 6: [2, 4, 5], 7: [6], 8: [1], 9: [7], 10: [8, 9] },
   'SOLA-NA': { 2: [1], 3: [1], 4: [3], 5: [3], 6: [2, 4, 5], 7: [6], 8: [7], 9: [8], 10: [1], 11: [9], 12: [10, 11] },
+  'SOLA-BASE': { 2: [1], 3: [1], 4: [3], 5: [3], 6: [2, 4, 5], 7: [6], 8: [7], 9: [1], 10: [8], 11: [10, 9] },
 };
