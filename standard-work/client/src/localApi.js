@@ -552,6 +552,106 @@ async function handle(method, url, body) {
     }).sort((a, b) => b.aggregate_seconds - a.aggregate_seconds);
   }
 
+  /* ----- Solutions (improvement what-ifs) ----- */
+  const solWithTargets = sol => ({
+    ...sol,
+    targets: (state.solutionTargets || []).filter(t => t.solution_id === sol.id).map(t => {
+      if (t.target_type === 'tag') {
+        const tag = tagById(t.target_id);
+        return { ...t, label: tag ? tag.name : '(deleted tag)', is_unit: !!tag?.unit_seconds };
+      }
+      const st = state.steps.find(s => s.id === t.target_id);
+      const sku = st && skuById(st.sku_id);
+      const tg = st?.tag_id ? tagById(st.tag_id) : null;
+      return { ...t, label: st ? `${tg?.name || st.name} (${sku?.sku_number})` : '(deleted step)' };
+    }),
+  });
+  if (path === '/api/solutions') {
+    state.solutions = state.solutions || []; state.solutionTargets = state.solutionTargets || [];
+    if (method === 'GET') return [...state.solutions].sort((a, b) => b.id - a.id).map(solWithTargets);
+    if (method === 'POST') {
+      if (!body.name) httpError(400, { error: 'Solution name is required' });
+      const sol = { id: nextId(), name: body.name.trim(), description: body.description || null, status: 'idea', created_at: now() };
+      state.solutions.push(sol);
+      await persist();
+      return solWithTargets(sol);
+    }
+  }
+  if ((m = path.match(/^\/api\/solutions\/(\d+)$/))) {
+    const sol = (state.solutions || []).find(s => s.id === Number(m[1]));
+    if (!sol) httpError(404, { error: 'Solution not found' });
+    if (method === 'PUT') {
+      Object.assign(sol, { name: body.name ?? sol.name, description: body.description ?? sol.description, status: body.status ?? sol.status });
+      await persist();
+      return solWithTargets(sol);
+    }
+    if (method === 'DELETE') {
+      state.solutions = state.solutions.filter(s => s.id !== sol.id);
+      state.solutionTargets = (state.solutionTargets || []).filter(t => t.solution_id !== sol.id);
+      await persist();
+      return { ok: true };
+    }
+  }
+  if (method === 'POST' && (m = path.match(/^\/api\/solutions\/(\d+)\/targets$/))) {
+    const sol = (state.solutions || []).find(s => s.id === Number(m[1]));
+    if (!sol) httpError(404, { error: 'Solution not found' });
+    const { target_type, target_id, mode, value } = body;
+    if (!['tag', 'sku_step'].includes(target_type) || !['percent', 'seconds'].includes(mode)) {
+      httpError(400, { error: 'target_type must be tag|sku_step and mode percent|seconds' });
+    }
+    const v = Number(value);
+    if (!Number.isFinite(v) || v <= 0) httpError(400, { error: 'Savings value must be a positive number' });
+    if (mode === 'percent' && v >= 100) httpError(400, { error: 'Percent savings must be under 100' });
+    state.solutionTargets = state.solutionTargets || [];
+    const t = { id: nextId(), solution_id: sol.id, target_type, target_id: Number(target_id), mode, value: v };
+    state.solutionTargets.push(t);
+    await persist();
+    return { id: t.id };
+  }
+  if (method === 'DELETE' && (m = path.match(/^\/api\/solutions\/(\d+)\/targets\/(\d+)$/))) {
+    state.solutionTargets = (state.solutionTargets || []).filter(t => !(t.id === Number(m[2]) && t.solution_id === Number(m[1])));
+    await persist();
+    return { ok: true };
+  }
+  if (method === 'POST' && (m = path.match(/^\/api\/solutions\/(\d+)\/apply$/))) {
+    const sol = (state.solutions || []).find(s => s.id === Number(m[1]));
+    if (!sol) httpError(404, { error: 'Solution not found' });
+    const targets = (state.solutionTargets || []).filter(t => t.solution_id === sol.id);
+    const note = `solution installed: ${sol.name}`;
+    const cut = (secs, t) => secs == null ? null
+      : Math.max(0, t.mode === 'percent' ? Math.round(secs * (1 - t.value / 100)) : Math.round(secs - t.value));
+    for (const t of targets) {
+      if (t.target_type === 'tag') {
+        const tag = tagById(t.target_id);
+        if (!tag) continue;
+        if (tag.unit_seconds != null) {
+          const nu = cut(tag.unit_seconds, t);
+          if (nu !== tag.unit_seconds) { recordHistory('tag', tag.id, tag.unit_seconds, nu, `${note} [per-unit time]`); tag.unit_seconds = nu; }
+        } else {
+          const nc = cut(tag.canonical_time_seconds, t);
+          if (nc !== tag.canonical_time_seconds) { recordHistory('tag', tag.id, tag.canonical_time_seconds, nc, note); tag.canonical_time_seconds = nc; }
+        }
+        tag.updated_at = now();
+      } else {
+        const step = state.steps.find(s => s.id === t.target_id);
+        if (!step) continue;
+        if (step.tag_id && step.override_time_seconds == null) continue;
+        const field = step.tag_id ? 'override_time_seconds' : 'time_seconds';
+        const nv = cut(step[field], t);
+        if (nv !== step[field]) { recordHistory('sku_step', step.id, step[field], nv, note); step[field] = nv; }
+        if (step.size_times) {
+          const st2 = { ...step.size_times };
+          for (const k of Object.keys(st2)) st2[k] = cut(st2[k], t);
+          step.size_times = st2;
+        }
+        step.updated_at = now();
+      }
+    }
+    sol.status = 'installed';
+    await persist();
+    return { ok: true };
+  }
+
   /* ----- Operators ----- */
   if (path === '/api/operators') {
     if (method === 'GET') return [...state.operators].sort((a, b) => (a.sort_order - b.sort_order) || (a.id - b.id));

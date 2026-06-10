@@ -431,6 +431,112 @@ app.get('/api/stats/tag-impact', (req, res) => {
   `).all());
 });
 
+/* ---------------- Solutions (improvement what-ifs) ---------------- */
+
+function solutionWithTargets(sol) {
+  const targets = db.prepare('SELECT * FROM solution_targets WHERE solution_id = ?').all(sol.id).map(t => {
+    if (t.target_type === 'tag') {
+      const tag = db.prepare('SELECT name, unit_seconds, unit_label, canonical_time_seconds FROM tags WHERE id = ?').get(t.target_id);
+      return { ...t, label: tag ? tag.name : '(deleted tag)', is_unit: !!tag?.unit_seconds };
+    }
+    const step = db.prepare(`
+      SELECT s.name, s.sku_id, t.name AS tag_name, k.sku_number FROM sku_steps s
+      LEFT JOIN tags t ON t.id = s.tag_id JOIN skus k ON k.id = s.sku_id WHERE s.id = ?`).get(t.target_id);
+    return { ...t, label: step ? `${step.tag_name || step.name} (${step.sku_number})` : '(deleted step)' };
+  });
+  return { ...sol, targets };
+}
+
+app.get('/api/solutions', (req, res) => {
+  res.json(db.prepare('SELECT * FROM solutions ORDER BY id DESC').all().map(solutionWithTargets));
+});
+
+app.post('/api/solutions', (req, res) => {
+  const { name, description } = req.body;
+  if (!name) return res.status(400).json({ error: 'Solution name is required' });
+  const info = db.prepare('INSERT INTO solutions (name, description) VALUES (?, ?)').run(name.trim(), description || null);
+  res.json(solutionWithTargets(db.prepare('SELECT * FROM solutions WHERE id = ?').get(info.lastInsertRowid)));
+});
+
+app.put('/api/solutions/:id', (req, res) => {
+  const sol = db.prepare('SELECT * FROM solutions WHERE id = ?').get(req.params.id);
+  if (!sol) return res.status(404).json({ error: 'Solution not found' });
+  const { name, description, status } = req.body;
+  db.prepare('UPDATE solutions SET name = ?, description = ?, status = ? WHERE id = ?')
+    .run(name ?? sol.name, description ?? sol.description, status ?? sol.status, sol.id);
+  res.json(solutionWithTargets(db.prepare('SELECT * FROM solutions WHERE id = ?').get(sol.id)));
+});
+
+app.delete('/api/solutions/:id', (req, res) => {
+  db.prepare('DELETE FROM solutions WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+app.post('/api/solutions/:id/targets', (req, res) => {
+  const sol = db.prepare('SELECT id FROM solutions WHERE id = ?').get(req.params.id);
+  if (!sol) return res.status(404).json({ error: 'Solution not found' });
+  const { target_type, target_id, mode, value } = req.body;
+  if (!['tag', 'sku_step'].includes(target_type) || !['percent', 'seconds'].includes(mode)) {
+    return res.status(400).json({ error: 'target_type must be tag|sku_step and mode percent|seconds' });
+  }
+  const v = Number(value);
+  if (!Number.isFinite(v) || v <= 0) return res.status(400).json({ error: 'Savings value must be a positive number' });
+  if (mode === 'percent' && v >= 100) return res.status(400).json({ error: 'Percent savings must be under 100' });
+  const info = db.prepare('INSERT INTO solution_targets (solution_id, target_type, target_id, mode, value) VALUES (?, ?, ?, ?, ?)')
+    .run(sol.id, target_type, Number(target_id), mode, v);
+  res.json({ id: info.lastInsertRowid });
+});
+
+app.delete('/api/solutions/:sid/targets/:tid', (req, res) => {
+  db.prepare('DELETE FROM solution_targets WHERE id = ? AND solution_id = ?').run(req.params.tid, req.params.sid);
+  res.json({ ok: true });
+});
+
+// Install a solution: write the reduced times into the real data (with
+// history entries noting the solution) and mark it installed.
+app.post('/api/solutions/:id/apply', (req, res) => {
+  const sol = db.prepare('SELECT * FROM solutions WHERE id = ?').get(req.params.id);
+  if (!sol) return res.status(404).json({ error: 'Solution not found' });
+  const targets = db.prepare('SELECT * FROM solution_targets WHERE solution_id = ?').all(sol.id);
+  const note = `solution installed: ${sol.name}`;
+  const cut = (secs, t) => secs == null ? null
+    : Math.max(0, t.mode === 'percent' ? Math.round(secs * (1 - t.value / 100)) : Math.round(secs - t.value));
+
+  db.transaction(() => {
+    for (const t of targets) {
+      if (t.target_type === 'tag') {
+        const tag = db.prepare('SELECT * FROM tags WHERE id = ?').get(t.target_id);
+        if (!tag) continue;
+        // Per-unit tags: 'seconds' savings are per unit; fixed tags: off the canonical.
+        const newUnit = tag.unit_seconds != null ? cut(tag.unit_seconds, t) : tag.unit_seconds;
+        const newCanon = tag.unit_seconds == null ? cut(tag.canonical_time_seconds, t) : tag.canonical_time_seconds;
+        if (newUnit !== tag.unit_seconds) recordTimeHistory('tag', tag.id, tag.unit_seconds, newUnit, `${note} [per-unit time]`);
+        if (newCanon !== tag.canonical_time_seconds) recordTimeHistory('tag', tag.id, tag.canonical_time_seconds, newCanon, note);
+        db.prepare('UPDATE tags SET unit_seconds = ?, canonical_time_seconds = ?, updated_at = datetime(\'now\') WHERE id = ?')
+          .run(newUnit, newCanon, tag.id);
+      } else {
+        const step = db.prepare('SELECT * FROM sku_steps WHERE id = ?').get(t.target_id);
+        if (!step) continue;
+        if (step.tag_id && step.override_time_seconds == null) continue; // inherits a tag; target the tag instead
+        const field = step.tag_id ? 'override_time_seconds' : 'time_seconds';
+        const oldV = step[field];
+        const newV = cut(oldV, t);
+        if (newV !== oldV) recordTimeHistory('sku_step', step.id, oldV, newV, note);
+        let sizeTimes = step.size_times;
+        if (sizeTimes) {
+          const parsed = JSON.parse(sizeTimes);
+          for (const k of Object.keys(parsed)) parsed[k] = cut(parsed[k], t);
+          sizeTimes = JSON.stringify(parsed);
+        }
+        db.prepare(`UPDATE sku_steps SET ${field} = ?, size_times = ?, updated_at = datetime('now') WHERE id = ?`)
+          .run(newV, sizeTimes, step.id);
+      }
+    }
+    db.prepare("UPDATE solutions SET status = 'installed' WHERE id = ?").run(sol.id);
+  })();
+  res.json({ ok: true });
+});
+
 /* ---------------- Operators ---------------- */
 
 app.get('/api/operators', (req, res) => {

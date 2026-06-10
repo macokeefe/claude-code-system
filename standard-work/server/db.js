@@ -75,6 +75,23 @@ CREATE TABLE IF NOT EXISTS time_history (
   changed_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS solutions (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  status TEXT DEFAULT 'idea',
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS solution_targets (
+  id INTEGER PRIMARY KEY,
+  solution_id INTEGER NOT NULL REFERENCES solutions(id) ON DELETE CASCADE,
+  target_type TEXT NOT NULL CHECK (target_type IN ('tag','sku_step')),
+  target_id INTEGER NOT NULL,
+  mode TEXT NOT NULL CHECK (mode IN ('percent','seconds')),
+  value REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS operators (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
