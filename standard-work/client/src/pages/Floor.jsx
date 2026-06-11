@@ -58,6 +58,7 @@ function initMats() {
   MAT.pants = new THREE.MeshStandardMaterial({ color: 0x2e3440, roughness: 0.9 });
   MAT.skin = new THREE.MeshStandardMaterial({ color: 0xc89576, roughness: 0.8 });
   MAT.steel = new THREE.MeshStandardMaterial({ color: 0x9aa0a8, roughness: 0.5, metalness: 0.6 });
+  MAT.brass = new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: 0.35, metalness: 0.8 });
 }
 
 function makeLabel(seq, name, timeStr) {
@@ -89,41 +90,207 @@ function makeOperator() {
   return g;
 }
 
-/* The product being assembled: cherry frame + chrome bar + slats, like the
-   Sola frames on the benches in the photos. Reveals progressively. */
-function makeProduct() {
+/* ------------- station-specific work-in-progress visuals ------------- */
+/* Each builder returns { g, update(prog) } — the actual operation on that
+   bench, revealed as the step progresses. Matched by step name keywords. */
+
+const bx = (w, h, d, mat) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.castShadow = true; return m; };
+const cy = (r, h, mat) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 10), mat); m.castShadow = true; return m; };
+const showCount = (arr, n) => arr.forEach((m, i) => { m.visible = i < n; });
+const frac = (arr, prog) => showCount(arr, prog >= 1 ? arr.length : Math.floor(prog * (arr.length + 0.999)));
+
+function clampFixture() {
   const g = new THREE.Group();
-  const rails = new THREE.Group();
-  const L = 1.7, W = 1.05, railR = 0.055;
-  const mkRail = (len, x, z, rotY) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(len, 0.11, 0.11), MAT.cherry);
-    m.position.set(x, 0, z); m.rotation.y = rotY; m.castShadow = true;
-    return m;
-  };
-  rails.add(mkRail(L, 0, -W / 2, 0), mkRail(L, 0, W / 2, 0), mkRail(W, -L / 2, 0, Math.PI / 2), mkRail(W, L / 2, 0, Math.PI / 2));
-  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, L - 0.15, 10), MAT.chrome);
-  bar.rotation.z = Math.PI / 2; bar.castShadow = true;
-  const slats = new THREE.Group();
-  const slatCount = 6;
-  for (let i = 0; i < slatCount; i++) {
-    const s = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.05, W - 0.12), MAT.cherry);
-    s.position.x = -L / 2 + 0.25 + i * ((L - 0.5) / (slatCount - 1));
-    s.castShadow = true; s.visible = false;
-    slats.add(s);
+  const base = bx(0.34, 0.16, 0.3, MAT.pants); base.position.y = 0.08; g.add(base);
+  const screw = cy(0.025, 0.22, MAT.chrome); screw.position.y = 0.27; g.add(screw);
+  const handle = bx(0.18, 0.03, 0.03, MAT.steel); handle.position.y = 0.38; g.add(handle);
+  return g;
+}
+function barClamp(len) {
+  const g = new THREE.Group();
+  const bar = bx(len, 0.045, 0.045, MAT.steel); bar.position.y = 0.1; g.add(bar);
+  for (const x of [-len / 2 + 0.06, len / 2 - 0.06]) {
+    const pad = bx(0.07, 0.16, 0.1, MAT.rackPost); pad.position.set(x, 0.08, 0); g.add(pad);
   }
-  g.add(rails, bar, slats);
-  g.userData = { rails, bar, slats, slatCount };
+  return g;
+}
+function drillTool() {
+  const g = new THREE.Group();
+  const body = bx(0.2, 0.1, 0.07, MAT.binYellow); body.position.y = 0.05; g.add(body);
+  const grip = bx(0.05, 0.12, 0.06, MAT.pants); grip.position.set(-0.04, -0.04, 0); g.add(grip);
+  const bit = cy(0.013, 0.12, MAT.chrome); bit.rotation.z = Math.PI / 2; bit.position.set(0.15, 0.05, 0); g.add(bit);
+  return g;
+}
+function rail(len, mat = MAT.cherry) { return bx(len, 0.1, 0.1, mat); }
+
+/* full perimeter frame used by several stations */
+function fullFrame(L = 1.6, W = 1.0) {
+  const g = new THREE.Group();
+  const a = rail(L); a.position.z = -W / 2;
+  const b = rail(L); b.position.z = W / 2;
+  const c = rail(W); c.rotation.y = Math.PI / 2; c.position.x = -L / 2;
+  const d = rail(W); d.rotation.y = Math.PI / 2; d.position.x = L / 2;
+  g.add(a, b, c, d);
   return g;
 }
 
-function setProductProgress(p, prog) {
-  const { rails, bar, slats, slatCount } = p.userData;
-  const railP = Math.min(1, prog / 0.3);
-  rails.scale.set(Math.max(0.001, railP), Math.max(0.001, railP), Math.max(0.001, railP));
-  rails.visible = prog > 0.001;
-  bar.visible = prog >= 0.35;
-  const shown = prog >= 1 ? slatCount : Math.floor(Math.max(0, prog - 0.45) / 0.55 * (slatCount + 0.99));
-  slats.children.forEach((s, i) => { s.visible = i < shown; });
+function visRivnut() {
+  const g = new THREE.Group();
+  const fixture = clampFixture(); fixture.position.set(-0.85, 0, -0.35); g.add(fixture);
+  const studs = [];
+  [-0.25, 0.05, 0.35].forEach((z, r) => {
+    const ext = rail(1.5); ext.position.set(0.1, 0.05, z); g.add(ext);
+    for (let i = 0; i < 4; i++) {
+      const stud = cy(0.024, 0.05, MAT.brass); stud.position.set(-0.5 + i * 0.34, 0.13, z);
+      stud.visible = false; g.add(stud); studs.push(stud);
+    }
+  });
+  return { g, update: p => frac(studs, p) };
+}
+function visConnectorPre() {
+  const g = new THREE.Group();
+  const fixture = clampFixture(); fixture.position.set(-0.85, 0, 0.3); g.add(fixture);
+  const bin = bx(0.34, 0.18, 0.4, MAT.binYellow); bin.position.set(-0.85, 0.09, -0.3); g.add(bin);
+  const conns = [];
+  for (let i = 0; i < 12; i++) {
+    const c2 = new THREE.Group();
+    const body = bx(0.16, 0.09, 0.09, MAT.cherry); c2.add(body);
+    const lug = bx(0.06, 0.13, 0.06, MAT.chrome); lug.position.y = 0.06; c2.add(lug);
+    c2.position.set(-0.35 + (i % 6) * 0.28, 0.05, i < 6 ? -0.22 : 0.22);
+    c2.visible = false; g.add(c2); conns.push(c2);
+  }
+  return { g, update: p => frac(conns, p) };
+}
+function visConnectorPlate() {
+  const g = new THREE.Group();
+  const leg = rail(1.3); leg.position.set(-0.1, 0.05, 0); g.add(leg);
+  const fixture = clampFixture(); fixture.position.set(-0.85, 0, 0); g.add(fixture);
+  const dr = drillTool(); dr.position.set(0.7, 0.02, 0.45); dr.rotation.y = -0.6; g.add(dr);
+  const plate = bx(0.3, 0.02, 0.22, MAT.chrome); plate.position.set(0.25, 0.12, 0); plate.visible = false; g.add(plate);
+  const screws = [];
+  for (const [dx, dz] of [[-0.1, -0.07], [0.1, -0.07], [-0.1, 0.07], [0.1, 0.07]]) {
+    const s = cy(0.014, 0.03, MAT.brass); s.position.set(0.25 + dx, 0.15, dz); s.visible = false; g.add(s); screws.push(s);
+  }
+  return { g, update: p => { plate.visible = p > 0.15; frac(screws, Math.max(0, (p - 0.3) / 0.7)); } };
+}
+function visAttachConnectors() {
+  const g = new THREE.Group();
+  const leg = rail(1.5); leg.position.set(0, 0.05, 0); g.add(leg);
+  const wr = bx(0.34, 0.025, 0.06, MAT.steel); wr.position.set(0.65, 0.02, 0.4); wr.rotation.y = 0.5; g.add(wr);
+  const conns = [];
+  for (let i = 0; i < 4; i++) {
+    const c2 = bx(0.13, 0.13, 0.16, MAT.cherry);
+    c2.position.set(-0.55 + i * 0.37, 0.05, 0.13); c2.visible = false; g.add(c2); conns.push(c2);
+  }
+  return { g, update: p => frac(conns, p) };
+}
+function visFrameSub() {
+  const g = new THREE.Group();
+  const rails = [];
+  // two L-shaped sections taking shape
+  const defs = [
+    [0.9, -0.6, -0.3, 0], [0.7, -0.95, 0.05, Math.PI / 2], [0.9, -0.6, 0.4, 0],
+    [0.9, 0.6, -0.3, 0], [0.7, 0.95, 0.05, Math.PI / 2], [0.9, 0.6, 0.4, 0],
+  ];
+  for (const [len, x, z, ry] of defs) {
+    const r = rail(len); r.position.set(x, 0.05, z); r.rotation.y = ry; r.visible = false; g.add(r); rails.push(r);
+  }
+  const cl1 = barClamp(1.1); cl1.position.set(-0.6, 0, 0.05); cl1.rotation.y = Math.PI / 2; g.add(cl1);
+  const cl2 = barClamp(1.1); cl2.position.set(0.6, 0, 0.05); cl2.rotation.y = Math.PI / 2; g.add(cl2);
+  return { g, update: p => frac(rails, p) };
+}
+function visFrameAssembly() {
+  const g = new THREE.Group();
+  const rails = [];
+  const L = 1.7, W = 1.05;
+  const defs = [[L, 0, -W / 2, 0], [L, 0, W / 2, 0], [W, -L / 2, 0, Math.PI / 2], [W, L / 2, 0, Math.PI / 2], [W, 0, 0, Math.PI / 2]];
+  for (const [len, x, z, ry] of defs) {
+    const r = rail(len); r.position.set(x, 0.05, z); r.rotation.y = ry; r.visible = false; g.add(r); rails.push(r);
+  }
+  const cl = barClamp(1.3); cl.position.set(-L / 2, 0, 0); cl.rotation.y = Math.PI / 2; g.add(cl);
+  return { g, update: p => frac(rails, p) };
+}
+function visMiddleLeg() {
+  const g = new THREE.Group();
+  const wr = bx(0.34, 0.025, 0.06, MAT.steel); wr.position.set(0.7, 0.02, 0.4); g.add(wr);
+  const parts = [];
+  const a = rail(0.8); a.position.set(-0.3, 0.05, -0.15); a.visible = false;
+  const b = rail(0.8); b.position.set(-0.3, 0.05, 0.2); b.visible = false;
+  const c = rail(0.6); c.rotation.y = Math.PI / 2; c.position.set(0.25, 0.05, 0.02); c.visible = false;
+  g.add(a, b, c); parts.push(a, b, c);
+  return { g, update: p => frac(parts, p) };
+}
+function visCornerCaps() {
+  const g = new THREE.Group();
+  const frame = fullFrame(); frame.position.y = 0.05; g.add(frame);
+  const paint = cy(0.06, 0.1, MAT.boxWhite); paint.position.set(0.75, 0.05, 0.42); g.add(paint);
+  const caps = [];
+  for (const [x, z] of [[-0.8, -0.5], [0.8, -0.5], [-0.8, 0.5], [0.8, 0.5]]) {
+    const cap = bx(0.13, 0.13, 0.13, MAT.pants); cap.position.set(x, 0.1, z); cap.visible = false; g.add(cap); caps.push(cap);
+  }
+  return { g, update: p => frac(caps, p) };
+}
+function visSeatSupport() {
+  const g = new THREE.Group();
+  const bars = [rail(1.6), rail(1.6)];
+  bars[0].position.set(0, 0.04, -0.45); bars[1].position.set(0, 0.04, 0.45);
+  bars.forEach(b => { b.scale.y = 0.6; g.add(b); });
+  const slats = [];
+  for (let i = 0; i < 7; i++) {
+    const s = bx(0.14, 0.05, 0.95, MAT.cherry);
+    s.position.set(-0.66 + i * 0.22, 0.07, 0); s.visible = false; g.add(s); slats.push(s);
+  }
+  return { g, update: p => frac(slats, p) };
+}
+function visFramePrep() {
+  const g = new THREE.Group();
+  const frame = fullFrame(); frame.position.y = 0.05; g.add(frame);
+  const dr = drillTool(); dr.position.set(-0.6, 0.1, 0); g.add(dr);
+  return { g, update: p => { dr.position.x = -0.6 + Math.min(1, p) * 1.2; } };
+}
+function visInstall() {
+  // seat-support panel lowering onto the finished frame
+  const g = new THREE.Group();
+  const frame = fullFrame(); frame.position.y = 0.05; g.add(frame);
+  const panel = new THREE.Group();
+  for (let i = 0; i < 6; i++) {
+    const s = bx(0.14, 0.04, 0.9, MAT.cherry);
+    s.position.x = -0.6 + i * 0.24; panel.add(s);
+  }
+  const pb1 = rail(1.5); pb1.scale.y = 0.5; pb1.position.z = -0.42; panel.add(pb1);
+  const pb2 = rail(1.5); pb2.scale.y = 0.5; pb2.position.z = 0.42; panel.add(pb2);
+  panel.position.y = 0.6; g.add(panel);
+  const dr = drillTool(); dr.position.set(0.85, 0.02, 0.45); g.add(dr);
+  return { g, update: p => { panel.position.y = 0.6 - Math.min(1, p) * 0.46; } };
+}
+function visPPE() {
+  const g = new THREE.Group();
+  const post = cy(0.03, 0.5, MAT.steel); post.position.y = 0.25; g.add(post);
+  const board = bx(0.7, 0.45, 0.03, MAT.boxWhite); board.position.y = 0.6; g.add(board);
+  const glasses = bx(0.3, 0.07, 0.04, MAT.trimBlue); glasses.position.set(-0.6, 0.06, 0.3); g.add(glasses);
+  return { g, update: () => {} };
+}
+function visGeneric() {
+  const g = new THREE.Group();
+  const frame = fullFrame(); frame.position.y = 0.05; frame.visible = false; g.add(frame);
+  return { g, update: p => { frame.visible = p > 0.05; const s = Math.max(0.05, Math.min(1, p)); frame.scale.set(s, 1, s); } };
+}
+
+function stationVisualFor(step) {
+  const n = ((step.tag_id ? step.tag_name : step.name) || '').toLowerCase();
+  if (n.includes('ppe')) return visPPE();
+  if (n.includes('rivet') || n.includes('rivnut')) return visRivnut();
+  if (n.includes('connector') && n.includes('pre')) return visConnectorPre();
+  if (n.includes('plate')) return visConnectorPlate();
+  if (n.includes('attach') && n.includes('connector')) return visAttachConnectors();
+  if (n.includes('frame sub')) return visFrameSub();
+  if (n.includes('frame connection') || n.includes('frame assembly')) return visFrameAssembly();
+  if (n.includes('middle leg')) return visMiddleLeg();
+  if (n.includes('corner cap') || n.includes('end cap')) return visCornerCaps();
+  if (n.includes('seat support') || n.includes('trellis') || n.includes('assemble frame')) return visSeatSupport();
+  if (n.includes('frame prep')) return visFramePrep();
+  if (n.includes('installation') && (n.includes('seat') || n.includes('leg'))) return visInstall();
+  return visGeneric();
 }
 
 /* Workbench like the photos: pine frame, white padded top, bins on the shelf. */
@@ -366,12 +533,13 @@ export default function Floor() {
       st.position.set(px, 0, pz);
       if (row === 1) st.rotation.y = Math.PI; // face the aisle
 
-      const product = makeProduct();
-      product.position.y = 1.1;
-      setProductProgress(product, 0);
-      st.add(product);
+      const visual = stationVisualFor(s);
+      visual.g.position.y = 1.06;
+      visual.update(0);
+      st.add(visual.g);
 
-      const label = makeLabel(s.sequence, shortName(s), formatTime(durOf(s)));
+      const dur = durOf(s);
+      const label = makeLabel(s.sequence, shortName(s), dur > 0 ? formatTime(dur) : 'no time');
       label.position.set(0, 2.7, 0); st.add(label);
 
       const op = makeOperator(); op.position.set(0, 0, 1.55);
@@ -381,7 +549,7 @@ export default function Floor() {
       if (i % 2 === 0) { const hose = makeHose(); hose.position.set(0.8, 0, -0.4); st.add(hose); }
 
       group.add(st);
-      stations.push({ stepId: s.id, name: shortName(s), ring: ring.material, product, op, sched: schedule.get(s.id) });
+      stations.push({ stepId: s.id, name: shortName(s), ring: ring.material, visual, op, noTime: dur <= 0, sched: schedule.get(s.id) });
     });
 
     ctx.controls.target.set(0, 0.8, 0);
@@ -405,9 +573,15 @@ export default function Floor() {
         s.op.position.y = Math.abs(Math.sin(t * 3 + s.stepId)) * 0.05;
       }
       if (state !== 'active') s.op.position.y = 0;
-      s.ring.color.setHex(RING[state]);
-      s.ring.emissive.setHex(state === 'active' ? 0x0c4a22 : 0x000000);
-      setProductProgress(s.product, prog);
+      if (s.noTime && t > 0) {
+        // No recorded time: runs instantly — flag amber so it isn't mistaken for scheduled work
+        s.ring.color.setHex(0xd9a427);
+        s.ring.emissive.setHex(0x000000);
+      } else {
+        s.ring.color.setHex(RING[state]);
+        s.ring.emissive.setHex(state === 'active' ? 0x0c4a22 : 0x000000);
+      }
+      s.visual.update(prog);
     }
     if (clockRef.current) clockRef.current.textContent = `${formatTime(t)} / ${formatTime(ctx.total || 0)}`;
     if (sliderRef.current && playingRef.current) sliderRef.current.value = t;
@@ -416,6 +590,12 @@ export default function Floor() {
 
   const sizes = detail ? [...new Set(detail.steps.flatMap(s => s.size_times ? Object.keys(s.size_times) : []))] : [];
   const activeSize = size ?? (sizes.length ? sizes[Math.floor((sizes.length - 1) / 2)] : null);
+  const noTimeSteps = detail
+    ? detail.steps.filter(s => {
+        const d = (size && s.size_times && s.size_times[size] != null) ? s.size_times[size] : (s.effective_seconds || 0);
+        return d <= 0;
+      })
+    : [];
 
   return (
     <>
@@ -457,6 +637,12 @@ export default function Floor() {
         <input ref={sliderRef} type="range" min="0" max={total || 1} defaultValue="0" style={{ width: '100%' }}
           onInput={e => { tRef.current = Number(e.target.value); setPlaying(false); }} />
         <div className="muted" style={{ marginTop: 6 }}>Working now: <strong ref={activeRef}>not started</strong></div>
+        {noTimeSteps.length > 0 && (
+          <div className="alert warn" style={{ marginTop: 8, padding: '6px 10px', fontSize: 12 }}>
+            {noTimeSteps.map(s => (s.tag_id ? s.tag_name : s.name)).join(', ')} {noTimeSteps.length === 1 ? 'has' : 'have'} no recorded time —
+            they run instantly in playback (amber ring). Independent steps with times all start together; give these a time on the SKU page and they'll appear as a parallel branch here.
+          </div>
+        )}
         <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
           <span style={{ color: '#1fa84f' }}>● working</span> &nbsp; <span style={{ color: '#1a56b0' }}>● done</span> &nbsp; <span style={{ color: '#8e98a6' }}>● waiting</span>
           &nbsp;— total build time with unlimited operators: <strong>{formatLong(total)}</strong>
