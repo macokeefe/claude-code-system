@@ -8,6 +8,16 @@ facts arrive (corrections, new SKUs, Meritage), update BOTH this file and
 ## The operation
 
 - Furniture manufacturer; the user is a continuous-improvement engineer.
+- Photos of the real floor (2026-06): TUUCI-branded plant (outdoor shade /
+  furniture). Work cells = pine lumber workbenches with white foam-padded
+  tops (blue/red trim), yellow & blue small-parts bins on lower shelves,
+  black anti-fatigue mats with yellow edges, benches in two rows facing a
+  central aisle marked with yellow floor tape. Worn grey concrete floor,
+  white square columns, perimeter pallet racking with cardboard/TUUCI boxes,
+  overhead red coiled air-hose drops, HVLS ceiling fans, strip lighting.
+  Product on benches: cherry/bronze wood-look aluminum frames with chrome
+  cross-bars and slatted panels. Crew wear grey tees. The 3D Floor page is
+  modeled on these photos.
 - ~8 operators on the line. They have individual skills but should be treated
   as fully flexible (any operator can do any task). Skills are recorded on the
   operator model for later constraint support.
