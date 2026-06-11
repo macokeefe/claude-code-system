@@ -8,7 +8,7 @@ import { fileURLToPath } from 'url';
 import db, { PHOTOS_DIR, EFFECTIVE_TIME_SQL, getSkuSteps, getSkuTotal, recordTimeHistory } from './db.js';
 import { parseTime } from '../shared/timeParse.js';
 import { canonicalSizeKey } from '../shared/sizeKeys.js';
-import { parseWorkbook, commitImport } from './importer.js';
+import { parseWorkbook, commitImport, attachPhotosToSku } from './importer.js';
 import { exportSkuToExcel, printableHtml } from './exporter.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -618,6 +618,21 @@ app.post('/api/import/commit', async (req, res) => {
     res.json(result);
   } catch (e) {
     res.status(400).json({ error: e.message });
+  }
+});
+
+// Attach embedded step photos from a workbook to this SKU's steps.
+app.post('/api/skus/:id/import-photos', importUpload.single('file'), async (req, res) => {
+  const sku = db.prepare('SELECT id FROM skus WHERE id = ?').get(req.params.id);
+  if (!sku) { if (req.file) fs.unlink(req.file.path, () => {}); return res.status(404).json({ error: 'SKU not found' }); }
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  try {
+    const result = await attachPhotosToSku(sku.id, req.file.path);
+    res.json(result);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  } finally {
+    fs.unlink(req.file.path, () => {});
   }
 });
 

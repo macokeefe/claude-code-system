@@ -393,7 +393,10 @@ export default function SkuDetail() {
   const [sku, setSku] = useState(null);
   const [size, setSize] = useState(null); // selected sofa size (null = Standard/representative)
   const photoInput = useRef();
+  const xlsxPhotoInput = useRef();
   const stepPhotoFor = useRef(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoMsg, setPhotoMsg] = useState(null);
 
   const load = useCallback(() => api.get(`/api/skus/${id}`).then(setSku), [id]);
   useEffect(() => { load(); setSize(null); }, [load]);
@@ -478,11 +481,16 @@ export default function SkuDetail() {
         <button className="small" onClick={() => { stepPhotoFor.current = null; photoInput.current.click(); }}>
           {sku.photo_path ? 'Replace product photo' : 'Add product photo'}
         </button>
+        <button className="small" onClick={() => xlsxPhotoInput.current.click()} disabled={photoBusy}
+          title="Pull the step photos out of this product's SWI .xlsx and attach them to the matching steps">
+          {photoBusy ? 'Attaching photos…' : '📷 Attach photos from .xlsx'}
+        </button>
         <div className="spacer" />
         <button className="small" onClick={() => openPrint(sku.id)}>Print / PDF</button>
         <button className="small" onClick={() => downloadExcel(sku.id)}>Export Excel</button>
         <button className="small danger" onClick={removeSku}>Delete SKU</button>
       </div>
+      {photoMsg && <div className={`alert ${photoMsg.error ? 'error' : 'info'}`}>{photoMsg.text}</div>}
       <input type="file" accept="image/*" hidden ref={photoInput}
         onChange={e => {
           const file = e.target.files[0];
@@ -490,6 +498,21 @@ export default function SkuDetail() {
           if (stepPhotoFor.current) uploadPhoto(file, 'sku_step', stepPhotoFor.current);
           else uploadPhoto(file, 'sku', sku.id);
           e.target.value = '';
+        }} />
+      <input type="file" accept=".xlsx" hidden ref={xlsxPhotoInput}
+        onChange={async e => {
+          const file = e.target.files[0]; e.target.value = '';
+          if (!file) return;
+          setPhotoBusy(true); setPhotoMsg(null);
+          try {
+            const fd = new FormData(); fd.append('file', file);
+            const r = await api.post(`/api/skus/${sku.id}/import-photos`, fd);
+            setPhotoMsg({ text: r.attached
+              ? `Attached ${r.attached} photo(s) to ${r.report.length} step(s): ${r.report.map(x => x.sequence).join(', ')}.`
+              : `No embedded photos found in that workbook (${r.imageCount || 0} image(s) detected).` });
+            load();
+          } catch (err) { setPhotoMsg({ error: true, text: err.message }); }
+          setPhotoBusy(false);
         }} />
 
       {sku.steps.length > 0 && (() => {

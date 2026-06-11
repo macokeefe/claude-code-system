@@ -63,34 +63,38 @@ function initMats() {
 }
 
 function makeLabel(seq, name, timeStr) {
-  // High-resolution canvas → crisp text; word-wrap long names onto 2 lines.
-  const W = 640, H = 230;
+  // Big, bold, dark text on a white card with a heavy colored header.
+  const W = 900, H = 340;
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const x = c.getContext('2d');
-  // drop shadow + white card with a thick colored header bar
-  x.fillStyle = 'rgba(0,0,0,0.28)'; x.beginPath(); x.roundRect(8, 12, W - 12, H - 16, 22); x.fill();
-  x.fillStyle = '#ffffff'; x.beginPath(); x.roundRect(4, 6, W - 16, H - 22, 22); x.fill();
-  x.fillStyle = '#1a56b0'; x.beginPath(); x.roundRect(4, 6, W - 16, 60, 22); x.fill();
-  x.fillStyle = '#ffffff'; x.font = 'bold 40px Arial, sans-serif'; x.textAlign = 'left';
-  x.fillText(`STEP ${seq}`, 28, 50);
-  x.textAlign = 'right'; x.font = 'bold 38px "Courier New", monospace';
-  x.fillText(timeStr, W - 32, 49);
-  // name, wrapped
-  x.fillStyle = '#16202e'; x.textAlign = 'center'; x.font = 'bold 46px Arial, sans-serif';
+  x.fillStyle = 'rgba(0,0,0,0.32)'; x.beginPath(); x.roundRect(12, 18, W - 18, H - 22, 26); x.fill();
+  x.fillStyle = '#ffffff'; x.beginPath(); x.roundRect(6, 8, W - 24, H - 30, 26); x.fill();
+  x.fillStyle = '#143e85'; x.beginPath(); x.roundRect(6, 8, W - 24, 92, 26); x.fill();
+  x.fillStyle = '#ffffff'; x.font = '900 64px Arial, sans-serif'; x.textAlign = 'left';
+  x.fillText(`STEP ${seq}`, 34, 76);
+  x.textAlign = 'right'; x.font = '900 60px "Courier New", monospace';
+  x.fillText(timeStr, W - 40, 75);
+  // name — large, near-black, with a stroke for extra weight, wrapped to 2 lines
+  x.textAlign = 'center';
+  x.font = '900 78px Arial, sans-serif';
   const words = String(name).split(' ');
   const lines = []; let cur = '';
   for (const w of words) {
-    if ((cur + ' ' + w).trim().length > 18 && cur) { lines.push(cur.trim()); cur = w; }
+    if ((cur + ' ' + w).trim().length > 15 && cur) { lines.push(cur.trim()); cur = w; }
     else cur = (cur + ' ' + w).trim();
   }
   if (cur) lines.push(cur);
   const two = lines.slice(0, 2);
-  const startY = two.length === 1 ? 158 : 132;
-  two.forEach((ln, i) => x.fillText(ln, W / 2, startY + i * 50));
+  const startY = two.length === 1 ? 232 : 198;
+  two.forEach((ln, i) => {
+    const y = startY + i * 82;
+    x.lineJoin = 'round'; x.strokeStyle = '#0a0e14'; x.lineWidth = 6; x.strokeText(ln, W / 2, y);
+    x.fillStyle = '#0a0e14'; x.fillText(ln, W / 2, y);
+  });
 
   const tex = new THREE.CanvasTexture(c); tex.anisotropy = 8;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-  sp.scale.set(3.5, 1.26, 1);
+  sp.scale.set(5.2, 1.96, 1);
   sp.renderOrder = 999;
   return sp;
 }
@@ -430,7 +434,7 @@ export default function Floor() {
     scene.fog = new THREE.Fog(0xd9dee3, 38, 95);
 
     const camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 220);
-    camera.position.set(15, 11, 21);
+    camera.position.set(18, 13, 25);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(w, h);
@@ -542,7 +546,7 @@ export default function Floor() {
     // Two rows of benches facing a central aisle, like the real cell.
     const steps = detail.steps;
     const pairs = Math.ceil(steps.length / 2);
-    const spacing = 5.6;
+    const spacing = 6.6;
     const offset = ((pairs - 1) * spacing) / 2;
     const stations = [];
     steps.forEach((s, i) => {
@@ -560,8 +564,8 @@ export default function Floor() {
 
       const dur = durOf(s);
       const label = makeLabel(s.sequence, fullName(s), dur > 0 ? formatTime(dur) : 'no time');
-      // stagger label heights slightly so neighbours don't overlap head-on
-      label.position.set(0, 3.05 + (i % 2) * 0.55, 0); st.add(label);
+      // raise high and stagger front/back rows so the big labels don't collide
+      label.position.set(0, 3.5 + (i % 2) * 1.15, 0); st.add(label);
 
       const op = makeOperator(); op.position.set(0, 0, 1.55);
       st.add(op);

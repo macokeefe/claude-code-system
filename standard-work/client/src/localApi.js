@@ -3,7 +3,7 @@
 // against IndexedDB, so the page components are identical in both builds.
 import ExcelJS from 'exceljs';
 import { parseTime, formatTime } from '../../shared/timeParse.js';
-import { parseSwiWorkbook } from '../../shared/swiParse.js';
+import { parseSwiWorkbook, normalize as normalizeName } from '../../shared/swiParse.js';
 import { buildPrintableHtml, buildSkuWorkbook } from '../../shared/printTemplate.js';
 import { seedTags, seedSkus, seedDeps, PRECEDENCE_VERSION } from '../../shared/seedData.js';
 import { canonicalSizeKey, normalizeSizeTimes } from '../../shared/sizeKeys.js';
@@ -752,6 +752,47 @@ async function handle(method, url, body) {
     const token = `imp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     pendingImports.set(token, workbook);
     return { token, ...preview };
+  }
+  if (method === 'POST' && (m = path.match(/^\/api\/skus\/(\d+)\/import-photos$/))) {
+    const sku = skuById(m[1]);
+    if (!sku) httpError(404, { error: 'SKU not found' });
+    const file = body.get('file');
+    if (!file) httpError(400, { error: 'No file uploaded' });
+    const workbook = new ExcelJS.Workbook();
+    try { await workbook.xlsx.load(await file.arrayBuffer()); }
+    catch (e) { httpError(400, { error: `Could not read workbook: ${e.message}` }); }
+    const parsed = parseSwiWorkbook(workbook, file.name, []);
+    const wbMedia = new Map();
+    workbook.model.media?.forEach(x => wbMedia.set(String(x.index), x));
+
+    const existing = state.steps.filter(s => s.sku_id === sku.id).sort((a, b) => a.sequence - b.sequence)
+      .map(s => ({ step: s, key: normalizeName((s.tag_id ? tagById(s.tag_id)?.name : s.name) || '') }));
+    const withImages = parsed.steps.filter(p => p.imageIds && p.imageIds.length);
+    const used = new Set();
+    const report = [];
+    let attached = 0;
+    for (let idx = 0; idx < withImages.length; idx++) {
+      const ps = withImages[idx];
+      const pn = normalizeName(ps.name);
+      let match = existing.find(e => !used.has(e.step.id) && e.key === pn)
+        || (existing[idx] && !used.has(existing[idx].step.id) ? existing[idx] : null)
+        || existing.find(e => !used.has(e.step.id));
+      if (!match) continue;
+      used.add(match.step.id);
+      let sort = state.photos.filter(p => p.owner_type === 'sku_step' && p.owner_id === match.step.id).length;
+      let first = true;
+      for (const imageId of ps.imageIds) {
+        const x = wbMedia.get(String(imageId));
+        if (!x || !x.buffer) continue;
+        const key = await saveBlob(new Blob([x.buffer]), x.extension || 'png');
+        state.photos.push({ id: nextId(), owner_type: 'sku_step', owner_id: match.step.id, file_path: key, sort_order: sort++ });
+        if (first && !match.step.photo_path) { match.step.photo_path = key; first = false; }
+        attached++;
+      }
+      report.push({ sequence: match.step.sequence, name: (match.step.tag_id ? tagById(match.step.tag_id)?.name : match.step.name), count: ps.imageIds.length });
+    }
+    await persist();
+    return { attached, report, imageCount: parsed.imageCount };
   }
   if (method === 'POST' && path === '/api/import/commit') {
     const { token, ...preview } = body;
