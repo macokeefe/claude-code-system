@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { normalizeSizeTimes } from '../shared/sizeKeys.js';
+import { seedDeps, PRECEDENCE_VERSION } from '../shared/seedData.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DATA_DIR = path.join(__dirname, '..', 'data');
@@ -116,6 +117,21 @@ for (const stmt of [
   'ALTER TABLE sku_steps ADD COLUMN depends_on TEXT',
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
+}
+
+// Re-apply corrected build-order precedence to seeded Sola SKUs once.
+if (db.pragma('user_version', { simple: true }) < PRECEDENCE_VERSION) {
+  for (const [skuNumber, map] of Object.entries(seedDeps)) {
+    const sku = db.prepare('SELECT id FROM skus WHERE sku_number = ?').get(skuNumber);
+    if (!sku) continue;
+    const steps = db.prepare('SELECT id, sequence FROM sku_steps WHERE sku_id = ?').all(sku.id);
+    const seqToId = {}; steps.forEach(s => { seqToId[s.sequence] = s.id; });
+    for (const s of steps) {
+      const ids = (map[s.sequence] || []).map(q => seqToId[q]).filter(Boolean);
+      db.prepare('UPDATE sku_steps SET depends_on = ? WHERE id = ?').run(ids.length ? JSON.stringify(ids) : null, s.id);
+    }
+  }
+  db.pragma(`user_version = ${PRECEDENCE_VERSION}`);
 }
 
 // One-time cleanup: collapse legacy size labels (small/medium/large, hyphen

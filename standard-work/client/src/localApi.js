@@ -5,7 +5,7 @@ import ExcelJS from 'exceljs';
 import { parseTime, formatTime } from '../../shared/timeParse.js';
 import { parseSwiWorkbook } from '../../shared/swiParse.js';
 import { buildPrintableHtml, buildSkuWorkbook } from '../../shared/printTemplate.js';
-import { seedTags, seedSkus, seedDeps } from '../../shared/seedData.js';
+import { seedTags, seedSkus, seedDeps, PRECEDENCE_VERSION } from '../../shared/seedData.js';
 import { canonicalSizeKey, normalizeSizeTimes } from '../../shared/sizeKeys.js';
 
 export { formatTime };
@@ -132,6 +132,19 @@ async function ensureInit() {
         for (let i = 1; i <= 8; i++) {
           state.operators.push({ id: state.nextId++, name: `Operator ${i}`, skills: null, active: 1, sort_order: i, created_at: now() });
         }
+        await persist();
+      }
+      // Re-apply corrected build-order precedence to the seeded Sola SKUs
+      // (matched by sku_number + step sequence). Skips user-created/imported SKUs.
+      if (state.prereqVersion !== PRECEDENCE_VERSION) {
+        for (const sku of state.skus) {
+          const map = seedDeps[sku.sku_number];
+          if (!map) continue;
+          const steps = state.steps.filter(s => s.sku_id === sku.id);
+          const seqToId = {}; steps.forEach(s => { seqToId[s.sequence] = s.id; });
+          for (const s of steps) s.depends_on = (map[s.sequence] || []).map(q => seqToId[q]).filter(Boolean);
+        }
+        state.prereqVersion = PRECEDENCE_VERSION;
         await persist();
       }
       // Collapse legacy size labels (small/medium/large, hyphen variants) to

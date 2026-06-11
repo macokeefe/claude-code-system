@@ -102,6 +102,27 @@ connectors = 14 (base) + 2 × (number of arms) + 4 × (middle leg present)
 - Visualization preferences: vertical bar charts; family → configuration →
   size chip pickers (not dropdowns).
 
+## Build-order precedence (authoritative, engineer-confirmed 2026-06)
+
+Encoded in `shared/seedData.js` → `seedDeps` (PRECEDENCE_VERSION migrates
+existing DBs). Per the engineer:
+- **Rivet Nut** and **Connector Pre-Assembly** are prerequisite-free → both
+  start at t=0 (parallel branches).
+- **Connector Plate Installation** ← Rivet Nut + Connector Pre-Assembly.
+- **Attach Connectors to Leg Pieces** ← Rivet Nut + Connector Pre-Assembly —
+  a *separate* branch from Connector Plate (they attach connectors differently).
+- **Frame Sub-Assembly** ("side support + arm assembly") ← Connector Plate.
+- **Frame Assembly / Frame Connection** ← Frame Sub-Assembly.
+- **Corner Caps** ← assembled frame (parallel to Middle Leg). Gluing a cap
+  blocks top connector access — anything needing that access must precede caps.
+- **Seat Support Frame Assembly** ("assemble seat support") is prerequisite-free
+  → gates **Frame Prep** ("seat support prep") → gates **Seat Frame
+  Installation** ("trellis support installation"; also needs the frame).
+- Engineer's preferred name: "Seat Frame Installation" ≈ "Trellis Support
+  Installation" (not yet renamed in data).
+This corrected the earlier seeded graph (rivnut no longer gates Frame Sub;
+caps depend on the frame, not the middle leg) → critical path dropped.
+
 ## Open items
 
 - Meritage: not yet modeled — waiting on a readable copy (app Export Excel →

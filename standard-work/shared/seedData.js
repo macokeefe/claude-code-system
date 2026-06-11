@@ -168,13 +168,21 @@ export const seedSkus = [
   },
 ];
 
-// Starting-point build-order dependencies, keyed by SKU number then by step
-// sequence → the step sequences that must finish first. Drawn from the sheet
-// text (e.g. frame sub-assembly uses the pre-installed connectors); the prep
-// branches (rivnut, connector pre-assembly, seat support) run in parallel.
-// Editable in the app — treat as a sensible default, not gospel.
+// Build-order dependencies, keyed by SKU number then step sequence → the
+// sequences that must finish first. Authoritative per the engineer (2026-06):
+//   • Rivet Nut and Connector Pre-Assembly are prerequisite-free (start at t=0).
+//   • Connector Plate AND Attach Connectors each need rivnut + connector
+//     pre-assembly (two separate branches).
+//   • Frame Sub-Assembly ← Connector Plate; Frame (Connection/Assembly) ← Frame Sub.
+//   • Seat Support is prerequisite-free; it gates Frame Prep ("seat support
+//     prep"), which gates the final seat/trellis installation (also needs the frame).
+//   • Corner caps depend on the assembled frame, parallel to the middle leg.
 export const seedDeps = {
-  'SOLA-RA': { 2: [1], 3: [1], 4: [3], 5: [3], 6: [2, 4, 5], 7: [6], 8: [1], 9: [7], 10: [8, 9] },
-  'SOLA-NA': { 2: [1], 3: [1], 4: [3], 5: [3], 6: [2, 4, 5], 7: [6], 8: [7], 9: [8], 10: [1], 11: [9], 12: [10, 11] },
-  'SOLA-BASE': { 2: [1], 3: [1], 4: [3], 5: [3], 6: [2, 4, 5], 7: [6], 8: [7], 9: [1], 10: [8], 11: [10, 9] },
+  'SOLA-RA':   { 4: [2, 3], 5: [2, 3], 6: [4], 7: [6], 9: [8], 10: [9, 7] },
+  'SOLA-NA':   { 4: [2, 3], 5: [2, 3], 6: [4], 7: [6], 8: [7], 9: [7], 11: [10], 12: [11, 7] },
+  'SOLA-BASE': { 4: [2, 3], 5: [2, 3], 6: [4], 7: [6], 8: [7], 10: [9], 11: [10, 7] },
 };
+
+// Bump when seedDeps changes so existing databases re-apply the corrected
+// precedence to the seeded Sola SKUs (matched by sku_number + step sequence).
+export const PRECEDENCE_VERSION = 2;

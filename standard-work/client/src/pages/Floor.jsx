@@ -12,6 +12,7 @@ function shortName(s) {
   const n = (s.tag_id ? s.tag_name : s.name) || '';
   return n.length > 22 ? n.slice(0, 21) + '…' : n;
 }
+function fullName(s) { return (s.tag_id ? s.tag_name : s.name) || ''; }
 
 /* ---------- materials & textures (modeled on the real floor photos) ---------- */
 
@@ -62,18 +63,35 @@ function initMats() {
 }
 
 function makeLabel(seq, name, timeStr) {
-  const c = document.createElement('canvas'); c.width = 330; c.height = 140;
+  // High-resolution canvas → crisp text; word-wrap long names onto 2 lines.
+  const W = 640, H = 230;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
   const x = c.getContext('2d');
-  x.fillStyle = 'rgba(255,255,255,0.95)';
-  x.beginPath(); x.roundRect(0, 0, 330, 140, 14); x.fill();
-  x.fillStyle = '#1a56b0'; x.fillRect(0, 0, 10, 140);
-  x.fillStyle = '#16202e'; x.font = 'bold 28px sans-serif'; x.textAlign = 'center';
-  x.fillText(`${seq}. ${name}`.slice(0, 24), 170, 54);
-  x.fillStyle = '#5c6470'; x.font = '26px monospace';
-  x.fillText(timeStr, 170, 102);
-  const tex = new THREE.CanvasTexture(c); tex.anisotropy = 4;
+  // drop shadow + white card with a thick colored header bar
+  x.fillStyle = 'rgba(0,0,0,0.28)'; x.beginPath(); x.roundRect(8, 12, W - 12, H - 16, 22); x.fill();
+  x.fillStyle = '#ffffff'; x.beginPath(); x.roundRect(4, 6, W - 16, H - 22, 22); x.fill();
+  x.fillStyle = '#1a56b0'; x.beginPath(); x.roundRect(4, 6, W - 16, 60, 22); x.fill();
+  x.fillStyle = '#ffffff'; x.font = 'bold 40px Arial, sans-serif'; x.textAlign = 'left';
+  x.fillText(`STEP ${seq}`, 28, 50);
+  x.textAlign = 'right'; x.font = 'bold 38px "Courier New", monospace';
+  x.fillText(timeStr, W - 32, 49);
+  // name, wrapped
+  x.fillStyle = '#16202e'; x.textAlign = 'center'; x.font = 'bold 46px Arial, sans-serif';
+  const words = String(name).split(' ');
+  const lines = []; let cur = '';
+  for (const w of words) {
+    if ((cur + ' ' + w).trim().length > 18 && cur) { lines.push(cur.trim()); cur = w; }
+    else cur = (cur + ' ' + w).trim();
+  }
+  if (cur) lines.push(cur);
+  const two = lines.slice(0, 2);
+  const startY = two.length === 1 ? 158 : 132;
+  two.forEach((ln, i) => x.fillText(ln, W / 2, startY + i * 50));
+
+  const tex = new THREE.CanvasTexture(c); tex.anisotropy = 8;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-  sp.scale.set(2.6, 1.1, 1);
+  sp.scale.set(3.5, 1.26, 1);
+  sp.renderOrder = 999;
   return sp;
 }
 
@@ -412,7 +430,7 @@ export default function Floor() {
     scene.fog = new THREE.Fog(0xd9dee3, 38, 95);
 
     const camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 220);
-    camera.position.set(11, 8.5, 15);
+    camera.position.set(15, 11, 21);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(w, h);
@@ -447,15 +465,17 @@ export default function Floor() {
       scene.add(tape);
     }
 
-    // white columns
-    for (const [cx, cz] of [[-12, -8], [12, -8], [-12, 8], [12, 8]]) {
+    // white columns moved out of the cell so they don't block the benches
+    for (const [cx, cz] of [[-22, -12], [22, -12], [-22, 12], [22, 12]]) {
       const col = new THREE.Mesh(new THREE.BoxGeometry(0.7, 7.5, 0.7), MAT.column);
       col.position.set(cx, 3.75, cz); col.castShadow = true;
       scene.add(col);
     }
 
-    // perimeter pallet racking
-    for (const [rx, rz, ry] of [[-18, -4, Math.PI / 2], [-18, 4, Math.PI / 2], [18, -4, -Math.PI / 2], [18, 4, -Math.PI / 2], [-7, -14, 0], [0, -14, 0], [7, -14, 0]]) {
+    // pallet racking pushed to the far perimeter so it reads as background
+    for (const [rx, rz, ry] of [[-30, -8, Math.PI / 2], [-30, 0, Math.PI / 2], [-30, 8, Math.PI / 2],
+                                [30, -8, -Math.PI / 2], [30, 0, -Math.PI / 2], [30, 8, -Math.PI / 2],
+                                [-10, -26, 0], [0, -26, 0], [10, -26, 0]]) {
       const rack = makeRack(); rack.position.set(rx, 0, rz); rack.rotation.y = ry;
       scene.add(rack);
     }
@@ -522,7 +542,7 @@ export default function Floor() {
     // Two rows of benches facing a central aisle, like the real cell.
     const steps = detail.steps;
     const pairs = Math.ceil(steps.length / 2);
-    const spacing = 4.4;
+    const spacing = 5.6;
     const offset = ((pairs - 1) * spacing) / 2;
     const stations = [];
     steps.forEach((s, i) => {
@@ -539,14 +559,13 @@ export default function Floor() {
       st.add(visual.g);
 
       const dur = durOf(s);
-      const label = makeLabel(s.sequence, shortName(s), dur > 0 ? formatTime(dur) : 'no time');
-      label.position.set(0, 2.7, 0); st.add(label);
+      const label = makeLabel(s.sequence, fullName(s), dur > 0 ? formatTime(dur) : 'no time');
+      // stagger label heights slightly so neighbours don't overlap head-on
+      label.position.set(0, 3.05 + (i % 2) * 0.55, 0); st.add(label);
 
       const op = makeOperator(); op.position.set(0, 0, 1.55);
       st.add(op);
 
-      // hose over every other bench
-      if (i % 2 === 0) { const hose = makeHose(); hose.position.set(0.8, 0, -0.4); st.add(hose); }
 
       group.add(st);
       stations.push({ stepId: s.id, name: shortName(s), ring: ring.material, visual, op, noTime: dur <= 0, sched: schedule.get(s.id) });
