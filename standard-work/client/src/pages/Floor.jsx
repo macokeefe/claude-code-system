@@ -445,6 +445,7 @@ export default function Floor() {
   const clockRef = useRef();
   const sliderRef = useRef();
   const activeRef = useRef();
+  const idleCountRef = useRef();
 
   const [skus, setSkus] = useState([]);
   const [skuId, setSkuId] = useState(null);
@@ -456,6 +457,7 @@ export default function Floor() {
   const [helping, setHelping] = useState(true);
   const [shiftHours, setShiftHours] = useState(8);
   const [target, setTarget] = useState(8);
+  const [quantity, setQuantity] = useState(3);
   const [assignments, setAssignments] = useState({}); // opId -> {own:[seq], help:[seq]}
   const [showAssign, setShowAssign] = useState(false);
 
@@ -489,8 +491,8 @@ export default function Floor() {
         help: (a.help || []).map(q => seqToId[q]).filter(Boolean),
       };
     });
-    return simulateBuild(simSteps, activeOps.length, { helping, assignments: assignArr });
-  }, [simSteps, activeOps.length, assignments, helping, detail]); // eslint-disable-line
+    return simulateBuild(simSteps, activeOps.length, { helping, assignments: assignArr, quantity });
+  }, [simSteps, activeOps.length, assignments, helping, detail, quantity]); // eslint-disable-line
 
   // keep the render loop fed
   useEffect(() => {
@@ -667,12 +669,13 @@ export default function Floor() {
     if (!ctx.stations || !sm) return;
     const t = tRef.current;
     for (const s of ctx.stations) {
-      const ps = sm.perStep.get(s.stepId) || {};
-      const start = ps.start, finish = ps.finish;
+      // station = a template; may have several unit-instances over time
+      const insts = sm.byTemplate.get(s.stepId) || [];
+      const act = insts.find(e => e.start != null && t >= e.start && (e.finish == null || t < e.finish));
       let state, prog;
-      if (start == null || t < start) { state = 'idle'; prog = 0; }
-      else if (finish != null && t >= finish) { state = 'done'; prog = 1; }
-      else { state = 'active'; prog = finish > start ? (t - start) / (finish - start) : 1; }
+      if (act) { state = 'active'; prog = act.finish > act.start ? (t - act.start) / (act.finish - act.start) : 1; }
+      else if (insts.length && insts.every(e => e.finish != null && t >= e.finish)) { state = 'done'; prog = 1; }
+      else { state = 'idle'; prog = 0; }
       if (s.noTime && t > 0) {
         s.ring.color.setHex(0xd9a427); s.ring.emissive.setHex(0x000000);
       } else {
@@ -691,15 +694,16 @@ export default function Floor() {
     if (!ctx.crew || !sm || !ctx.benchSpots) return;
     const t = tRef.current;
     const lines = [];
+    let activeCount = 0;
     ctx.crew.forEach((c, i) => {
       const intervals = sm.operators[i]?.intervals || [];
       const iv = intervals.find(v => t >= v.start && t < v.end);
       let target = c.home, working = false;
       if (iv) {
-        const spots = ctx.benchSpots.get(iv.stepId);
-        if (spots) { target = iv.role === 'help' ? spots.helper : spots.primary; working = true; }
-        const st = ctx.stations.find(x => x.stepId === iv.stepId);
-        if (st) lines.push(`${c.name} → ${st.seq}. ${st.name}${iv.role === 'help' ? ' (helping)' : ''}`);
+        const spots = ctx.benchSpots.get(iv.template);
+        if (spots) { target = iv.role === 'help' ? spots.helper : spots.primary; working = true; activeCount++; }
+        const stn = ctx.stations.find(x => x.stepId === iv.template);
+        if (stn) lines.push(`${c.name} → ${stn.seq}. ${stn.name}${sm.quantity > 1 ? ` #${(iv.unit ?? 0) + 1}` : ''}${iv.role === 'help' ? ' (helping)' : ''}`);
       }
       const k = 1 - Math.exp(-dt * 3);
       c.fig.position.x += (target.x - c.fig.position.x) * k;
@@ -709,15 +713,23 @@ export default function Floor() {
     });
     if (activeRef.current) {
       activeRef.current.textContent = lines.length ? lines.join('  ·  ')
-        : (t >= (ctx.total || 0) && ctx.total ? 'build complete' : 'crew idle');
+        : (t >= (ctx.total || 0) && ctx.total ? 'all units complete' : 'crew idle');
+    }
+    if (idleCountRef.current) {
+      const idleN = ctx.crew.length - activeCount;
+      const unitsDone = sm.unitFinishes.filter(f => t >= f && f > 0).length;
+      idleCountRef.current.textContent = `${activeCount} working · ${idleN} idle  ·  units finished ${unitsDone}/${sm.quantity}`;
     }
   }
 
   const noTimeSteps = detail ? detail.steps.filter(s => durOfStep(s) <= 0) : [];
   const shiftSeconds = Math.round(shiftHours * 3600);
-  const unitsPerShift = sim && sim.makespan > 0 ? Math.floor(shiftSeconds / sim.makespan) : 0;
+  const unitsPerShift = sim && sim.makespan > 0 ? Math.floor((quantity / sim.makespan) * shiftSeconds) : 0;
   const hitsTarget = unitsPerShift >= target;
-  const neverStarted = sim && detail ? detail.steps.filter(s => { const ps = sim.perStep.get(s.id); return !ps || ps.start == null; }) : [];
+  const neverStarted = sim && detail ? detail.steps.filter(s => {
+    const insts = sim.byTemplate.get(s.id) || [];
+    return insts.length > 0 && insts.every(e => e.start == null);
+  }) : [];
 
   function toggleAssign(opId, kind, seq) {
     setAssignments(prev => {
@@ -753,32 +765,36 @@ export default function Floor() {
 
       {sim && (
         <div className="card">
-          <div className="row" style={{ gap: 14, flexWrap: 'wrap' }}>
+          <div className="row" style={{ gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div className="field" style={{ maxWidth: 130 }}>
+              <label>Make (units)</label>
+              <input type="number" min="1" max="30" value={quantity} onChange={e => setQuantity(Math.max(1, Math.min(30, Number(e.target.value))))} />
+            </div>
             <div className="stat" style={{ borderLeftColor: '#1a56b0' }}>
               <div className="stat-value">{formatLong(sim.makespan)}</div>
-              <div className="stat-label">Build time / unit ({activeOps.length} operators{helping ? ' + helping' : ''})</div>
+              <div className="stat-label">to build {quantity} with {activeOps.length} operators{helping ? ' + helping' : ''}</div>
             </div>
             <div className="stat" style={{ borderLeftColor: hitsTarget ? '#1c7c3c' : '#b3261e' }}>
               <div className="stat-value">{unitsPerShift} / {target}</div>
-              <div className="stat-label">Units in shift vs target</div>
+              <div className="stat-label">units/{shiftHours}h vs target</div>
             </div>
-            <div className="stat">
+            <div className="stat" style={{ borderLeftColor: sim.utilization < 0.5 ? '#b3261e' : sim.utilization < 0.75 ? '#e0913d' : '#1c7c3c' }}>
               <div className="stat-value">{Math.round(sim.utilization * 100)}%</div>
-              <div className="stat-label">Crew utilization</div>
+              <div className="stat-label">crew utilization ({formatLong(sim.idleSeconds)} idle total)</div>
             </div>
-            <div className="field" style={{ maxWidth: 110 }}>
+            <div className="field" style={{ maxWidth: 90 }}>
               <label>Target</label>
               <input type="number" min="1" value={target} onChange={e => setTarget(Math.max(1, Number(e.target.value)))} />
             </div>
-            <div className="field" style={{ maxWidth: 110 }}>
+            <div className="field" style={{ maxWidth: 90 }}>
               <label>Shift (h)</label>
               <input type="number" min="0.5" step="0.5" value={shiftHours} onChange={e => setShiftHours(Math.max(0.5, Number(e.target.value)))} />
             </div>
-            <div className="field" style={{ maxWidth: 170 }}>
+            <div className="field" style={{ maxWidth: 150 }}>
               <label>Auto-helping</label>
               <label style={{ display: 'flex', gap: 6, alignItems: 'center', textTransform: 'none', fontWeight: 400, marginTop: 6 }}>
                 <input type="checkbox" style={{ width: 'auto' }} checked={helping} onChange={e => setHelping(e.target.checked)} />
-                idle ops help out
+                idle ops help
               </label>
             </div>
           </div>
@@ -787,6 +803,33 @@ export default function Floor() {
               Never started: {neverStarted.map(s => `${s.sequence}. ${(s.tag_id ? s.tag_name : s.name)}`).join(', ')} — an assigned owner may never be free, or the dependency graph is blocked.
             </div>
           )}
+        </div>
+      )}
+
+      {sim && (
+        <div className="card">
+          <h2 style={{ marginTop: 0 }}>Operator workload <span className="muted" style={{ fontWeight: 400 }}>— building {quantity} unit{quantity > 1 ? 's' : ''}; who works and who waits</span></h2>
+          {activeOps.map((op, i) => {
+            const o = sim.operators[i] || { busySeconds: 0, idleSeconds: 0 };
+            const busyPct = sim.makespan > 0 ? (o.busySeconds / sim.makespan) * 100 : 0;
+            return (
+              <div key={op.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                <span style={{ width: 110, fontWeight: 600 }}>
+                  <span style={{ display: 'inline-block', width: 11, height: 11, borderRadius: 6, background: '#' + OP_COLORS[i % OP_COLORS.length].toString(16).padStart(6, '0'), marginRight: 6 }} />
+                  {op.name}
+                </span>
+                <div style={{ flex: 1, height: 20, background: '#e7e3da', borderRadius: 5, overflow: 'hidden' }}>
+                  <div style={{ width: `${busyPct}%`, height: '100%', background: busyPct < 35 ? '#b3261e' : busyPct < 70 ? '#e0913d' : '#1c7c3c' }} />
+                </div>
+                <span className="muted" style={{ width: 200, fontSize: 12, textAlign: 'right' }}>
+                  busy {formatLong(o.busySeconds)} · <strong style={{ color: o.idleSeconds > o.busySeconds ? '#b3261e' : 'inherit' }}>idle {formatLong(o.idleSeconds)}</strong> ({Math.round(busyPct)}%)
+                </span>
+              </div>
+            );
+          })}
+          <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+            Bars are share of the run each operator is working. Lots of red/short bars = too many people for this many units — raise "Make" or drop operators. Building more units at once keeps the crew busier (that's flow).
+          </p>
         </div>
       )}
 
@@ -802,17 +845,18 @@ export default function Floor() {
           <button className={showAssign ? 'small primary' : 'small'} onClick={() => setShowAssign(v => !v)}>
             {showAssign ? 'Hide assignments' : '⚙ Assignments'}{anyAssigned ? ' •' : ''}
           </button>
-          <label style={{ display: 'flex', gap: 6, alignItems: 'center', textTransform: 'none', fontWeight: 400 }}>
-            Speed
-            <select value={speed} onChange={e => setSpeed(Number(e.target.value))}>
-              <option value={30}>30×</option><option value={120}>120×</option>
-              <option value={300}>300×</option><option value={900}>900×</option>
-            </select>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', textTransform: 'none', fontWeight: 400, minWidth: 230 }}>
+            Speed <strong style={{ minWidth: 52, textAlign: 'right' }}>{speed}×</strong>
+            <input type="range" min="5" max="1200" step="5" value={speed} style={{ width: 120 }}
+              onChange={e => setSpeed(Number(e.target.value))} />
           </label>
         </div>
         <input ref={sliderRef} type="range" min="0" max={sim ? sim.makespan : 1} defaultValue="0" style={{ width: '100%' }}
           onInput={e => { tRef.current = Number(e.target.value); setPlaying(false); }} />
-        <div className="muted" style={{ marginTop: 6 }}>Crew: <strong ref={activeRef}>idle</strong></div>
+        <div className="muted" style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <span>Crew: <strong ref={activeRef}>idle</strong></span>
+          <strong ref={idleCountRef} style={{ whiteSpace: 'nowrap' }} />
+        </div>
         {noTimeSteps.length > 0 && (
           <div className="alert warn" style={{ marginTop: 8, padding: '6px 10px', fontSize: 12 }}>
             {noTimeSteps.map(s => (s.tag_id ? s.tag_name : s.name)).join(', ')} {noTimeSteps.length === 1 ? 'has' : 'have'} no recorded time — they run instantly (amber ring).

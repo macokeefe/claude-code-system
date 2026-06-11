@@ -1,44 +1,56 @@
-// Discrete-event staffing simulation with named operators, dynamic helping,
-// and manual assignment rules — drives both the Staffing page (aggregate) and
-// the 3D floor (per-operator timelines).
+// Discrete-event staffing simulation with multi-unit flow (pipelining),
+// named operators, dynamic helping, and manual assignment rules.
 //
-// Operators:
-//   • An operator may OWN steps (assignments[i].own = [stepIds]): they take
-//     those when ready, and only they may start them. While none of their own
-//     steps are ready they help; once all their own steps are done they
-//     become generalists.
-//   • An operator may have a HELP list (assignments[i].help = [stepIds]):
-//     when idle they go help those steps first (in order), peeling off the
-//     moment a step they must run becomes ready.
-//   • Operators with no assignments are generalists: they start any ready
-//     unpinned step, and (if helping is on) assist on helpable steps.
+// Build `quantity` units of the same product with a shared crew. Each unit is
+// an independent copy of the step graph; operators grab ready work from ANY
+// in-process unit, so while one unit is at frame assembly another can be at
+// rivnut — that's what keeps a crew busy and what the single-unit model can't
+// show. Operators are the shared constraint.
 //
-// A helper's effect comes from each step's help_seconds (time with 2 people);
-// steps not marked helpable gain nothing from extra hands.
+// Assignments reference TEMPLATE step ids (the SKU's step ids): owning step 6
+// means owning step 6 on every unit (you're "the frame person").
 //
-// Returns { makespan, utilization, idleSeconds, perStep, operators, stuck }
-//   perStep: Map(id -> {start, finish, maxWorkers})
-//   operators: [{ intervals: [{stepId, role:'own'|'help', start, end}] }]
+// Returns:
+//   { makespan, utilization, idleSeconds,
+//     operators: [{ intervals:[{template,unit,role,start,end}], busySeconds, idleSeconds }],
+//     byTemplate: Map(templateId -> [{start,finish}]),  // instances per station
+//     unitFinishes: [seconds...], stuck }
 
-export function simulateBuild(steps, operatorCount, opts = {}) {
+export function simulateBuild(templateSteps, operatorCount, opts = {}) {
   const helping = opts.helping !== false;
   const maxWorkersDefault = opts.maxWorkersDefault || 2;
   const N = Math.max(1, Math.floor(operatorCount));
+  const Q = Math.max(1, Math.floor(opts.quantity || 1));
   const assignments = opts.assignments || [];
+  const U = 1000000; // unit id stride
+
+  // expand units
+  const steps = [];
+  for (let u = 0; u < Q; u++) {
+    for (const ts of templateSteps) {
+      steps.push({
+        id: u * U + ts.id, template: ts.id, unit: u,
+        depends_on: (ts.depends_on || []).map(d => u * U + d),
+        effective_seconds: ts.effective_seconds || 0,
+        helpable: !!ts.helpable, help_seconds: ts.help_seconds || 0,
+      });
+    }
+  }
 
   const st = new Map();
-  for (const s of steps) st.set(s.id, { remaining: s.effective_seconds || 0, status: 'wait', workers: [], start: null, finish: null, maxWorkers: 0 });
+  for (const s of steps) st.set(s.id, { remaining: s.effective_seconds || 0, status: 'wait', workers: [], start: null, finish: null });
 
-  // step pinned to the set of operators that own it
-  const owners = new Map(); // stepId -> [opIdx]
+  // ownership/help by template
   const ops = [];
+  const ownedTemplates = []; // Set per op
   for (let i = 0; i < N; i++) {
     const a = assignments[i] || {};
-    const own = (a.own || []).filter(id => st.has(id));
-    const help = (a.help || []).filter(id => st.has(id));
-    for (const id of own) { if (!owners.has(id)) owners.set(id, []); owners.get(id).push(i); }
-    ops.push({ own, help, on: null, role: null, intervals: [], _iv: null });
+    ownedTemplates.push(new Set(a.own || []));
+    ops.push({ ownSet: new Set(a.own || []), helpSet: new Set(a.help || []), on: null, role: null, intervals: [], busy: 0, _iv: null });
   }
+  const templateOwned = new Set();
+  for (const set of ownedTemplates) for (const tid of set) templateOwned.add(tid);
+  const ownersOf = s => ops.map((op, i) => op.ownSet.has(s.template) ? i : -1).filter(i => i >= 0);
 
   function power(s, k) {
     if (k <= 1 || !s.helpable) return 1;
@@ -48,27 +60,23 @@ export function simulateBuild(steps, operatorCount, opts = {}) {
     return 1 + (k - 1) * r;
   }
   const maxWorkers = s => (s.helpable ? Math.max(2, maxWorkersDefault) : 1);
-  const byId = new Map(steps.map(s => [s.id, s]));
   const depsDone = s => (s.depends_on || []).every(d => !st.get(d) || st.get(d).status === 'done');
-  const isGeneralist = op => op.own.length === 0 || op.own.every(id => st.get(id).status === 'done');
+  const ownsSomethingLeft = op => [...op.ownSet].some(tid => steps.some(s => s.template === tid && st.get(s.id).status !== 'done'));
+  const isGeneralist = op => op.ownSet.size === 0 || !ownsSomethingLeft(op);
 
-  let t = 0, done = 0, busyAccum = 0, guard = 0;
+  let t = 0, done = 0, guard = 0;
   const totalSteps = steps.length;
 
-  function setOp(i, stepId, role) {
+  function setOp(i, step, role) {
     const op = ops[i];
+    const stepId = step ? step.id : null;
     if (op.on === stepId && op.role === role) return;
     if (op._iv) { op._iv.end = t; if (op._iv.end > op._iv.start) op.intervals.push(op._iv); op._iv = null; }
-    if (op.on != null) {
-      const x = st.get(op.on);
-      x.workers = x.workers.filter(w => w !== i);
-    }
+    if (op.on != null) { const x = st.get(op.on); x.workers = x.workers.filter(w => w !== i); }
     op.on = stepId; op.role = role;
-    if (stepId != null) {
-      const x = st.get(stepId);
-      x.workers.push(i);
-      x.maxWorkers = Math.max(x.maxWorkers, x.workers.length);
-      op._iv = { stepId, role, start: t, end: null };
+    if (step) {
+      const x = st.get(step.id); x.workers.push(i);
+      op._iv = { template: step.template, unit: step.unit, role, start: t, end: null };
     }
   }
 
@@ -78,97 +86,87 @@ export function simulateBuild(steps, operatorCount, opts = {}) {
       changed = false;
       for (const s of steps) {
         const x = st.get(s.id);
-        if (x.status === 'wait' && depsDone(s) && (x.remaining || 0) <= 0) {
-          x.status = 'done'; x.start = t; x.finish = t; done++; changed = true;
-        }
+        if (x.status === 'wait' && depsDone(s) && (x.remaining || 0) <= 0) { x.status = 'done'; x.start = t; x.finish = t; done++; changed = true; }
       }
     }
   }
 
   function assign() {
     finishZeroes();
-
-    // 1. Ready pinned steps → their owner takes over (even off a helping job).
+    // 1. ready owned steps → an owner (pull off a helping job if needed)
     for (const s of steps) {
       const x = st.get(s.id);
-      if (x.status !== 'wait' || !depsDone(s) || !owners.has(s.id)) continue;
-      const cand = owners.get(s.id).find(i => ops[i].on == null || ops[i].role === 'help');
-      if (cand != null) {
-        setOp(cand, s.id, 'own');
-        x.status = 'active'; x.start = t;
-      }
+      if (x.status !== 'wait' || !depsDone(s)) continue;
+      const owners = ownersOf(s);
+      if (owners.length === 0) continue;
+      const cand = owners.find(i => ops[i].on == null || ops[i].role === 'help');
+      if (cand != null) { setOp(cand, s, 'own'); x.status = 'active'; x.start = t; }
     }
-    // 2. Ready unpinned steps → idle/helping generalists (longest first).
+    // 2. ready unpinned steps → idle/helping generalists (longest remaining first)
     const readyUnpinned = steps
-      .filter(s => st.get(s.id).status === 'wait' && depsDone(s) && !owners.has(s.id))
+      .filter(s => st.get(s.id).status === 'wait' && depsDone(s) && !templateOwned.has(s.template))
       .sort((a, b) => st.get(b.id).remaining - st.get(a.id).remaining);
     for (const s of readyUnpinned) {
       const cand = ops.findIndex(op => (op.on == null || op.role === 'help') && isGeneralist(op));
       if (cand === -1) break;
-      setOp(cand, s.id, 'own');
-      const x = st.get(s.id);
-      x.status = 'active'; x.start = t;
+      setOp(cand, s, 'own'); const x = st.get(s.id); x.status = 'active'; x.start = t;
     }
-    // 3. Idle operators go help.
+    // 3. idle operators go help
     for (let i = 0; i < N; i++) {
       const op = ops[i];
       if (op.on != null) continue;
       let target = null;
-      // explicit help list first, in the user's order
-      for (const id of op.help) {
-        const s = byId.get(id); const x = st.get(id);
-        if (x.status === 'active' && s.helpable && x.workers.length < maxWorkers(s)) { target = id; break; }
+      for (const tid of op.helpSet) {
+        const s = steps.find(s => s.template === tid && st.get(s.id).status === 'active' && s.helpable && st.get(s.id).workers.length < maxWorkers(s));
+        if (s) { target = s; break; }
       }
-      // otherwise general helping (if enabled)
-      if (target == null && helping) {
+      if (!target && helping) {
         let bestRem = -1;
         for (const s of steps) {
           const x = st.get(s.id);
-          if (x.status === 'active' && s.helpable && x.workers.length < maxWorkers(s) && x.remaining > bestRem) { target = s.id; bestRem = x.remaining; }
+          if (x.status === 'active' && s.helpable && x.workers.length < maxWorkers(s) && x.remaining > bestRem) { target = s; bestRem = x.remaining; }
         }
       }
-      if (target != null) setOp(i, target, 'help');
+      if (target) setOp(i, target, 'help');
     }
   }
 
   assign();
-  while (done < totalSteps && guard++ < 200000) {
+  while (done < totalSteps && guard++ < 500000) {
     let dt = Infinity;
     for (const s of steps) {
       const x = st.get(s.id);
-      if (x.status === 'active' && x.workers.length > 0) {
-        const tt = x.remaining / power(s, x.workers.length);
-        if (tt < dt) dt = tt;
-      }
+      if (x.status === 'active' && x.workers.length > 0) { const tt = x.remaining / power(s, x.workers.length); if (tt < dt) dt = tt; }
     }
-    if (!isFinite(dt)) break; // blocked: cycle, or pinned step whose owners never free
-    for (const s of steps) {
-      const x = st.get(s.id);
-      if (x.status === 'active' && x.workers.length > 0) x.remaining -= power(s, x.workers.length) * dt;
-    }
-    busyAccum += ops.filter(o => o.on != null).length * dt;
+    if (!isFinite(dt)) break;
+    for (const s of steps) { const x = st.get(s.id); if (x.status === 'active' && x.workers.length > 0) x.remaining -= power(s, x.workers.length) * dt; }
+    for (let i = 0; i < N; i++) if (ops[i].on != null) ops[i].busy += dt;
     t += dt;
     for (const s of steps) {
       const x = st.get(s.id);
-      if (x.status === 'active' && x.remaining <= 1e-6) {
-        x.status = 'done'; x.finish = t; done++;
-        for (const w of [...x.workers]) setOp(w, null, null);
-      }
+      if (x.status === 'active' && x.remaining <= 1e-6) { x.status = 'done'; x.finish = t; done++; for (const w of [...x.workers]) setOp(w, null, null); }
     }
     assign();
   }
-
-  // close open intervals
   for (let i = 0; i < N; i++) { const op = ops[i]; if (op._iv) { op._iv.end = t; op.intervals.push(op._iv); op._iv = null; } }
 
-  const perStep = new Map();
-  for (const s of steps) { const x = st.get(s.id); perStep.set(s.id, { start: x.start, finish: x.finish, maxWorkers: x.maxWorkers }); }
+  const byTemplate = new Map();
+  for (const ts of templateSteps) byTemplate.set(ts.id, []);
+  for (const s of steps) { const x = st.get(s.id); byTemplate.get(s.template).push({ unit: s.unit, start: x.start, finish: x.finish }); }
+  const unitFinishes = [];
+  for (let u = 0; u < Q; u++) {
+    let f = 0; for (const s of steps) if (s.unit === u) f = Math.max(f, st.get(s.id).finish || 0);
+    unitFinishes.push(f);
+  }
+  let busyTotal = 0; for (const op of ops) busyTotal += op.busy;
   return {
     makespan: t,
-    utilization: N * t > 0 ? busyAccum / (N * t) : 0,
-    idleSeconds: Math.max(0, N * t - busyAccum),
-    perStep,
-    operators: ops.map(o => ({ intervals: o.intervals })),
+    utilization: N * t > 0 ? busyTotal / (N * t) : 0,
+    idleSeconds: Math.max(0, N * t - busyTotal),
+    operators: ops.map(o => ({ intervals: o.intervals, busySeconds: o.busy, idleSeconds: Math.max(0, t - o.busy) })),
+    byTemplate,
+    unitFinishes,
+    quantity: Q,
     stuck: done < totalSteps,
   };
 }
