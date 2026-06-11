@@ -125,7 +125,15 @@ app.post('/api/skus/:id/steps', (req, res) => {
 app.put('/api/steps/:id', (req, res) => {
   const step = db.prepare('SELECT * FROM sku_steps WHERE id = ?').get(req.params.id);
   if (!step) return res.status(404).json({ error: 'Step not found' });
-  const { name, description, time, override_time, station, parallel_notes, tag_id, quantity, size_times, depends_on, needs_review, note } = req.body;
+  const { name, description, time, override_time, station, parallel_notes, tag_id, quantity, size_times, depends_on, helpable, help_time, needs_review, note } = req.body;
+
+  let helpableVal = step.helpable;
+  let helpSecondsVal = step.help_seconds;
+  if (helpable !== undefined) helpableVal = helpable ? 1 : 0;
+  if (help_time !== undefined) {
+    if (help_time === null || help_time === '') helpSecondsVal = null;
+    else { const ht = timeInput(help_time); if (ht.ambiguous) return res.status(400).json({ error: `Could not parse helper time "${help_time}"` }); helpSecondsVal = ht.seconds; }
+  }
 
   // depends_on: array of step ids that must finish first. Guard self-ref and
   // cycles using the SKU's current graph.
@@ -195,13 +203,14 @@ app.put('/api/steps/:id', (req, res) => {
   }
 
   db.prepare(`UPDATE sku_steps SET name = ?, description = ?, time_seconds = ?, override_time_seconds = ?,
-              station = ?, parallel_notes = ?, tag_id = ?, quantity = ?, size_times = ?, depends_on = ?, needs_review = ?, updated_at = datetime('now')
+              station = ?, parallel_notes = ?, tag_id = ?, quantity = ?, size_times = ?, depends_on = ?,
+              helpable = ?, help_seconds = ?, needs_review = ?, updated_at = datetime('now')
               WHERE id = ?`)
     .run(name ?? step.name, description ?? step.description, ownSeconds, override,
          station ?? step.station, parallel_notes ?? step.parallel_notes,
          tag_id !== undefined ? tag_id : step.tag_id,
          quantity !== undefined ? (quantity === null || quantity === '' ? null : Number(quantity)) : step.quantity,
-         sizeTimesJson, dependsJson,
+         sizeTimesJson, dependsJson, helpableVal, helpSecondsVal,
          needs_review !== undefined ? (needs_review ? 1 : 0) : step.needs_review, step.id);
   res.json({ ok: true, total_seconds: getSkuTotal(step.sku_id) });
 });

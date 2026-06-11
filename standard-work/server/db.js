@@ -115,6 +115,8 @@ for (const stmt of [
   'ALTER TABLE sku_steps ADD COLUMN quantity REAL',
   'ALTER TABLE sku_steps ADD COLUMN size_times TEXT',
   'ALTER TABLE sku_steps ADD COLUMN depends_on TEXT',
+  'ALTER TABLE sku_steps ADD COLUMN helpable INTEGER DEFAULT 0',
+  'ALTER TABLE sku_steps ADD COLUMN help_seconds INTEGER',
 ]) {
   try { db.exec(stmt); } catch { /* column already exists */ }
 }

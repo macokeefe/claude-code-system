@@ -103,7 +103,7 @@ function freshStateFromSeed() {
         name: step.name || null, description: step.description || null,
         time_seconds: step.seconds ?? null, time_raw_text: step.raw || null,
         override_time_seconds: step.override ?? null, quantity: step.quantity ?? null,
-        size_times: step.sizeTimes ?? null, depends_on: [],
+        size_times: step.sizeTimes ?? null, depends_on: [], helpable: 0, help_seconds: null,
         station: null, parallel_notes: step.parallel || null,
         photo_path: null, needs_review: step.needsReview ? 1 : 0,
         created_at: now(), updated_at: now(),
@@ -326,7 +326,7 @@ async function handle(method, url, body) {
     }
     const seq = Math.max(0, ...state.steps.filter(s => s.sku_id === sku.id).map(s => s.sequence)) + 1;
     const qty = body.quantity !== undefined && body.quantity !== null && body.quantity !== '' ? Number(body.quantity) : null;
-    const step = { id: nextId(), sku_id: sku.id, sequence: seq, tag_id: tag_id || null, name: name || null, description: description || null, time_seconds: ownSeconds, time_raw_text: null, override_time_seconds: override, quantity: qty, size_times: null, depends_on: [], station: station || null, parallel_notes: parallel_notes || null, photo_path: null, needs_review: 0, created_at: now(), updated_at: now() };
+    const step = { id: nextId(), sku_id: sku.id, sequence: seq, tag_id: tag_id || null, name: name || null, description: description || null, time_seconds: ownSeconds, time_raw_text: null, override_time_seconds: override, quantity: qty, size_times: null, depends_on: [], helpable: 0, help_seconds: null, station: station || null, parallel_notes: parallel_notes || null, photo_path: null, needs_review: 0, created_at: now(), updated_at: now() };
     state.steps.push(step);
     await persist();
     return { id: step.id, total_seconds: skuTotal(sku.id) };
@@ -398,6 +398,10 @@ async function handle(method, url, body) {
         tag_id: tag_id !== undefined ? tag_id : step.tag_id,
         quantity: quantity !== undefined ? (quantity === null || quantity === '' ? null : Number(quantity)) : step.quantity,
         size_times: nextSizeTimes, time_seconds: nextOwn, depends_on: nextDepends,
+        helpable: body.helpable !== undefined ? (body.helpable ? 1 : 0) : (step.helpable || 0),
+        help_seconds: body.help_time !== undefined
+          ? (body.help_time === null || body.help_time === '' ? null : (() => { const h = timeInput(body.help_time); if (h.ambiguous) httpError(400, { error: `Could not parse helper time "${body.help_time}"` }); return h.seconds; })())
+          : (step.help_seconds ?? null),
         needs_review: needs_review !== undefined ? (needs_review ? 1 : 0) : step.needs_review,
         updated_at: now(),
       });
