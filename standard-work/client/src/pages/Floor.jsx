@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { api, formatTime, formatLong } from '@backend';
-import { scheduleSteps } from '../../../shared/schedule.js';
+import { simulateBuild } from '../../../shared/simulate.js';
 import { sizeLabel } from '../sizeLabel.js';
 
 // Status colors for the floor ring under each bench
@@ -401,9 +401,44 @@ function makeFan() {
 
 /* ------------------------------- component ------------------------------- */
 
+const OP_COLORS = [0x2d6cdf, 0xd9772e, 0x1c7c3c, 0xb03a9c, 0xc9a227, 0x16a3a3, 0xb3261e, 0x5b5ea6];
+
+function makeNameTag(name, colorHex) {
+  const c = document.createElement('canvas'); c.width = 320; c.height = 96;
+  const x = c.getContext('2d');
+  x.fillStyle = '#' + colorHex.toString(16).padStart(6, '0');
+  x.beginPath(); x.roundRect(0, 0, 320, 96, 30); x.fill();
+  x.fillStyle = '#ffffff'; x.font = '900 52px Arial, sans-serif'; x.textAlign = 'center';
+  x.fillText(String(name).slice(0, 12), 160, 64);
+  const tex = new THREE.CanvasTexture(c); tex.anisotropy = 4;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  sp.scale.set(1.5, 0.45, 1);
+  sp.renderOrder = 998;
+  return sp;
+}
+
+function makeCrewFigure(colorHex, name) {
+  const g = new THREE.Group();
+  const shirt = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.85 });
+  const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.55, 10), MAT.pants);
+  legs.position.y = 0.28; legs.castShadow = true;
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.21, 0.42, 4, 10), shirt);
+  torso.position.y = 0.85; torso.castShadow = true;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 14, 14), MAT.skin);
+  head.position.y = 1.32; head.castShadow = true;
+  const tag = makeNameTag(name, colorHex);
+  tag.position.y = 1.85;
+  g.add(legs, torso, head, tag);
+  return g;
+}
+
+const loadAssign = skuId => { try { return JSON.parse(localStorage.getItem(`sw-assign-${skuId}`)) || {}; } catch { return {}; } };
+const saveAssign = (skuId, a) => { try { localStorage.setItem(`sw-assign-${skuId}`, JSON.stringify(a)); } catch {} };
+
 export default function Floor() {
   const mountRef = useRef();
   const three = useRef({});
+  const simRef = useRef(null);
   const tRef = useRef(0);
   const playingRef = useRef(false);
   const speedRef = useRef(120);
@@ -415,14 +450,54 @@ export default function Floor() {
   const [skuId, setSkuId] = useState(null);
   const [size, setSize] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [operators, setOperators] = useState([]);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(120);
-  const [total, setTotal] = useState(0);
+  const [helping, setHelping] = useState(true);
+  const [shiftHours, setShiftHours] = useState(8);
+  const [target, setTarget] = useState(8);
+  const [assignments, setAssignments] = useState({}); // opId -> {own:[seq], help:[seq]}
+  const [showAssign, setShowAssign] = useState(false);
 
-  useEffect(() => { api.get('/api/skus').then(list => { setSkus(list); if (list.length) setSkuId(p => p ?? list[0].id); }); }, []);
-  useEffect(() => { if (skuId == null) return; setSize(null); api.get(`/api/skus/${skuId}`).then(setDetail); }, [skuId]);
+  useEffect(() => {
+    api.get('/api/skus').then(list => { setSkus(list); if (list.length) setSkuId(p => p ?? list[0].id); });
+    api.get('/api/operators').then(setOperators);
+  }, []);
+  useEffect(() => { if (skuId == null) return; setSize(null); setAssignments(loadAssign(skuId)); api.get(`/api/skus/${skuId}`).then(setDetail); }, [skuId]);
   useEffect(() => { playingRef.current = playing; }, [playing]);
   useEffect(() => { speedRef.current = speed; }, [speed]);
+
+  const activeOps = operators.filter(o => o.active);
+  const sizes = detail ? [...new Set(detail.steps.flatMap(s => s.size_times ? Object.keys(s.size_times) : []))] : [];
+  const activeSize = size ?? (sizes.length ? sizes[Math.floor((sizes.length - 1) / 2)] : null);
+  const durOfStep = s => (activeSize && s.size_times && s.size_times[activeSize] != null) ? s.size_times[activeSize] : (s.effective_seconds || 0);
+
+  const simSteps = useMemo(() => detail ? detail.steps.map(s => ({
+    id: s.id, depends_on: s.depends_on || [],
+    effective_seconds: durOfStep(s),
+    helpable: !!s.helpable, help_seconds: s.help_seconds || 0,
+  })) : [], [detail, activeSize]); // eslint-disable-line
+
+  const sim = useMemo(() => {
+    if (!simSteps.length || !activeOps.length) return null;
+    const seqToId = {};
+    detail.steps.forEach(s => { seqToId[s.sequence] = s.id; });
+    const assignArr = activeOps.map(op => {
+      const a = assignments[op.id] || {};
+      return {
+        own: (a.own || []).map(q => seqToId[q]).filter(Boolean),
+        help: (a.help || []).map(q => seqToId[q]).filter(Boolean),
+      };
+    });
+    return simulateBuild(simSteps, activeOps.length, { helping, assignments: assignArr });
+  }, [simSteps, activeOps.length, assignments, helping, detail]); // eslint-disable-line
+
+  // keep the render loop fed
+  useEffect(() => {
+    simRef.current = sim;
+    if (three.current) three.current.total = sim ? sim.makespan : 0;
+    if (sliderRef.current && sim) { sliderRef.current.max = sim.makespan; if (tRef.current > sim.makespan) { tRef.current = 0; sliderRef.current.value = 0; } }
+  }, [sim]);
 
   // ---- Scene setup (once) ----
   useEffect(() => {
@@ -455,36 +530,28 @@ export default function Floor() {
     for (const [k, v] of Object.entries({ left: -30, right: 30, top: 30, bottom: -30 })) sun.shadow.camera[k] = v;
     scene.add(sun);
 
-    // worn concrete floor
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(90, 90),
       new THREE.MeshStandardMaterial({ map: concreteTexture(), roughness: 0.95 }));
     floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true;
     scene.add(floor);
 
-    // yellow aisle tape down the center walkway
     for (const z of [-1.7, 1.7]) {
       const tape = new THREE.Mesh(new THREE.BoxGeometry(34, 0.012, 0.12), MAT.tape);
       tape.position.set(0, 0.006, z);
       scene.add(tape);
     }
-
-    // white columns moved out of the cell so they don't block the benches
     for (const [cx, cz] of [[-22, -12], [22, -12], [-22, 12], [22, 12]]) {
       const col = new THREE.Mesh(new THREE.BoxGeometry(0.7, 7.5, 0.7), MAT.column);
       col.position.set(cx, 3.75, cz); col.castShadow = true;
       scene.add(col);
     }
-
-    // pallet racking pushed to the far perimeter so it reads as background
     for (const [rx, rz, ry] of [[-30, -8, Math.PI / 2], [-30, 0, Math.PI / 2], [-30, 8, Math.PI / 2],
                                 [30, -8, -Math.PI / 2], [30, 0, -Math.PI / 2], [30, 8, -Math.PI / 2],
                                 [-10, -26, 0], [0, -26, 0], [10, -26, 0]]) {
       const rack = makeRack(); rack.position.set(rx, 0, rz); rack.rotation.y = ry;
       scene.add(rack);
     }
-
-    // hanging light strips
     for (let lx = -12; lx <= 12; lx += 6) {
       for (const lz of [-6, 0, 6]) {
         const strip = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.08, 0.18),
@@ -493,14 +560,12 @@ export default function Floor() {
         scene.add(strip);
       }
     }
-
-    // HVLS ceiling fans
     const fans = [];
     for (const fx of [-8, 8]) {
       const fan = makeFan(); fan.position.set(fx, 7, 0); scene.add(fan); fans.push(fan);
     }
 
-    three.current = { scene, camera, renderer, controls, stationGroup: null, fans };
+    three.current = { scene, camera, renderer, controls, stationGroup: null, fans, total: 0 };
 
     const ro = new ResizeObserver(() => {
       const W = mount.clientWidth, H = mount.clientHeight || 520;
@@ -518,6 +583,7 @@ export default function Floor() {
       }
       for (const f of three.current.fans || []) f.userData.blades.rotation.y += dt * 0.8;
       updateStations();
+      updateCrew(dt);
       controls.update();
       renderer.render(scene, camera);
       raf = requestAnimationFrame(loop);
@@ -538,68 +604,77 @@ export default function Floor() {
     const group = new THREE.Group();
     ctx.scene.add(group);
 
-    const durOf = s => (size && s.size_times && s.size_times[size] != null) ? s.size_times[size] : (s.effective_seconds || 0);
-    const { schedule, total: tot } = scheduleSteps(detail.steps, durOf);
-    setTotal(tot); three.current.total = tot;
-    tRef.current = 0; if (sliderRef.current) { sliderRef.current.max = tot; sliderRef.current.value = 0; }
-
-    // Two rows of benches facing a central aisle, like the real cell.
     const steps = detail.steps;
     const pairs = Math.ceil(steps.length / 2);
     const spacing = 6.6;
     const offset = ((pairs - 1) * spacing) / 2;
     const stations = [];
+    const benchSpots = new Map(); // stepId -> { primary: Vector3, helper: Vector3 }
     steps.forEach((s, i) => {
       const col = Math.floor(i / 2), row = i % 2;
       const px = col * spacing - offset;
       const pz = row === 0 ? -3.1 : 3.1;
       const { st, ring } = makeBench(i);
       st.position.set(px, 0, pz);
-      if (row === 1) st.rotation.y = Math.PI; // face the aisle
+      if (row === 1) st.rotation.y = Math.PI;
 
       const visual = stationVisualFor(s);
       visual.g.position.y = 1.06;
       visual.update(0);
       st.add(visual.g);
 
-      const dur = durOf(s);
+      const dur = durOfStep(s);
       const label = makeLabel(s.sequence, fullName(s), dur > 0 ? formatTime(dur) : 'no time');
-      // raise high and stagger front/back rows so the big labels don't collide
       label.position.set(0, 3.5 + (i % 2) * 1.15, 0); st.add(label);
-
-      const op = makeOperator(); op.position.set(0, 0, 1.55);
-      st.add(op);
-
-
       group.add(st);
-      stations.push({ stepId: s.id, name: shortName(s), ring: ring.material, visual, op, noTime: dur <= 0, sched: schedule.get(s.id) });
+      st.updateMatrixWorld(true);
+      benchSpots.set(s.id, {
+        primary: st.localToWorld(new THREE.Vector3(-0.55, 0, 1.55)),
+        helper: st.localToWorld(new THREE.Vector3(0.75, 0, 1.55)),
+      });
+      stations.push({ stepId: s.id, name: shortName(s), seq: s.sequence, ring: ring.material, visual, noTime: dur <= 0 });
     });
 
     ctx.controls.target.set(0, 0.8, 0);
     ctx.stationGroup = group;
     ctx.stations = stations;
-  }, [detail, size]);
+    ctx.benchSpots = benchSpots;
+    tRef.current = 0; if (sliderRef.current) sliderRef.current.value = 0;
+  }, [detail, size]); // eslint-disable-line
+
+  // ---- Crew figures (named, colored) ----
+  useEffect(() => {
+    const ctx = three.current;
+    if (!ctx.scene) return;
+    if (ctx.crewGroup) ctx.scene.remove(ctx.crewGroup);
+    const crewGroup = new THREE.Group();
+    ctx.scene.add(crewGroup);
+    const crew = activeOps.map((op, i) => {
+      const color = OP_COLORS[i % OP_COLORS.length];
+      const fig = makeCrewFigure(color, op.name);
+      const home = new THREE.Vector3((i - (activeOps.length - 1) / 2) * 1.6, 0, 0);
+      fig.position.copy(home);
+      crewGroup.add(fig);
+      return { fig, home, name: op.name, color };
+    });
+    ctx.crewGroup = crewGroup;
+    ctx.crew = crew;
+  }, [operators.length, activeOps.map(o => o.id + o.name).join(',')]); // eslint-disable-line
 
   function updateStations() {
     const ctx = three.current;
-    if (!ctx.stations) return;
+    const sm = simRef.current;
+    if (!ctx.stations || !sm) return;
     const t = tRef.current;
-    const activeNames = [];
     for (const s of ctx.stations) {
-      const { start, finish, duration } = s.sched || { start: 0, finish: 0, duration: 0 };
+      const ps = sm.perStep.get(s.stepId) || {};
+      const start = ps.start, finish = ps.finish;
       let state, prog;
-      if (t < start) { state = 'idle'; prog = 0; }
-      else if (t >= finish) { state = 'done'; prog = 1; }
-      else {
-        state = 'active'; prog = duration > 0 ? (t - start) / duration : 1;
-        activeNames.push(s.name);
-        s.op.position.y = Math.abs(Math.sin(t * 3 + s.stepId)) * 0.05;
-      }
-      if (state !== 'active') s.op.position.y = 0;
+      if (start == null || t < start) { state = 'idle'; prog = 0; }
+      else if (finish != null && t >= finish) { state = 'done'; prog = 1; }
+      else { state = 'active'; prog = finish > start ? (t - start) / (finish - start) : 1; }
       if (s.noTime && t > 0) {
-        // No recorded time: runs instantly — flag amber so it isn't mistaken for scheduled work
-        s.ring.color.setHex(0xd9a427);
-        s.ring.emissive.setHex(0x000000);
+        s.ring.color.setHex(0xd9a427); s.ring.emissive.setHex(0x000000);
       } else {
         s.ring.color.setHex(RING[state]);
         s.ring.emissive.setHex(state === 'active' ? 0x0c4a22 : 0x000000);
@@ -608,22 +683,58 @@ export default function Floor() {
     }
     if (clockRef.current) clockRef.current.textContent = `${formatTime(t)} / ${formatTime(ctx.total || 0)}`;
     if (sliderRef.current && playingRef.current) sliderRef.current.value = t;
-    if (activeRef.current) activeRef.current.textContent = activeNames.length ? activeNames.join(' · ') : (t >= (ctx.total || 0) && ctx.total ? 'build complete' : 'not started');
   }
 
-  const sizes = detail ? [...new Set(detail.steps.flatMap(s => s.size_times ? Object.keys(s.size_times) : []))] : [];
-  const activeSize = size ?? (sizes.length ? sizes[Math.floor((sizes.length - 1) / 2)] : null);
-  const noTimeSteps = detail
-    ? detail.steps.filter(s => {
-        const d = (size && s.size_times && s.size_times[size] != null) ? s.size_times[size] : (s.effective_seconds || 0);
-        return d <= 0;
-      })
-    : [];
+  function updateCrew(dt) {
+    const ctx = three.current;
+    const sm = simRef.current;
+    if (!ctx.crew || !sm || !ctx.benchSpots) return;
+    const t = tRef.current;
+    const lines = [];
+    ctx.crew.forEach((c, i) => {
+      const intervals = sm.operators[i]?.intervals || [];
+      const iv = intervals.find(v => t >= v.start && t < v.end);
+      let target = c.home, working = false;
+      if (iv) {
+        const spots = ctx.benchSpots.get(iv.stepId);
+        if (spots) { target = iv.role === 'help' ? spots.helper : spots.primary; working = true; }
+        const st = ctx.stations.find(x => x.stepId === iv.stepId);
+        if (st) lines.push(`${c.name} → ${st.seq}. ${st.name}${iv.role === 'help' ? ' (helping)' : ''}`);
+      }
+      const k = 1 - Math.exp(-dt * 3);
+      c.fig.position.x += (target.x - c.fig.position.x) * k;
+      c.fig.position.z += (target.z - c.fig.position.z) * k;
+      const distSq = (target.x - c.fig.position.x) ** 2 + (target.z - c.fig.position.z) ** 2;
+      c.fig.position.y = working && distSq < 0.05 ? Math.abs(Math.sin(t * 3 + i)) * 0.05 : 0;
+    });
+    if (activeRef.current) {
+      activeRef.current.textContent = lines.length ? lines.join('  ·  ')
+        : (t >= (ctx.total || 0) && ctx.total ? 'build complete' : 'crew idle');
+    }
+  }
+
+  const noTimeSteps = detail ? detail.steps.filter(s => durOfStep(s) <= 0) : [];
+  const shiftSeconds = Math.round(shiftHours * 3600);
+  const unitsPerShift = sim && sim.makespan > 0 ? Math.floor(shiftSeconds / sim.makespan) : 0;
+  const hitsTarget = unitsPerShift >= target;
+  const neverStarted = sim && detail ? detail.steps.filter(s => { const ps = sim.perStep.get(s.id); return !ps || ps.start == null; }) : [];
+
+  function toggleAssign(opId, kind, seq) {
+    setAssignments(prev => {
+      const next = { ...prev, [opId]: { own: [...(prev[opId]?.own || [])], help: [...(prev[opId]?.help || [])] } };
+      const arr = next[opId][kind];
+      const ix = arr.indexOf(seq);
+      if (ix >= 0) arr.splice(ix, 1); else arr.push(seq);
+      saveAssign(skuId, next);
+      return next;
+    });
+  }
+  const anyAssigned = Object.values(assignments).some(a => (a.own?.length || 0) + (a.help?.length || 0) > 0);
 
   return (
     <>
       <div className="toolbar">
-        <h1 style={{ margin: 0 }}>3D Floor</h1>
+        <h1 style={{ margin: 0 }}>3D Floor — simulation</h1>
         <div className="spacer" />
         <select value={skuId || ''} onChange={e => setSkuId(Number(e.target.value))} style={{ width: 240 }}>
           {skus.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -634,11 +745,50 @@ export default function Floor() {
           </select>
         )}
       </div>
-      <p className="subtitle">Modeled on your floor: benches face the center aisle; the ring under each bench is grey while waiting, green while worked, blue when done, and the frame on the bench builds up as the step progresses. Drag to orbit, scroll to zoom.</p>
+      <p className="subtitle">Your crew, simulated: named operators walk between benches, helping where you send them and peeling off when their own task is ready. Change assignments below and the whole run recomputes.</p>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div ref={mountRef} style={{ width: '100%', height: 520, position: 'relative' }} />
       </div>
+
+      {sim && (
+        <div className="card">
+          <div className="row" style={{ gap: 14, flexWrap: 'wrap' }}>
+            <div className="stat" style={{ borderLeftColor: '#1a56b0' }}>
+              <div className="stat-value">{formatLong(sim.makespan)}</div>
+              <div className="stat-label">Build time / unit ({activeOps.length} operators{helping ? ' + helping' : ''})</div>
+            </div>
+            <div className="stat" style={{ borderLeftColor: hitsTarget ? '#1c7c3c' : '#b3261e' }}>
+              <div className="stat-value">{unitsPerShift} / {target}</div>
+              <div className="stat-label">Units in shift vs target</div>
+            </div>
+            <div className="stat">
+              <div className="stat-value">{Math.round(sim.utilization * 100)}%</div>
+              <div className="stat-label">Crew utilization</div>
+            </div>
+            <div className="field" style={{ maxWidth: 110 }}>
+              <label>Target</label>
+              <input type="number" min="1" value={target} onChange={e => setTarget(Math.max(1, Number(e.target.value)))} />
+            </div>
+            <div className="field" style={{ maxWidth: 110 }}>
+              <label>Shift (h)</label>
+              <input type="number" min="0.5" step="0.5" value={shiftHours} onChange={e => setShiftHours(Math.max(0.5, Number(e.target.value)))} />
+            </div>
+            <div className="field" style={{ maxWidth: 170 }}>
+              <label>Auto-helping</label>
+              <label style={{ display: 'flex', gap: 6, alignItems: 'center', textTransform: 'none', fontWeight: 400, marginTop: 6 }}>
+                <input type="checkbox" style={{ width: 'auto' }} checked={helping} onChange={e => setHelping(e.target.checked)} />
+                idle ops help out
+              </label>
+            </div>
+          </div>
+          {neverStarted.length > 0 && (
+            <div className="alert error" style={{ marginTop: 8 }}>
+              Never started: {neverStarted.map(s => `${s.sequence}. ${(s.tag_id ? s.tag_name : s.name)}`).join(', ')} — an assigned owner may never be free, or the dependency graph is blocked.
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="card">
         <div className="toolbar" style={{ marginBottom: 8 }}>
@@ -647,8 +797,11 @@ export default function Floor() {
             setPlaying(p => !p);
           }}>{playing ? '⏸ Pause' : '▶ Play'}</button>
           <button className="small" onClick={() => { tRef.current = 0; if (sliderRef.current) sliderRef.current.value = 0; setPlaying(false); }}>⟲ Reset</button>
-          <span ref={clockRef} className="time" style={{ fontSize: 16, minWidth: 150 }}>0:00 / {formatTime(total)}</span>
+          <span ref={clockRef} className="time" style={{ fontSize: 16, minWidth: 150 }}>0:00 / {formatTime(sim ? sim.makespan : 0)}</span>
           <div className="spacer" />
+          <button className={showAssign ? 'small primary' : 'small'} onClick={() => setShowAssign(v => !v)}>
+            {showAssign ? 'Hide assignments' : '⚙ Assignments'}{anyAssigned ? ' •' : ''}
+          </button>
           <label style={{ display: 'flex', gap: 6, alignItems: 'center', textTransform: 'none', fontWeight: 400 }}>
             Speed
             <select value={speed} onChange={e => setSpeed(Number(e.target.value))}>
@@ -657,20 +810,62 @@ export default function Floor() {
             </select>
           </label>
         </div>
-        <input ref={sliderRef} type="range" min="0" max={total || 1} defaultValue="0" style={{ width: '100%' }}
+        <input ref={sliderRef} type="range" min="0" max={sim ? sim.makespan : 1} defaultValue="0" style={{ width: '100%' }}
           onInput={e => { tRef.current = Number(e.target.value); setPlaying(false); }} />
-        <div className="muted" style={{ marginTop: 6 }}>Working now: <strong ref={activeRef}>not started</strong></div>
+        <div className="muted" style={{ marginTop: 6 }}>Crew: <strong ref={activeRef}>idle</strong></div>
         {noTimeSteps.length > 0 && (
           <div className="alert warn" style={{ marginTop: 8, padding: '6px 10px', fontSize: 12 }}>
-            {noTimeSteps.map(s => (s.tag_id ? s.tag_name : s.name)).join(', ')} {noTimeSteps.length === 1 ? 'has' : 'have'} no recorded time —
-            they run instantly in playback (amber ring). Independent steps with times all start together; give these a time on the SKU page and they'll appear as a parallel branch here.
+            {noTimeSteps.map(s => (s.tag_id ? s.tag_name : s.name)).join(', ')} {noTimeSteps.length === 1 ? 'has' : 'have'} no recorded time — they run instantly (amber ring).
           </div>
         )}
         <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
           <span style={{ color: '#1fa84f' }}>● working</span> &nbsp; <span style={{ color: '#1a56b0' }}>● done</span> &nbsp; <span style={{ color: '#8e98a6' }}>● waiting</span>
-          &nbsp;— total build time with unlimited operators: <strong>{formatLong(total)}</strong>
+          &nbsp;— mark steps helpable (and set 2-person times) on the <strong>Staffing</strong> page; the same flags drive this simulation.
         </div>
       </div>
+
+      {showAssign && detail && (
+        <div className="card">
+          <h2 style={{ marginTop: 0 }}>Operator assignments <span className="muted" style={{ fontWeight: 400 }}>— OWN: only they run it. HELP: where they go when idle (until their own task is ready). Blank = automatic.</span></h2>
+          <table className="data">
+            <thead>
+              <tr><th style={{ width: 130 }}>Operator</th><th>Owns steps</th><th>Helps on (when idle)</th></tr>
+            </thead>
+            <tbody>
+              {activeOps.map((op, i) => {
+                const a = assignments[op.id] || {};
+                return (
+                  <tr key={op.id}>
+                    <td>
+                      <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 6, background: '#' + OP_COLORS[i % OP_COLORS.length].toString(16).padStart(6, '0'), marginRight: 6 }} />
+                      <strong>{op.name}</strong>
+                    </td>
+                    <td>
+                      {detail.steps.map(s => (
+                        <button key={s.id} className={`chip-mini ${(a.own || []).includes(s.sequence) ? 'on' : ''}`}
+                          title={(s.tag_id ? s.tag_name : s.name) || ''}
+                          onClick={() => toggleAssign(op.id, 'own', s.sequence)}>{s.sequence}</button>
+                      ))}
+                    </td>
+                    <td>
+                      {detail.steps.filter(s => s.helpable).map(s => (
+                        <button key={s.id} className={`chip-mini help ${(a.help || []).includes(s.sequence) ? 'on' : ''}`}
+                          title={(s.tag_id ? s.tag_name : s.name) || ''}
+                          onClick={() => toggleAssign(op.id, 'help', s.sequence)}>{s.sequence}</button>
+                      ))}
+                      {detail.steps.filter(s => s.helpable).length === 0 && <span className="muted" style={{ fontSize: 12 }}>no steps marked helpable yet (Staffing page)</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div className="toolbar" style={{ marginTop: 8 }}>
+            <button className="small" onClick={() => { setAssignments({}); saveAssign(skuId, {}); }}>Reset all to automatic</button>
+            <span className="muted" style={{ fontSize: 12 }}>Assignments are saved per product on this computer. The simulation, stats, and 3D playback all recompute instantly when you change them.</span>
+          </div>
+        </div>
+      )}
     </>
   );
 }

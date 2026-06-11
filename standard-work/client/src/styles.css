@@ -138,6 +138,15 @@ label { display: block; font-weight: 600; font-size: 12px; margin-bottom: 4px; c
 .chip:hover { background: #f0f2f5; }
 .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 
+.chip-mini {
+  font: inherit; font-size: 12px; font-weight: 700; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-soft); border-radius: 6px;
+  padding: 2px 8px; margin: 2px; cursor: pointer;
+}
+.chip-mini:hover { background: #f0f2f5; }
+.chip-mini.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.chip-mini.help.on { background: #1c7c3c; border-color: #1c7c3c; }
+
 .solution-row { border-top: 1px solid var(--border); padding: 10px 0; }
 .solution-row:first-of-type { border-top: none; }
 .target-adder { margin-top: 8px; }
