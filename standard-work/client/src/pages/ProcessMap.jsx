@@ -16,15 +16,17 @@ export default function ProcessMap() {
   const [detail, setDetail] = useState(null);
   const [size, setSize] = useState(null);
   const [pos, setPos] = useState({});            // stepId -> {x,y}
-  const [drag, setDrag] = useState(null);        // {id, offX, offY}
+  const [drag, setDrag] = useState(null);        // {startX, startY, items:[{id,x0,y0}], moved}
   const [link, setLink] = useState(null);        // {fromId, x, y}
+  const [selected, setSelected] = useState(() => new Set()); // selected step ids
+  const [marquee, setMarquee] = useState(null);  // {x0,y0,x1,y1}
   const [error, setError] = useState('');
   const [hoverArrow, setHoverArrow] = useState(null);
   const [zoom, setZoom] = useState(1);
 
   const load = useCallback(() => { if (skuId != null) return api.get(`/api/skus/${skuId}`).then(setDetail); }, [skuId]);
   useEffect(() => { api.get('/api/skus').then(list => { setSkus(list); if (list.length) setSkuId(p => p ?? list[0].id); }); }, []);
-  useEffect(() => { if (skuId == null) return; setSize(null); api.get(`/api/skus/${skuId}`).then(setDetail); }, [skuId]);
+  useEffect(() => { if (skuId == null) return; setSize(null); setSelected(new Set()); api.get(`/api/skus/${skuId}`).then(setDetail); }, [skuId]);
 
   const sizes = detail ? [...new Set(detail.steps.flatMap(s => s.size_times ? Object.keys(s.size_times) : []))] : [];
   const activeSize = size ?? (sizes.length ? sizes[Math.floor((sizes.length - 1) / 2)] : null);
@@ -89,10 +91,19 @@ export default function ProcessMap() {
   function onPointerMove(e) {
     if (drag) {
       const { x, y } = boardXY(e);
-      setPos(p => ({ ...p, [drag.id]: { x: Math.max(0, x - drag.offX), y: Math.max(0, y - drag.offY) } }));
+      const dx = x - drag.startX, dy = y - drag.startY;
+      if (!drag.moved && (Math.abs(dx) > 2 || Math.abs(dy) > 2)) setDrag(d => ({ ...d, moved: true }));
+      setPos(p => {
+        const n = { ...p };
+        for (const it of drag.items) n[it.id] = { x: Math.max(0, it.x0 + dx), y: Math.max(0, it.y0 + dy) };
+        return n;
+      });
     } else if (link) {
       const { x, y } = boardXY(e);
       setLink(l => ({ ...l, x, y }));
+    } else if (marquee) {
+      const { x, y } = boardXY(e);
+      setMarquee(m => ({ ...m, x1: x, y1: y }));
     }
   }
   async function onPointerUp(e) {
@@ -106,7 +117,41 @@ export default function ProcessMap() {
       if (target && target.id !== link.fromId) await addDep(link.fromId, target.id);
       setLink(null);
     }
+    if (marquee) {
+      const rx = Math.min(marquee.x0, marquee.x1), ry = Math.min(marquee.y0, marquee.y1);
+      const rw = Math.abs(marquee.x1 - marquee.x0), rh = Math.abs(marquee.y1 - marquee.y0);
+      if (rw > 4 || rh > 4) {
+        const hit = new Set();
+        for (const s of detail.steps) {
+          const p = pos[s.id]; if (!p) continue;
+          if (p.x < rx + rw && p.x + NW > rx && p.y < ry + rh && p.y + NH > ry) hit.add(s.id);
+        }
+        setSelected(prev => e.shiftKey ? new Set([...prev, ...hit]) : hit);
+      } else if (!e.shiftKey) {
+        setSelected(new Set()); // a click on empty space clears selection
+      }
+      setMarquee(null);
+    }
     setDrag(null);
+  }
+
+  function onBoardPointerDown(e) {
+    // background press (notes/handles stop propagation) → start a marquee
+    const b = boardXY(e);
+    setMarquee({ x0: b.x, y0: b.y, x1: b.x, y1: b.y });
+  }
+
+  function startNoteDrag(e, s) {
+    e.stopPropagation();
+    const b = boardXY(e);
+    if (e.shiftKey) {
+      setSelected(prev => { const n = new Set(prev); n.has(s.id) ? n.delete(s.id) : n.add(s.id); return n; });
+      return; // shift-click toggles selection, no drag
+    }
+    const group = selected.has(s.id) && selected.size > 1 ? [...selected] : [s.id];
+    if (!selected.has(s.id)) setSelected(new Set([s.id]));
+    const items = group.map(id => ({ id, x0: (pos[id] || { x: 0, y: 0 }).x, y0: (pos[id] || { x: 0, y: 0 }).y }));
+    setDrag({ startX: b.x, startY: b.y, items, moved: false });
   }
 
   async function addDep(fromId, toId) {
@@ -158,14 +203,15 @@ export default function ProcessMap() {
           <button className="small" title="zoom in" onClick={() => setZoom(z => Math.min(1.6, Number((z + 0.1).toFixed(2))))}>＋</button>
         </span>
       </div>
-      <p className="subtitle">Drag sticky notes anywhere. To set a prerequisite, drag from a note's <strong>● right handle</strong> onto another note — the arrow means “must finish before.” Click an arrow to delete it. These arrows are the real dependencies: they drive the critical path, the simulation, and the line. Red = on the critical path.</p>
+      <p className="subtitle">Drag sticky notes anywhere. Drag a box around several to select them, or <strong>shift-click</strong> to add/remove — then drag any one to move the whole group. To set a prerequisite, drag from a note's <strong>● right handle</strong> onto another note (the arrow means “must finish before”). To delete an arrow, click its <strong>✕</strong>. These arrows are the real dependencies: they drive the critical path, the simulation, and the line. Red = on the critical path.{selected.size > 1 && <strong style={{ color: '#1a56b0' }}> · {selected.size} selected</strong>}</p>
 
       {error && <div className="alert error">{error}</div>}
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div ref={boardRef} className="map-board"
           style={{ position: 'relative', width: '100%', height: 560, overflow: 'auto', background: '#f3f5f8', backgroundImage: 'radial-gradient(#d6dbe3 1px, transparent 1px)', backgroundSize: `${22 * zoom}px ${22 * zoom}px` }}
-          onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={() => { setDrag(null); setLink(null); }}>
+          onPointerDown={onBoardPointerDown}
+          onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={() => { setDrag(null); setLink(null); setMarquee(null); }}>
           <div className="map-canvas" style={{ position: 'relative', width: maxX * zoom, height: maxY * zoom }}>
           <div style={{ position: 'absolute', top: 0, left: 0, width: maxX, height: maxY, transform: `scale(${zoom})`, transformOrigin: '0 0' }}>
           <svg width={maxX} height={maxY} style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}>
@@ -182,6 +228,7 @@ export default function ProcessMap() {
               const dx = Math.max(40, Math.abs(t.x - s.x) / 2);
               const path = `M${s.x},${s.y} C${s.x + dx},${s.y} ${t.x - dx},${t.y} ${t.x},${t.y}`;
               const hot = hoverArrow === i;
+              const mx = (s.x + t.x) / 2, my = (s.y + t.y) / 2; // bezier midpoint
               return (
                 <g key={i}>
                   <path d={path} fill="none" stroke={a.critical ? '#b3261e' : '#7a828f'} strokeWidth={hot ? 3.5 : 2}
@@ -189,12 +236,26 @@ export default function ProcessMap() {
                   <path d={path} fill="none" stroke="transparent" strokeWidth="16" style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
                     onPointerEnter={() => setHoverArrow(i)} onPointerLeave={() => setHoverArrow(null)}
                     onClick={() => removeDep(a.fromId, a.toId)} />
+                  {/* always-visible delete badge at the arrow midpoint; turns red on hover */}
+                  <g style={{ pointerEvents: 'all', cursor: 'pointer' }}
+                    onPointerEnter={() => setHoverArrow(i)} onPointerLeave={() => setHoverArrow(null)}
+                    onClick={() => removeDep(a.fromId, a.toId)}>
+                    <circle cx={mx} cy={my} r={hot ? 9.5 : 7} fill={hot ? '#b3261e' : '#ffffff'}
+                      stroke={hot ? '#b3261e' : '#c2c8d0'} strokeWidth="1.5" opacity={hot ? 1 : 0.9} />
+                    <path d={`M${mx - 3},${my - 3} L${mx + 3},${my + 3} M${mx + 3},${my - 3} L${mx - 3},${my + 3}`}
+                      stroke={hot ? '#ffffff' : '#8a929c'} strokeWidth="1.7" strokeLinecap="round" />
+                  </g>
                 </g>
               );
             })}
             {link && pos[link.fromId] && (() => {
               const s = anchor(link.fromId, 'out');
               return <path d={`M${s.x},${s.y} L${link.x},${link.y}`} fill="none" stroke="#1a56b0" strokeWidth="2.5" strokeDasharray="5 4" markerEnd="url(#ah)" />;
+            })()}
+            {marquee && (() => {
+              const rx = Math.min(marquee.x0, marquee.x1), ry = Math.min(marquee.y0, marquee.y1);
+              const rw = Math.abs(marquee.x1 - marquee.x0), rh = Math.abs(marquee.y1 - marquee.y0);
+              return <rect x={rx} y={ry} width={rw} height={rh} fill="rgba(26,86,176,0.10)" stroke="#1a56b0" strokeDasharray="4 3" strokeWidth="1.5" />;
             })()}
           </svg>
 
@@ -203,11 +264,11 @@ export default function ProcessMap() {
             const crit = criticalSet.has(s.id);
             const t = timeOf(s);
             return (
-              <div key={s.id} className={`map-note ${crit ? 'crit' : ''}`}
+              <div key={s.id} className={`map-note ${crit ? 'crit' : ''} ${selected.has(s.id) ? 'sel' : ''}`}
                 style={{ left: p.x, top: p.y, width: NW, minHeight: NH, background: COLORS[(s.sequence - 1) % COLORS.length] }}
                 onPointerDown={e => {
                   if (e.target.classList.contains('map-handle')) return;
-                  const b = boardXY(e); setDrag({ id: s.id, offX: b.x - p.x, offY: b.y - p.y });
+                  startNoteDrag(e, s);
                 }}>
                 <div className="map-note-name">{s.sequence}. {(s.tag_id ? s.tag_name : s.name) || ''}</div>
                 <div className="map-note-time">{t > 0 ? formatTime(t) : 'no time'}{crit ? ' · critical' : ''}</div>
