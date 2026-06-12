@@ -12,6 +12,7 @@ import Floor from './pages/Floor.jsx';
 import LineDesigner from './pages/LineDesigner.jsx';
 import ProcessMap from './pages/ProcessMap.jsx';
 import Workflows from './pages/Workflows.jsx';
+import Compare from './pages/Compare.jsx';
 import Staffing from './pages/Staffing.jsx';
 import Assistant from './pages/Assistant.jsx';
 
@@ -25,6 +26,7 @@ export default function App() {
         <NavLink to="/" end>Dashboard</NavLink>
         <NavLink to="/skus">SKUs</NavLink>
         <NavLink to="/tags">Shared Steps</NavLink>
+        <NavLink to="/compare">Compare</NavLink>
         <NavLink to="/planner">Day Planner</NavLink>
         <NavLink to="/staffing">Staffing</NavLink>
         <NavLink to="/line">Line Designer</NavLink>
@@ -59,6 +61,7 @@ export default function App() {
           <Route path="/skus" element={<SkuList />} />
           <Route path="/skus/:id" element={<SkuDetail />} />
           <Route path="/tags" element={<Tags />} />
+          <Route path="/compare" element={<Compare />} />
           <Route path="/import" element={<ImportPage />} />
           <Route path="/planner" element={<Planner />} />
           <Route path="/staffing" element={<Staffing />} />
