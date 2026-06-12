@@ -369,6 +369,22 @@ async function handle(method, url, body) {
         if (reaches(step.id, step.id)) httpError(400, { error: 'That dependency would create a cycle' });
         nextDepends = clean;
       }
+      // dep_overlap: {depId: fraction in (0,1)} — how much of a prerequisite
+      // must be done before this step can start (overlapping operations).
+      let nextOverlap = step.dep_overlap || null;
+      if (body.dep_overlap !== undefined) {
+        const clean = {};
+        for (const [d, f] of Object.entries(body.dep_overlap || {})) {
+          const fr = Number(f);
+          if (Number.isFinite(fr) && fr > 0 && fr < 1) clean[Number(d)] = fr;
+        }
+        nextOverlap = Object.keys(clean).length ? clean : null;
+      }
+      if (nextOverlap) { // drop overlaps whose dependency is gone
+        const keep = {};
+        for (const d of nextDepends) if (nextOverlap[d] != null) keep[d] = nextOverlap[d];
+        nextOverlap = Object.keys(keep).length ? keep : null;
+      }
       let nextSizeTimes = step.size_times;
       let nextOwn = step.time_seconds;
       if (body.size_times !== undefined) {
@@ -397,7 +413,7 @@ async function handle(method, url, body) {
         station: station ?? step.station, parallel_notes: parallel_notes ?? step.parallel_notes,
         tag_id: tag_id !== undefined ? tag_id : step.tag_id,
         quantity: quantity !== undefined ? (quantity === null || quantity === '' ? null : Number(quantity)) : step.quantity,
-        size_times: nextSizeTimes, time_seconds: nextOwn, depends_on: nextDepends,
+        size_times: nextSizeTimes, time_seconds: nextOwn, depends_on: nextDepends, dep_overlap: nextOverlap,
         helpable: body.helpable !== undefined ? (body.helpable ? 1 : 0) : (step.helpable || 0),
         help_seconds: body.help_time !== undefined
           ? (body.help_time === null || body.help_time === '' ? null : (() => { const h = timeInput(body.help_time); if (h.ambiguous) httpError(400, { error: `Could not parse helper time "${body.help_time}"` }); return h.seconds; })())
@@ -415,6 +431,8 @@ async function handle(method, url, body) {
       // Prune the deleted step from siblings' dependencies.
       state.steps.filter(s => s.sku_id === step.sku_id && Array.isArray(s.depends_on))
         .forEach(s => { s.depends_on = s.depends_on.filter(d => d !== step.id); });
+      state.steps.filter(s => s.sku_id === step.sku_id && s.dep_overlap)
+        .forEach(s => { if (s.dep_overlap[step.id] != null) { const n = { ...s.dep_overlap }; delete n[step.id]; s.dep_overlap = Object.keys(n).length ? n : null; } });
       await persist();
       return { ok: true, total_seconds: skuTotal(step.sku_id) };
     }

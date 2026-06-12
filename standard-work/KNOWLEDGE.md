@@ -181,6 +181,25 @@ per-station breakdown, and "Open in Line Designer to tweak" writes the result
 into `localStorage['sw-line-<sku>']`. Engineer's stated goal: "most throughput
 but also realistic"; optimizer style: generate + let me tweak.
 
+## Overlapping operations / partial handoff (2026-06)
+
+Engineer: "once a couple of connectors are ready the next person can start."
+Modeled as a per-edge **overlap**: each dependent step may carry
+`dep_overlap: {prereqStepId: fraction in (0,1)}` = how much of the prerequisite
+must be done before this step may start (default/absent = 1 = must fully
+finish). Set on the **Process Map**: each arrow has an "after 100%" pill →
+menu (100/75/50/25/10%); a partial edge draws dashed. Stored/pruned in both
+backends alongside depends_on (server col `dep_overlap TEXT`). Honored by:
+- `precedence.criticalPath`: es(B)=max(es(d)+ov·dur(d)); ef(B)=max(es+dur,
+  ef(d) for partial d) so B can't finish before a partial supplier — overlap
+  shrinks the critical path.
+- `simulate.simulateBuild`: a dep is ready when done OR (active AND
+  1−remaining/total ≥ ov); event loop also stops at threshold crossings so the
+  downstream starts exactly then. Needs ≥2 operators to actually overlap (one
+  person can't run both). 3D Floor passes `dep_overlap` through `simSteps`.
+NOT yet in workflow snapshots or the optimizer (line balance is station-level;
+overlap is cross-station start timing). schedule.js is unused.
+
 ## Open items
 
 - Meritage: not yet modeled — waiting on a readable copy (app Export Excel →

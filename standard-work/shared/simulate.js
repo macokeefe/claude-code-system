@@ -31,6 +31,10 @@ export function simulateBuild(templateSteps, operatorCount, opts = {}) {
       steps.push({
         id: u * U + ts.id, template: ts.id, unit: u,
         depends_on: (ts.depends_on || []).map(d => u * U + d),
+        // overlap: a dep may be only partly required before this can start
+        dep_overlap: ts.dep_overlap
+          ? Object.fromEntries(Object.entries(ts.dep_overlap).map(([d, f]) => [u * U + Number(d), f]))
+          : null,
         effective_seconds: ts.effective_seconds || 0,
         helpable: !!ts.helpable, help_seconds: ts.help_seconds || 0,
       });
@@ -60,7 +64,22 @@ export function simulateBuild(templateSteps, operatorCount, opts = {}) {
     return 1 + (k - 1) * r;
   }
   const maxWorkers = s => (s.helpable ? Math.max(2, maxWorkersDefault) : 1);
-  const depsDone = s => (s.depends_on || []).every(d => !st.get(d) || st.get(d).status === 'done');
+  const stepById = new Map(steps.map(s => [s.id, s]));
+  const ovOf = (s, d) => (s.dep_overlap && s.dep_overlap[d] != null) ? s.dep_overlap[d] : 1;
+  // A dep is "ready enough" when it is done, or — if an overlap < 1 is set —
+  // when it has progressed past that fraction (the next station can start once
+  // a few parts are made).
+  const depReady = (s, d) => {
+    const x = st.get(d);
+    if (!x) return true;
+    if (x.status === 'done') return true;
+    const ov = ovOf(s, d);
+    if (ov >= 1 || x.status !== 'active') return false;
+    const total = stepById.get(d)?.effective_seconds || 0;
+    if (total <= 0) return true;
+    return (1 - x.remaining / total) >= ov - 1e-9;
+  };
+  const depsDone = s => (s.depends_on || []).every(d => depReady(s, d));
   const ownsSomethingLeft = op => [...op.ownSet].some(tid => steps.some(s => s.template === tid && st.get(s.id).status !== 'done'));
   const isGeneralist = op => op.ownSet.size === 0 || !ownsSomethingLeft(op);
 
@@ -137,6 +156,24 @@ export function simulateBuild(templateSteps, operatorCount, opts = {}) {
     for (const s of steps) {
       const x = st.get(s.id);
       if (x.status === 'active' && x.workers.length > 0) { const tt = x.remaining / power(s, x.workers.length); if (tt < dt) dt = tt; }
+    }
+    // also stop at the next moment a waiting step's partial dependency crosses
+    // its overlap threshold, so the downstream can start right then
+    for (const s of steps) {
+      const x = st.get(s.id);
+      if (x.status !== 'wait') continue;
+      for (const d of (s.depends_on || [])) {
+        const ov = ovOf(s, d);
+        if (ov >= 1) continue;
+        const xd = st.get(d);
+        if (!xd || xd.status !== 'active' || xd.workers.length === 0) continue;
+        const total = stepById.get(d)?.effective_seconds || 0;
+        const targetRem = (1 - ov) * total;
+        if (xd.remaining > targetRem + 1e-6) {
+          const tt = (xd.remaining - targetRem) / power(stepById.get(d), xd.workers.length);
+          if (tt < dt) dt = tt;
+        }
+      }
     }
     if (!isFinite(dt)) break;
     for (const s of steps) { const x = st.get(s.id); if (x.status === 'active' && x.workers.length > 0) x.remaining -= power(s, x.workers.length) * dt; }

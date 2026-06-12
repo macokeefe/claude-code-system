@@ -185,6 +185,14 @@ label { display: block; font-weight: 600; font-size: 12px; margin-bottom: 4px; c
   border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3); cursor: crosshair;
 }
 .map-handle:hover { background: #14468f; transform: translateY(-50%) scale(1.18); }
+.ov-anchor { position: absolute; transform: translateX(-50%); z-index: 6; }
+.ov-pill { font: inherit; font-size: 10.5px; font-weight: 700; border: 1px solid var(--border); background: #fff; color: var(--text-soft); border-radius: 999px; padding: 1px 7px; cursor: pointer; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,0.14); }
+.ov-pill.on { background: #1a56b0; border-color: #1a56b0; color: #fff; }
+.ov-menu { position: absolute; left: 50%; top: 22px; transform: translateX(-50%); background: #fff; border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.18); padding: 6px; width: 196px; z-index: 30; }
+.ov-menu-title { font-size: 11px; color: var(--text-soft); padding: 2px 6px 6px; }
+.ov-opt { display: block; width: 100%; text-align: left; font-size: 12px; padding: 5px 8px; border: none; background: none; border-radius: 5px; cursor: pointer; }
+.ov-opt:hover { background: var(--accent-soft); }
+.ov-opt.sel { background: var(--accent); color: #fff; }
 
 .chip-mini {
   font: inherit; font-size: 12px; font-weight: 700; border: 1px solid var(--border);

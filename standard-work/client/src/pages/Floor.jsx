@@ -549,7 +549,7 @@ export default function Floor() {
   const durOfStep = s => (activeSize && s.size_times && s.size_times[activeSize] != null) ? s.size_times[activeSize] : (s.effective_seconds || 0);
 
   const simSteps = useMemo(() => detail ? detail.steps.map(s => ({
-    id: s.id, depends_on: s.depends_on || [],
+    id: s.id, depends_on: s.depends_on || [], dep_overlap: s.dep_overlap || null,
     effective_seconds: durOfStep(s),
     helpable: !!s.helpable, help_seconds: s.help_seconds || 0,
   })) : [], [detail, activeSize]); // eslint-disable-line

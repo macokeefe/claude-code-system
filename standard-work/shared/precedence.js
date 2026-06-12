@@ -9,24 +9,40 @@
 export function criticalPath(steps) {
   const byId = new Map(steps.map(s => [s.id, s]));
   const dur = s => s.effective_seconds || 0;
-  const memo = new Map();
+  // overlap(s, d): fraction of prerequisite d that must be done before s starts.
+  // Default 1 (d must fully finish). < 1 lets s start partway through d.
+  const ovOf = (s, d) => (s.dep_overlap && s.dep_overlap[d] != null) ? s.dep_overlap[d] : 1;
+  const esMemo = new Map();
+  const efMemo = new Map();
   const inStack = new Set();
   let hasCycle = false;
 
-  // Earliest finish = max(earliest finish of deps) + own duration.
-  function ef(id) {
-    if (memo.has(id)) return memo.get(id);
+  // Earliest start = latest moment any prerequisite reaches its required
+  // fraction: es(d) + overlap·dur(d).
+  function es(id) {
+    if (esMemo.has(id)) return esMemo.get(id);
     if (inStack.has(id)) { hasCycle = true; return 0; }
     inStack.add(id);
     const s = byId.get(id);
-    let maxDep = 0;
+    let start = 0;
     for (const d of (s.depends_on || [])) {
-      if (byId.has(d)) maxDep = Math.max(maxDep, ef(d));
+      if (byId.has(d)) start = Math.max(start, es(d) + ovOf(s, d) * dur(byId.get(d)));
     }
     inStack.delete(id);
-    const v = maxDep + dur(s);
-    memo.set(id, v);
-    return v;
+    esMemo.set(id, start);
+    return start;
+  }
+  // Earliest finish = start + duration, but never before a partially-overlapped
+  // supplier finishes (can't deliver the last unit before it's made).
+  function ef(id) {
+    if (efMemo.has(id)) return efMemo.get(id);
+    const s = byId.get(id);
+    let finish = es(id) + dur(s);
+    for (const d of (s.depends_on || [])) {
+      if (byId.has(d) && ovOf(s, d) < 1) finish = Math.max(finish, ef(d));
+    }
+    efMemo.set(id, finish);
+    return finish;
   }
 
   let criticalSeconds = 0;
@@ -36,16 +52,19 @@ export function criticalPath(steps) {
     if (e > criticalSeconds) { criticalSeconds = e; endId = s.id; }
   }
 
-  // Walk back along a longest path to mark the critical steps.
+  // Walk back along the binding chain to mark the critical steps.
   const critical = new Set();
   function walk(id) {
     if (id == null || critical.has(id)) return;
     critical.add(id);
     const s = byId.get(id);
-    const target = ef(id) - dur(s);
+    let best = null, bestVal = -1;
     for (const d of (s.depends_on || [])) {
-      if (byId.has(d) && ef(d) === target) { walk(d); break; }
+      if (!byId.has(d)) continue;
+      const v = Math.max(es(d) + ovOf(s, d) * dur(byId.get(d)), ovOf(s, d) < 1 ? ef(d) : 0);
+      if (v > bestVal) { bestVal = v; best = d; }
     }
+    if (best != null && bestVal >= es(id) - 1e-6) walk(best);
   }
   walk(endId);
 

@@ -25,6 +25,7 @@ export default function ProcessMap() {
   const [marquee, setMarquee] = useState(null);  // {x0,y0,x1,y1}
   const [error, setError] = useState('');
   const [hoverArrow, setHoverArrow] = useState(null);
+  const [editArrow, setEditArrow] = useState(null); // "fromId-toId" being overlap-edited
   const [zoom, setZoom] = useState(1);
 
   const load = useCallback(() => { if (skuId != null) return api.get(`/api/skus/${skuId}`).then(setDetail); }, [skuId]);
@@ -147,6 +148,7 @@ export default function ProcessMap() {
 
   function onBoardPointerDown(e) {
     // background press (notes/handles stop propagation) → start a marquee
+    setEditArrow(null);
     const b = boardXY(e);
     setMarquee({ x0: b.x, y0: b.y, x1: b.x, y1: b.y });
   }
@@ -179,11 +181,25 @@ export default function ProcessMap() {
     await api.put(`/api/steps/${toId}`, { depends_on: (target.depends_on || []).filter(d => d !== fromId) });
     await load();
   }
+  // overlap: how much of the prerequisite (fromId) must be done before the
+  // dependent (toId) may start. frac >= 1 clears it (full dependency).
+  async function setOverlap(fromId, toId, frac) {
+    const target = detail.steps.find(s => s.id === toId);
+    const cur = { ...(target.dep_overlap || {}) };
+    if (frac >= 1) delete cur[fromId]; else cur[fromId] = frac;
+    setEditArrow(null);
+    await api.put(`/api/steps/${toId}`, { dep_overlap: cur });
+    await load();
+  }
 
   // arrows: prerequisite (from) -> dependent (to)
   const arrows = [];
   if (detail) for (const s of detail.steps) for (const d of (s.depends_on || [])) {
-    if (pos[d] && pos[s.id]) arrows.push({ fromId: d, toId: s.id, critical: criticalSet.has(d) && criticalSet.has(s.id) });
+    if (pos[d] && pos[s.id]) arrows.push({
+      fromId: d, toId: s.id,
+      critical: criticalSet.has(d) && criticalSet.has(s.id),
+      overlap: (s.dep_overlap && s.dep_overlap[d] != null) ? s.dep_overlap[d] : 1,
+    });
   }
   const anchor = (id, side) => {
     const p = pos[id] || { x: 0, y: 0 };
@@ -217,7 +233,7 @@ export default function ProcessMap() {
         </span>
         <button className="primary small" title="Use these prerequisites to design an optimized line" onClick={() => navigate('/workflows')}>⚙ Optimize this process →</button>
       </div>
-      <p className="subtitle">Drag sticky notes anywhere. Drag a box around several to select them, or <strong>shift-click</strong> to add/remove — then drag any one to move the whole group. To set a prerequisite, drag from a note's <strong>● right handle</strong> onto another note (the arrow means “must finish before”). To delete an arrow, click its <strong>✕</strong>. These arrows are the real dependencies: they drive the critical path, the simulation, and the line. Red = on the critical path.{selected.size > 1 && <strong style={{ color: '#1a56b0' }}> · {selected.size} selected</strong>}</p>
+      <p className="subtitle">Drag sticky notes anywhere. Drag a box around several to select them, or <strong>shift-click</strong> to add/remove — then drag any one to move the whole group. To set a prerequisite, drag from a note's <strong>● right handle</strong> onto another note (the arrow means “must finish before”). To delete an arrow, click its <strong>✕</strong>. Click an arrow's <strong>“after 100%”</strong> pill to let the next step start before this one fully finishes (e.g. once a few connectors are ready) — the arrow goes dashed. These arrows are the real dependencies: they drive the critical path, the simulation, and the line. Red = on the critical path.{selected.size > 1 && <strong style={{ color: '#1a56b0' }}> · {selected.size} selected</strong>}</p>
 
       {error && <div className="alert error">{error}</div>}
 
@@ -246,6 +262,7 @@ export default function ProcessMap() {
               return (
                 <g key={i}>
                   <path d={path} fill="none" stroke={a.critical ? '#b3261e' : '#7a828f'} strokeWidth={hot ? 3.5 : 2}
+                    strokeDasharray={a.overlap < 1 ? '8 5' : undefined}
                     markerEnd={`url(#${a.critical ? 'ahr' : 'ah'})`} />
                   <path d={path} fill="none" stroke="transparent" strokeWidth="16" style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
                     onPointerEnter={() => setHoverArrow(i)} onPointerLeave={() => setHoverArrow(null)}
@@ -288,6 +305,33 @@ export default function ProcessMap() {
                 <div className="map-note-time">{t > 0 ? formatTime(t) : 'no time'}{crit ? ' · critical' : ''}</div>
                 <div className="map-handle" title="drag to a note this comes BEFORE"
                   onPointerDown={e => { e.stopPropagation(); const b = boardXY(e); setLink({ fromId: s.id, x: b.x, y: b.y }); }} />
+              </div>
+            );
+          })}
+
+          {/* overlap pills — set how much of a prerequisite must be done first */}
+          {arrows.map((a, i) => {
+            const s = anchor(a.fromId, 'out'), t = anchor(a.toId, 'in');
+            const mx = (s.x + t.x) / 2, my = (s.y + t.y) / 2 + 17;
+            const key = `${a.fromId}-${a.toId}`;
+            const partial = a.overlap < 1;
+            return (
+              <div key={key} className="ov-anchor" style={{ left: mx, top: my }}>
+                <button className={`ov-pill ${partial ? 'on' : ''}`}
+                  title="When can the next step start? Click to set how much of this prerequisite must be done first."
+                  onPointerDown={e => e.stopPropagation()}
+                  onClick={e => { e.stopPropagation(); setEditArrow(editArrow === key ? null : key); }}>
+                  {partial ? `start @ ${Math.round(a.overlap * 100)}%` : 'after 100%'}
+                </button>
+                {editArrow === key && (
+                  <div className="ov-menu" onPointerDown={e => e.stopPropagation()}>
+                    <div className="ov-menu-title">Next step can start when this is…</div>
+                    {[[1, 'fully done (100%)'], [0.75, '75% done'], [0.5, 'half done (50%)'], [0.25, '25% done'], [0.1, 'just started (10%)']].map(([f, lbl]) => (
+                      <button key={f} className={`ov-opt ${a.overlap === f ? 'sel' : ''}`}
+                        onClick={() => setOverlap(a.fromId, a.toId, f)}>{lbl}</button>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}
