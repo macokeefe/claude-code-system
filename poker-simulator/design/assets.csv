@@ -1,0 +1,12 @@
+id,role,type,description,size/ratio,style line ref,source
+bg_room,ambient casino backdrop behind the table,background,midnight casino lounge interior,16:9,STYLE FORMULA,generate
+portrait_viktor,opponent avatar — tight-aggressive shark,sprite,poised man in midnight suit,1:1,STYLE FORMULA,generate
+portrait_lena,opponent avatar — balanced pro,sprite,calm woman in dark blazer,1:1,STYLE FORMULA,generate
+portrait_sonny,opponent avatar — loose-aggressive maniac,sprite,grinning young man loosened tie,1:1,STYLE FORMULA,generate
+portrait_gus,opponent avatar — tight-passive rock,sprite,stoic older bearded man,1:1,STYLE FORMULA,generate
+portrait_rita,opponent avatar — loose-passive station,sprite,cheerful woman with cocktail,1:1,STYLE FORMULA,generate
+cardback,back face of every dealt card,ui,ornate gold-on-emerald card back,1:1,STYLE FORMULA,generate
+felt_table,poker table surface and walnut rim,procedural,radial emerald felt gradient with walnut wood rim,n/a,STYLE FORMULA,procedural
+cards_faces,52 playing card faces,procedural,ivory cards with classic red/black pips and gold court accents,n/a,STYLE FORMULA,procedural
+chips,bet and pot chip stacks,procedural,dark chips with luminous gold edge ticks,n/a,STYLE FORMULA,procedural
+sfx,deal/chip/win sounds,procedural,subtle synthesized clicks and chimes via WebAudio,n/a,n/a,procedural

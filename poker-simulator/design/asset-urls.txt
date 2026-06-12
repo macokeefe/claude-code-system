@@ -1,0 +1,14 @@
+Generated asset URLs (Higgsfield CDN) — download into public/assets/ once
+the network allowlist permits d8j0ntlcm91z4.cloudfront.net.
+
+bg_room.png   https://d8j0ntlcm91z4.cloudfront.net/user_32iSetbQFY92PpvJEgIu4TFAi2r/hf_20260612_194304_39bb978f-8d11-4efb-b849-1543082e6150.png
+viktor.png    https://d8j0ntlcm91z4.cloudfront.net/user_32iSetbQFY92PpvJEgIu4TFAi2r/hf_20260612_195030_0ab070c7-7d3a-45a3-ade3-d6a57c53b173.png
+lena.png      https://d8j0ntlcm91z4.cloudfront.net/user_32iSetbQFY92PpvJEgIu4TFAi2r/hf_20260612_195031_e7b020bc-5952-4288-98a7-f6cd6b313ff1.png
+sonny.png     https://d8j0ntlcm91z4.cloudfront.net/user_32iSetbQFY92PpvJEgIu4TFAi2r/hf_20260612_195032_fd03bcdd-725a-4fbc-9c28-66c5af791396.png
+gus.png       https://d8j0ntlcm91z4.cloudfront.net/user_32iSetbQFY92PpvJEgIu4TFAi2r/hf_20260612_195033_02cd38f2-0aa0-4dd1-a5d9-6e90f99b7886.png
+rita.png      https://d8j0ntlcm91z4.cloudfront.net/user_32iSetbQFY92PpvJEgIu4TFAi2r/hf_20260612_195033_58f1df67-8907-4035-b332-1581319c8d49.png
+cardback.png  https://d8j0ntlcm91z4.cloudfront.net/user_32iSetbQFY92PpvJEgIu4TFAi2r/hf_20260612_195034_32f0c42b-5114-4afe-8256-90ee8d1c4ffe.png
+
+Marketplace card images (passed as URLs to deploy_game, no download needed):
+thumbnail (16:9)  https://d8j0ntlcm91z4.cloudfront.net/user_32iSetbQFY92PpvJEgIu4TFAi2r/hf_20260612_195036_5f489a93-b28d-4e13-924d-2682bb356338.png
+favicon (1:1)     https://d8j0ntlcm91z4.cloudfront.net/user_32iSetbQFY92PpvJEgIu4TFAi2r/hf_20260612_195037_05663781-d38a-429f-b406-3fc8b64d49ef.png
