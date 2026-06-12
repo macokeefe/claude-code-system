@@ -13,6 +13,7 @@ import LineDesigner from './pages/LineDesigner.jsx';
 import ProcessMap from './pages/ProcessMap.jsx';
 import Workflows from './pages/Workflows.jsx';
 import Compare from './pages/Compare.jsx';
+import Layout from './pages/Layout.jsx';
 import Staffing from './pages/Staffing.jsx';
 import Assistant from './pages/Assistant.jsx';
 
@@ -32,6 +33,7 @@ export default function App() {
         <NavLink to="/line">Line Designer</NavLink>
         <NavLink to="/map">Process Map</NavLink>
         <NavLink to="/workflows">Workflows</NavLink>
+        <NavLink to="/layout">Layout</NavLink>
         <NavLink to="/improvements">Improvements</NavLink>
         <NavLink to="/floor">3D Floor</NavLink>
         <NavLink to="/import">Import</NavLink>
@@ -68,6 +70,7 @@ export default function App() {
           <Route path="/line" element={<LineDesigner />} />
           <Route path="/map" element={<ProcessMap />} />
           <Route path="/workflows" element={<Workflows />} />
+          <Route path="/layout" element={<Layout />} />
           <Route path="/improvements" element={<Improvements />} />
           <Route path="/floor" element={<Floor />} />
           <Route path="/assistant" element={<Assistant />} />

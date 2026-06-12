@@ -200,6 +200,19 @@ backends alongside depends_on (server col `dep_overlap TEXT`). Honored by:
 NOT yet in workflow snapshots or the optimizer (line balance is station-level;
 overlap is cross-station start timing). schedule.js is unused.
 
+## Layout tester (2026-06)
+
+`Layout.jsx` — top-down floor plan (metres, FW30×FH17) to test physical
+arrangements. Drag the ≤8 stations (grouped via the same saved-line /
+auto-balance logic as the 3D floor) and one or more **parts carts**. Metrics:
+total product flow path (1→n centre-to-centre), longest single hop (flagged
+red >6 m), cart→station total (each station fed by its nearest cart), farthest
+station from a cart (flagged >7 m). Presets: Single row / Two rows
+(serpentine) / U-shape / Cell. Saved per product `sw-layout-<sku>`
+{stations:[{x,y}], carts:[{x,y}]}. Pure SVG + pointer drag, no deps.
+NOT yet wired to drive the 3D floor's bench positions (3D still lays one row);
+possible future link.
+
 ## Open items
 
 - Meritage: not yet modeled — waiting on a readable copy (app Export Excel →
