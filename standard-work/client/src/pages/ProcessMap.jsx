@@ -20,6 +20,7 @@ export default function ProcessMap() {
   const [link, setLink] = useState(null);        // {fromId, x, y}
   const [error, setError] = useState('');
   const [hoverArrow, setHoverArrow] = useState(null);
+  const [zoom, setZoom] = useState(1);
 
   const load = useCallback(() => { if (skuId != null) return api.get(`/api/skus/${skuId}`).then(setDetail); }, [skuId]);
   useEffect(() => { api.get('/api/skus').then(list => { setSkus(list); if (list.length) setSkuId(p => p ?? list[0].id); }); }, []);
@@ -34,8 +35,9 @@ export default function ProcessMap() {
     if (!detail) return;
     const saved = loadPos(skuId);
     const have = detail.steps.every(s => saved[s.id]);
-    if (have) setPos(saved);
-    else setPos(autoArrange());
+    const next = have ? saved : autoArrange();
+    setPos(next);
+    fitView(next);
   }, [detail]); // eslint-disable-line
 
   useEffect(() => { if (detail && Object.keys(pos).length) savePos(skuId, pos); }, [pos]); // eslint-disable-line
@@ -65,7 +67,23 @@ export default function ProcessMap() {
 
   function boardXY(e) {
     const r = boardRef.current.getBoundingClientRect();
-    return { x: e.clientX - r.left + boardRef.current.scrollLeft, y: e.clientY - r.top + boardRef.current.scrollTop };
+    return {
+      x: (e.clientX - r.left + boardRef.current.scrollLeft) / zoom,
+      y: (e.clientY - r.top + boardRef.current.scrollTop) / zoom,
+    };
+  }
+
+  // Scale the whole graph so it fits inside the visible board (never above 1×).
+  function fitView(p) {
+    const el = boardRef.current;
+    if (!el) return;
+    const vals = Object.values(p || {});
+    if (!vals.length) return;
+    const cw = Math.max(900, ...vals.map(q => q.x + NW + 40));
+    const ch = Math.max(520, ...vals.map(q => q.y + NH + 40));
+    const z = Math.min(1, (el.clientWidth - 8) / cw, (el.clientHeight - 8) / ch);
+    setZoom(Math.max(0.4, Number(z.toFixed(3))));
+    el.scrollTo({ left: 0, top: 0 });
   }
 
   function onPointerMove(e) {
@@ -133,7 +151,12 @@ export default function ProcessMap() {
             {sizes.map(sz => <option key={sz} value={sz}>{sizeLabel(sz)}</option>)}
           </select>
         )}
-        <button className="small" onClick={() => { const a = autoArrange(); setPos(a); }}>⤢ Auto-arrange</button>
+        <button className="small" onClick={() => { const a = autoArrange(); setPos(a); fitView(a); }}>⤢ Auto-arrange</button>
+        <span className="zoom-ctl">
+          <button className="small" title="zoom out" onClick={() => setZoom(z => Math.max(0.4, Number((z - 0.1).toFixed(2))))}>−</button>
+          <button className="small" title="fit to screen" onClick={() => fitView(pos)}>{Math.round(zoom * 100)}%</button>
+          <button className="small" title="zoom in" onClick={() => setZoom(z => Math.min(1.6, Number((z + 0.1).toFixed(2))))}>＋</button>
+        </span>
       </div>
       <p className="subtitle">Drag sticky notes anywhere. To set a prerequisite, drag from a note's <strong>● right handle</strong> onto another note — the arrow means “must finish before.” Click an arrow to delete it. These arrows are the real dependencies: they drive the critical path, the simulation, and the line. Red = on the critical path.</p>
 
@@ -141,8 +164,10 @@ export default function ProcessMap() {
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div ref={boardRef} className="map-board"
-          style={{ position: 'relative', width: '100%', height: 560, overflow: 'auto', background: '#f3f5f8', backgroundImage: 'radial-gradient(#d6dbe3 1px, transparent 1px)', backgroundSize: '22px 22px' }}
+          style={{ position: 'relative', width: '100%', height: 560, overflow: 'auto', background: '#f3f5f8', backgroundImage: 'radial-gradient(#d6dbe3 1px, transparent 1px)', backgroundSize: `${22 * zoom}px ${22 * zoom}px` }}
           onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={() => { setDrag(null); setLink(null); }}>
+          <div className="map-canvas" style={{ position: 'relative', width: maxX * zoom, height: maxY * zoom }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, width: maxX, height: maxY, transform: `scale(${zoom})`, transformOrigin: '0 0' }}>
           <svg width={maxX} height={maxY} style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}>
             <defs>
               <marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
@@ -191,6 +216,8 @@ export default function ProcessMap() {
               </div>
             );
           })}
+          </div>
+          </div>
         </div>
       </div>
       <p className="muted" style={{ fontSize: 12 }}>

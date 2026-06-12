@@ -165,6 +165,9 @@ label { display: block; font-weight: 600; font-size: 12px; margin-bottom: 4px; c
 .sticky-warn { font-size: 11px; color: #b3261e; font-weight: 700; margin-top: 3px; }
 
 .map-board { touch-action: none; user-select: none; }
+.zoom-ctl { display: inline-flex; gap: 2px; align-items: center; }
+.zoom-ctl button { min-width: 30px; text-align: center; }
+.zoom-ctl button:nth-child(2) { min-width: 52px; font-variant-numeric: tabular-nums; }
 .map-note {
   position: absolute; border-radius: 8px; padding: 7px 9px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.18); border: 2px solid rgba(0,0,0,0.08);
