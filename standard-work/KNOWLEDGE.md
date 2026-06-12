@@ -123,6 +123,20 @@ existing DBs). Per the engineer:
 This corrected the earlier seeded graph (rivnut no longer gates Frame Sub;
 caps depend on the frame, not the middle leg) → critical path dropped.
 
+## Process model direction (2026-06)
+
+The engineer rejected the 'operators run all over the floor every spare
+second' model as unrealistic. Target = a balanced ASSEMBLY LINE: each
+operator stays at one station doing the same grouped steps on every unit;
+units flow station to station; output rate = the slowest (bottleneck)
+station. Optimization = group steps into stations to minimize the
+bottleneck (line balancing); add a 2nd person only to the bottleneck.
+The Line Designer page (sticky-note whiteboard) is the design tool for
+this: drag steps into stations, per-note worker stepper adjusts time,
+shows cycle time / units-per-shift / operators / balance % and flags
+precedence violations. Next: a 'line mode' in the 3D floor where
+operators are fixed at stations and units flow past.
+
 ## Open items
 
 - Meritage: not yet modeled — waiting on a readable copy (app Export Excel →

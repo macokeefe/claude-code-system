@@ -9,6 +9,7 @@ import ImportPage from './pages/ImportPage.jsx';
 import Planner from './pages/Planner.jsx';
 import Improvements from './pages/Improvements.jsx';
 import Floor from './pages/Floor.jsx';
+import LineDesigner from './pages/LineDesigner.jsx';
 import Staffing from './pages/Staffing.jsx';
 import Assistant from './pages/Assistant.jsx';
 
@@ -24,6 +25,7 @@ export default function App() {
         <NavLink to="/tags">Shared Steps</NavLink>
         <NavLink to="/planner">Day Planner</NavLink>
         <NavLink to="/staffing">Staffing</NavLink>
+        <NavLink to="/line">Line Designer</NavLink>
         <NavLink to="/improvements">Improvements</NavLink>
         <NavLink to="/floor">3D Floor</NavLink>
         <NavLink to="/import">Import</NavLink>
@@ -56,6 +58,7 @@ export default function App() {
           <Route path="/import" element={<ImportPage />} />
           <Route path="/planner" element={<Planner />} />
           <Route path="/staffing" element={<Staffing />} />
+          <Route path="/line" element={<LineDesigner />} />
           <Route path="/improvements" element={<Improvements />} />
           <Route path="/floor" element={<Floor />} />
           <Route path="/assistant" element={<Assistant />} />
