@@ -17,84 +17,78 @@ function fullName(s) { return (s.tag_id ? s.tag_name : s.name) || ''; }
 /* ---------- materials & textures (modeled on the real floor photos) ---------- */
 
 function concreteTexture() {
+  // Polished light-grey concrete: subtle variation only, no heavy staining —
+  // reads as a clean, modern plant in presentations.
   const c = document.createElement('canvas'); c.width = c.height = 512;
   const x = c.getContext('2d');
-  x.fillStyle = '#b9bcbe'; x.fillRect(0, 0, 512, 512);
-  // mottled stains and patches like worn shop concrete
-  for (let i = 0; i < 260; i++) {
-    const r = 8 + Math.random() * 60;
-    const g = 150 + Math.floor(Math.random() * 60);
-    x.fillStyle = `rgba(${g},${g},${g + 4},${0.04 + Math.random() * 0.08})`;
+  x.fillStyle = '#cdd1d4'; x.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 120; i++) {
+    const r = 20 + Math.random() * 80;
+    const g = 196 + Math.floor(Math.random() * 24);
+    x.fillStyle = `rgba(${g},${g},${g + 3},${0.03 + Math.random() * 0.05})`;
     x.beginPath(); x.arc(Math.random() * 512, Math.random() * 512, r, 0, 7); x.fill();
   }
-  for (let i = 0; i < 40; i++) {
-    x.fillStyle = `rgba(120,118,112,${0.05 + Math.random() * 0.06})`;
-    x.fillRect(Math.random() * 512, Math.random() * 512, 2 + Math.random() * 30, 1 + Math.random() * 3);
+  // faint saw-cut control joints
+  x.strokeStyle = 'rgba(140,144,148,0.25)'; x.lineWidth = 1.5;
+  for (const p of [128, 256, 384]) {
+    x.beginPath(); x.moveTo(p, 0); x.lineTo(p, 512); x.stroke();
+    x.beginPath(); x.moveTo(0, p); x.lineTo(512, p); x.stroke();
   }
   const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(7, 7);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(8, 8);
   return t;
 }
 
 const MAT = {};
 function initMats() {
-  MAT.pine = new THREE.MeshStandardMaterial({ color: 0xc89a5e, roughness: 0.85 });       // bench lumber
-  MAT.benchTop = new THREE.MeshStandardMaterial({ color: 0xf0ece2, roughness: 0.95 });   // white padded top
-  MAT.trimBlue = new THREE.MeshStandardMaterial({ color: 0x3556a8, roughness: 0.8 });
-  MAT.trimRed = new THREE.MeshStandardMaterial({ color: 0xa33a2e, roughness: 0.8 });
-  MAT.binYellow = new THREE.MeshStandardMaterial({ color: 0xe6b820, roughness: 0.7 });
-  MAT.binBlue = new THREE.MeshStandardMaterial({ color: 0x2456b0, roughness: 0.7 });
-  MAT.cherry = new THREE.MeshStandardMaterial({ color: 0x8f5a2e, roughness: 0.45, metalness: 0.25 }); // frame finish
-  MAT.chrome = new THREE.MeshStandardMaterial({ color: 0xd8dde2, roughness: 0.25, metalness: 0.9 });
-  MAT.mat = new THREE.MeshStandardMaterial({ color: 0x2b2f35, roughness: 0.95 });        // anti-fatigue mat
-  MAT.matEdge = new THREE.MeshStandardMaterial({ color: 0xd9c427, roughness: 0.9 });
-  MAT.tape = new THREE.MeshStandardMaterial({ color: 0xd9c427, roughness: 0.9 });
-  MAT.column = new THREE.MeshStandardMaterial({ color: 0xe8e8e6, roughness: 0.9 });
-  MAT.rackPost = new THREE.MeshStandardMaterial({ color: 0xc25e2a, roughness: 0.8 });    // orange pallet racking
-  MAT.rackBeam = new THREE.MeshStandardMaterial({ color: 0xb44a22, roughness: 0.8 });
-  MAT.box = new THREE.MeshStandardMaterial({ color: 0xc9a877, roughness: 0.95 });        // cardboard
+  // Muted, premium palette — same real-floor elements, boardroom finish.
+  MAT.pine = new THREE.MeshStandardMaterial({ color: 0xc9a06c, roughness: 0.8 });        // bench lumber
+  MAT.benchTop = new THREE.MeshStandardMaterial({ color: 0xf4f1e9, roughness: 0.9 });    // white padded top
+  MAT.trimBlue = new THREE.MeshStandardMaterial({ color: 0x2e4a7a, roughness: 0.75 });   // single navy trim
+  MAT.trimRed = MAT.trimBlue;                                                            // no alternating colors
+  MAT.binYellow = new THREE.MeshStandardMaterial({ color: 0xd3aa3a, roughness: 0.7 });
+  MAT.binBlue = new THREE.MeshStandardMaterial({ color: 0x33598f, roughness: 0.7 });
+  MAT.cherry = new THREE.MeshStandardMaterial({ color: 0x8a5a32, roughness: 0.4, metalness: 0.3 }); // frame finish
+  MAT.chrome = new THREE.MeshStandardMaterial({ color: 0xdce0e4, roughness: 0.22, metalness: 0.9 });
+  MAT.mat = new THREE.MeshStandardMaterial({ color: 0x32363c, roughness: 0.95 });        // anti-fatigue mat
+  MAT.matEdge = new THREE.MeshStandardMaterial({ color: 0xc7b53e, roughness: 0.9 });
+  MAT.tape = new THREE.MeshStandardMaterial({ color: 0xd9c544, roughness: 0.85 });
+  MAT.column = new THREE.MeshStandardMaterial({ color: 0xf0f0ee, roughness: 0.85 });
+  MAT.rackPost = new THREE.MeshStandardMaterial({ color: 0x8b9098, roughness: 0.7 });    // steel-grey racking
+  MAT.rackBeam = new THREE.MeshStandardMaterial({ color: 0x6f747c, roughness: 0.7 });
+  MAT.box = new THREE.MeshStandardMaterial({ color: 0xcbb08a, roughness: 0.95 });        // cardboard
   MAT.boxWhite = new THREE.MeshStandardMaterial({ color: 0xf2f2ef, roughness: 0.9 });
-  MAT.hose = new THREE.MeshStandardMaterial({ color: 0xc23b2e, roughness: 0.6 });
-  MAT.shirt = new THREE.MeshStandardMaterial({ color: 0x6d7480, roughness: 0.9 });       // crew gray tee
-  MAT.pants = new THREE.MeshStandardMaterial({ color: 0x2e3440, roughness: 0.9 });
+  MAT.hose = new THREE.MeshStandardMaterial({ color: 0xa83d33, roughness: 0.55 });
+  MAT.shirt = new THREE.MeshStandardMaterial({ color: 0x767d88, roughness: 0.9 });       // crew gray tee
+  MAT.pants = new THREE.MeshStandardMaterial({ color: 0x31363f, roughness: 0.9 });
   MAT.skin = new THREE.MeshStandardMaterial({ color: 0xc89576, roughness: 0.8 });
   MAT.steel = new THREE.MeshStandardMaterial({ color: 0x9aa0a8, roughness: 0.5, metalness: 0.6 });
-  MAT.brass = new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: 0.35, metalness: 0.8 });
+  MAT.brass = new THREE.MeshStandardMaterial({ color: 0xb89a3a, roughness: 0.35, metalness: 0.8 });
 }
 
-function makeLabel(seq, name, timeStr) {
-  // Big, bold, dark text on a white card with a heavy colored header.
-  const W = 900, H = 340;
+function makeStationLabel(idx, stepNames, timeStr) {
+  // Executive station sign: white card, navy header with STATION n and the
+  // station's total time, then up to three step lines in heavy dark type.
+  const W = 920, H = 380;
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const x = c.getContext('2d');
-  x.fillStyle = 'rgba(0,0,0,0.32)'; x.beginPath(); x.roundRect(12, 18, W - 18, H - 22, 26); x.fill();
-  x.fillStyle = '#ffffff'; x.beginPath(); x.roundRect(6, 8, W - 24, H - 30, 26); x.fill();
-  x.fillStyle = '#143e85'; x.beginPath(); x.roundRect(6, 8, W - 24, 92, 26); x.fill();
-  x.fillStyle = '#ffffff'; x.font = '900 64px Arial, sans-serif'; x.textAlign = 'left';
-  x.fillText(`STEP ${seq}`, 34, 76);
-  x.textAlign = 'right'; x.font = '900 60px "Courier New", monospace';
-  x.fillText(timeStr, W - 40, 75);
-  // name — large, near-black, with a stroke for extra weight, wrapped to 2 lines
-  x.textAlign = 'center';
-  x.font = '900 78px Arial, sans-serif';
-  const words = String(name).split(' ');
-  const lines = []; let cur = '';
-  for (const w of words) {
-    if ((cur + ' ' + w).trim().length > 15 && cur) { lines.push(cur.trim()); cur = w; }
-    else cur = (cur + ' ' + w).trim();
-  }
-  if (cur) lines.push(cur);
-  const two = lines.slice(0, 2);
-  const startY = two.length === 1 ? 232 : 198;
-  two.forEach((ln, i) => {
-    const y = startY + i * 82;
-    x.lineJoin = 'round'; x.strokeStyle = '#0a0e14'; x.lineWidth = 6; x.strokeText(ln, W / 2, y);
-    x.fillStyle = '#0a0e14'; x.fillText(ln, W / 2, y);
-  });
-
+  x.fillStyle = 'rgba(10,16,26,0.18)'; x.beginPath(); x.roundRect(14, 20, W - 22, H - 26, 22); x.fill();
+  x.fillStyle = '#ffffff'; x.beginPath(); x.roundRect(8, 10, W - 26, H - 32, 22); x.fill();
+  x.fillStyle = '#1d3a66'; x.beginPath(); x.roundRect(8, 10, W - 26, 88, 22); x.fill();
+  x.fillStyle = '#1d3a66'; x.fillRect(8, 60, W - 26, 38); // square off header bottom
+  x.fillStyle = '#ffffff'; x.font = '900 58px Arial, sans-serif'; x.textAlign = 'left';
+  x.fillText(`STATION ${idx + 1}`, 36, 76);
+  x.textAlign = 'right'; x.font = '800 52px Arial, sans-serif';
+  x.fillText(timeStr, W - 44, 74);
+  // step list — bold, near-black, generous size
+  x.textAlign = 'left'; x.fillStyle = '#10151d';
+  const lines = stepNames.slice(0, 3).map(n => n.length > 24 ? n.slice(0, 23) + '…' : n);
+  if (stepNames.length > 3) lines[2] = `+ ${stepNames.length - 2} more steps`;
+  x.font = '800 58px Arial, sans-serif';
+  lines.forEach((ln, i) => x.fillText(ln, 40, 178 + i * 78));
   const tex = new THREE.CanvasTexture(c); tex.anisotropy = 8;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-  sp.scale.set(5.2, 1.96, 1);
+  sp.scale.set(4.6, 1.9, 1);
   sp.renderOrder = 999;
   return sp;
 }
@@ -315,13 +309,14 @@ function stationVisualFor(step) {
   return visGeneric();
 }
 
-/* Workbench like the photos: pine frame, white padded top, bins on the shelf. */
-function makeBench(i) {
+/* Workbench like the photos: pine frame, white padded top, bins on the shelf.
+   Status = a slim andon LED strip along the front edge (no cartoon floor ring). */
+function makeBench() {
   const st = new THREE.Group();
   const top = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.14, 1.7), MAT.benchTop);
   top.position.y = 0.96; top.castShadow = true; top.receiveShadow = true;
   st.add(top);
-  const trim = new THREE.Mesh(new THREE.BoxGeometry(2.72, 0.05, 1.72), i % 2 ? MAT.trimRed : MAT.trimBlue);
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(2.72, 0.05, 1.72), MAT.trimBlue);
   trim.position.y = 0.875; st.add(trim);
   for (const [lx, lz] of [[-1.2, -0.7], [1.2, -0.7], [-1.2, 0.7], [1.2, 0.7]]) {
     const leg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.95, 0.14), MAT.pine);
@@ -340,11 +335,15 @@ function makeBench(i) {
     const edge = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.027, 0.09), MAT.matEdge);
     edge.position.set(0, 0.014, 1.55 + dz); st.add(edge);
   }
-  // status ring under the bench
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.85, 0.05, 10, 48), new THREE.MeshStandardMaterial({ color: RING.idle, emissive: 0x000000 }));
-  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.03;
-  st.add(ring);
-  return { st, ring };
+  // andon LED strip on the front edge of the bench top
+  const led = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.055, 0.05),
+    new THREE.MeshStandardMaterial({ color: RING.idle, emissive: 0x000000, emissiveIntensity: 1.6, roughness: 0.4 }));
+  led.position.set(0, 1.045, 0.875);
+  st.add(led);
+  // overhead coiled air-hose drop
+  const hose = makeHose(); hose.position.set(0.95, 0, -0.45);
+  st.add(hose);
+  return { st, led: led.material };
 }
 
 /* Coiled red air hose dropping from overhead, like the photos. */
@@ -401,18 +400,20 @@ function makeFan() {
 
 /* ------------------------------- component ------------------------------- */
 
-const OP_COLORS = [0x2d6cdf, 0xd9772e, 0x1c7c3c, 0xb03a9c, 0xc9a227, 0x16a3a3, 0xb3261e, 0x5b5ea6];
+const OP_COLORS = [0x3a66a8, 0xb9772e, 0x2e7d4f, 0x8f5390, 0xa8923a, 0x3f8f8f, 0x9c4f45, 0x5c5f99];
 
 function makeNameTag(name, colorHex) {
-  const c = document.createElement('canvas'); c.width = 320; c.height = 96;
+  const c = document.createElement('canvas'); c.width = 320; c.height = 92;
   const x = c.getContext('2d');
+  x.fillStyle = '#ffffff';
+  x.beginPath(); x.roundRect(0, 0, 320, 92, 28); x.fill();
   x.fillStyle = '#' + colorHex.toString(16).padStart(6, '0');
-  x.beginPath(); x.roundRect(0, 0, 320, 96, 30); x.fill();
-  x.fillStyle = '#ffffff'; x.font = '900 52px Arial, sans-serif'; x.textAlign = 'center';
-  x.fillText(String(name).slice(0, 12), 160, 64);
+  x.beginPath(); x.roundRect(0, 0, 18, 92, { tl: 28, bl: 28, tr: 0, br: 0 }); x.fill();
+  x.fillStyle = '#1a2230'; x.font = '800 46px Arial, sans-serif'; x.textAlign = 'center';
+  x.fillText(String(name).slice(0, 12), 168, 60);
   const tex = new THREE.CanvasTexture(c); tex.anisotropy = 4;
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-  sp.scale.set(1.5, 0.45, 1);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, opacity: 0.95 }));
+  sp.scale.set(1.3, 0.38, 1);
   sp.renderOrder = 998;
   return sp;
 }
@@ -507,11 +508,11 @@ export default function Floor() {
     const mount = mountRef.current;
     const w = mount.clientWidth, h = mount.clientHeight || 520;
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xd9dee3);
-    scene.fog = new THREE.Fog(0xd9dee3, 38, 95);
+    scene.background = new THREE.Color(0xe9edf1);
+    scene.fog = new THREE.Fog(0xe9edf1, 55, 130);
 
-    const camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 220);
-    camera.position.set(18, 13, 25);
+    const camera = new THREE.PerspectiveCamera(46, w / h, 0.1, 240);
+    camera.position.set(3, 11, 21);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(w, h);
@@ -519,52 +520,58 @@ export default function Floor() {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.06;
     mount.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true; controls.target.set(0, 0.8, 0); controls.maxPolarAngle = Math.PI / 2.05;
-    controls.maxDistance = 45;
+    controls.enableDamping = true; controls.target.set(0, 0.6, -1.5); controls.maxPolarAngle = Math.PI / 2.05;
+    controls.maxDistance = 55;
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x8e9298, 0.95));
-    const sun = new THREE.DirectionalLight(0xfff6e8, 1.15);
-    sun.position.set(14, 22, 10); sun.castShadow = true;
+    // soft, even studio daylight — no harsh contrast
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xb8bcc2, 1.0));
+    const sun = new THREE.DirectionalLight(0xfff8ee, 0.85);
+    sun.position.set(16, 26, 14); sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
-    for (const [k, v] of Object.entries({ left: -30, right: 30, top: 30, bottom: -30 })) sun.shadow.camera[k] = v;
+    sun.shadow.radius = 5;
+    for (const [k, v] of Object.entries({ left: -34, right: 34, top: 34, bottom: -34 })) sun.shadow.camera[k] = v;
     scene.add(sun);
+    const fill = new THREE.DirectionalLight(0xeef2f8, 0.3);
+    fill.position.set(-18, 14, -10);
+    scene.add(fill);
 
     const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(90, 90),
-      new THREE.MeshStandardMaterial({ map: concreteTexture(), roughness: 0.95 }));
+      new THREE.PlaneGeometry(110, 80),
+      new THREE.MeshStandardMaterial({ map: concreteTexture(), roughness: 0.55, metalness: 0.06 }));
     floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true;
     scene.add(floor);
 
-    for (const z of [-1.7, 1.7]) {
-      const tape = new THREE.Mesh(new THREE.BoxGeometry(34, 0.012, 0.12), MAT.tape);
+    // central aisle in front of the single station row
+    for (const z of [-0.4, 3.6]) {
+      const tape = new THREE.Mesh(new THREE.BoxGeometry(48, 0.012, 0.13), MAT.tape);
       tape.position.set(0, 0.006, z);
       scene.add(tape);
     }
-    for (const [cx, cz] of [[-22, -12], [22, -12], [-22, 12], [22, 12]]) {
-      const col = new THREE.Mesh(new THREE.BoxGeometry(0.7, 7.5, 0.7), MAT.column);
-      col.position.set(cx, 3.75, cz); col.castShadow = true;
+    for (const [cx, cz] of [[-26, -11], [26, -11], [-26, 10], [26, 10]]) {
+      const col = new THREE.Mesh(new THREE.BoxGeometry(0.6, 8, 0.6), MAT.column);
+      col.position.set(cx, 4, cz); col.castShadow = true;
       scene.add(col);
     }
-    for (const [rx, rz, ry] of [[-30, -8, Math.PI / 2], [-30, 0, Math.PI / 2], [-30, 8, Math.PI / 2],
-                                [30, -8, -Math.PI / 2], [30, 0, -Math.PI / 2], [30, 8, -Math.PI / 2],
-                                [-10, -26, 0], [0, -26, 0], [10, -26, 0]]) {
-      const rack = makeRack(); rack.position.set(rx, 0, rz); rack.rotation.y = ry;
+    // tidy perimeter racking, far behind the line only
+    for (const rx of [-21, -10.5, 0, 10.5, 21]) {
+      const rack = makeRack(); rack.position.set(rx, 0, -14);
       scene.add(rack);
     }
-    for (let lx = -12; lx <= 12; lx += 6) {
-      for (const lz of [-6, 0, 6]) {
-        const strip = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.08, 0.18),
-          new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xf5f2e8, emissiveIntensity: 1.4 }));
-        strip.position.set(lx, 6.4, lz);
+    for (let lx = -18; lx <= 18; lx += 6) {
+      for (const lz of [-3, 1.5]) {
+        const strip = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.08, 0.18),
+          new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xf6f3ea, emissiveIntensity: 1.3 }));
+        strip.position.set(lx, 6.6, lz);
         scene.add(strip);
       }
     }
     const fans = [];
-    for (const fx of [-8, 8]) {
-      const fan = makeFan(); fan.position.set(fx, 7, 0); scene.add(fan); fans.push(fan);
+    for (const fx of [-10, 10]) {
+      const fan = makeFan(); fan.position.set(fx, 7.2, 0); scene.add(fan); fans.push(fan);
     }
 
     three.current = { scene, camera, renderer, controls, stationGroup: null, fans, total: 0 };
@@ -607,40 +614,72 @@ export default function Floor() {
     ctx.scene.add(group);
 
     const steps = detail.steps;
-    const pairs = Math.ceil(steps.length / 2);
-    const spacing = 6.6;
-    const offset = ((pairs - 1) * spacing) / 2;
+    // The real floor has 8 stations: group the steps onto at most 8 benches in
+    // a single line. Use the Line Designer layout when one is saved for this
+    // product; otherwise auto-balance contiguously by build order.
+    const STATIONS = 8;
+    let groups = null;
+    try {
+      const saved = JSON.parse(localStorage.getItem(`sw-line-${skuId}`));
+      if (saved && saved.assign && Object.keys(saved.assign).length) {
+        const n = Math.min(STATIONS, Math.max(1, saved.stationCount || STATIONS));
+        const arr = Array.from({ length: n }, () => []);
+        for (const s of steps) arr[Math.min(n - 1, saved.assign[s.id] ?? 0)].push(s);
+        groups = arr.filter(g => g.length);
+      }
+    } catch { /* fall through to auto-balance */ }
+    if (!groups || !groups.length) {
+      const total = steps.reduce((a, s) => a + durOfStep(s), 0);
+      const target = total / Math.min(STATIONS, steps.length);
+      groups = [[]];
+      let acc = 0;
+      for (const s of steps) {
+        const t = durOfStep(s);
+        if (acc > 0 && acc + t > target * 1.2 && groups.length < STATIONS) { groups.push([]); acc = 0; }
+        groups[groups.length - 1].push(s); acc += t;
+      }
+    }
+    groups.forEach(g => g.sort((a, b) => a.sequence - b.sequence));
+
+    const spacing = 5.4;
+    const offset = ((groups.length - 1) * spacing) / 2;
     const stations = [];
     const benchSpots = new Map(); // stepId -> { primary: Vector3, helper: Vector3 }
-    steps.forEach((s, i) => {
-      const col = Math.floor(i / 2), row = i % 2;
-      const px = col * spacing - offset;
-      const pz = row === 0 ? -3.1 : 3.1;
-      const { st, ring } = makeBench(i);
-      st.position.set(px, 0, pz);
-      if (row === 1) st.rotation.y = Math.PI;
+    const stepInfo = new Map();   // stepId -> { seq, name, station }
+    groups.forEach((g, k) => {
+      const px = k * spacing - offset;
+      const { st, led } = makeBench();
+      st.position.set(px, 0, -2.6); // one row, mats facing the aisle
 
-      const visual = stationVisualFor(s);
+      const longest = g.reduce((a, s) => (durOfStep(s) > durOfStep(a) ? s : a), g[0]);
+      const visual = stationVisualFor(longest);
       visual.g.position.y = 1.06;
       visual.update(0);
       st.add(visual.g);
 
-      const dur = durOfStep(s);
-      const label = makeLabel(s.sequence, fullName(s), dur > 0 ? formatTime(dur) : 'no time');
-      label.position.set(0, 3.5 + (i % 2) * 1.15, 0); st.add(label);
+      const totalDur = g.reduce((a, s) => a + durOfStep(s), 0);
+      const label = makeStationLabel(k, g.map(s => `${s.sequence} · ${fullName(s)}`), totalDur > 0 ? formatTime(totalDur) : '—');
+      label.position.set(0, 3.35, 0); st.add(label);
       group.add(st);
       st.updateMatrixWorld(true);
-      benchSpots.set(s.id, {
-        primary: st.localToWorld(new THREE.Vector3(-0.55, 0, 1.55)),
-        helper: st.localToWorld(new THREE.Vector3(0.75, 0, 1.55)),
+      g.forEach((s, j) => {
+        benchSpots.set(s.id, {
+          primary: st.localToWorld(new THREE.Vector3(-0.7 + Math.min(j, 3) * 0.5, 0, 1.55)),
+          helper: st.localToWorld(new THREE.Vector3(0.95, 0, 1.55)),
+        });
+        stepInfo.set(s.id, { seq: s.sequence, name: shortName(s), station: k + 1 });
       });
-      stations.push({ stepId: s.id, name: shortName(s), seq: s.sequence, ring: ring.material, visual, noTime: dur <= 0 });
+      stations.push({
+        idx: k, stepIds: g.map(s => s.id), durs: g.map(s => durOfStep(s)),
+        totalDur, led, visual, noTime: totalDur <= 0,
+      });
     });
 
-    ctx.controls.target.set(0, 0.8, 0);
+    ctx.controls.target.set(0, 0.6, -1.5);
     ctx.stationGroup = group;
     ctx.stations = stations;
     ctx.benchSpots = benchSpots;
+    ctx.stepInfo = stepInfo;
     tRef.current = 0; if (sliderRef.current) sliderRef.current.value = 0;
   }, [detail, size]); // eslint-disable-line
 
@@ -654,7 +693,7 @@ export default function Floor() {
     const crew = activeOps.map((op, i) => {
       const color = OP_COLORS[i % OP_COLORS.length];
       const fig = makeCrewFigure(color, op.name);
-      const home = new THREE.Vector3((i - (activeOps.length - 1) / 2) * 1.6, 0, 0);
+      const home = new THREE.Vector3((i - (activeOps.length - 1) / 2) * 1.6, 0, 1.7);
       fig.position.copy(home);
       crewGroup.add(fig);
       return { fig, home, name: op.name, color };
@@ -668,21 +707,32 @@ export default function Floor() {
     const sm = simRef.current;
     if (!ctx.stations || !sm) return;
     const t = tRef.current;
+    const Q = sm.quantity || 1;
     for (const s of ctx.stations) {
-      // station = a template; may have several unit-instances over time
-      const insts = sm.byTemplate.get(s.stepId) || [];
-      const act = insts.find(e => e.start != null && t >= e.start && (e.finish == null || t < e.finish));
-      let state, prog;
-      if (act) { state = 'active'; prog = act.finish > act.start ? (t - act.start) / (act.finish - act.start) : 1; }
-      else if (insts.length && insts.every(e => e.finish != null && t >= e.finish)) { state = 'done'; prog = 1; }
-      else { state = 'idle'; prog = 0; }
+      // a station holds several steps; each step has Q unit-instances
+      let active = false, done = 0;
+      s.stepIds.forEach((id, i) => {
+        const insts = sm.byTemplate.get(id) || [];
+        let fin = 0, partial = 0;
+        for (const e of insts) {
+          if (e.start != null && t >= e.start && (e.finish == null || t < e.finish)) {
+            active = true;
+            partial += e.finish > e.start ? (t - e.start) / (e.finish - e.start) : 1;
+          } else if (e.finish != null && t >= e.finish) fin++;
+        }
+        const w = s.totalDur > 0 ? s.durs[i] / s.totalDur : 1 / s.stepIds.length;
+        done += w * Math.min(1, (fin + partial) / Q);
+      });
+      const state = active ? 'active' : (done >= 0.999 ? 'done' : 'idle');
+      const led = s.led;
       if (s.noTime && t > 0) {
-        s.ring.color.setHex(0xd9a427); s.ring.emissive.setHex(0x000000);
+        led.color.setHex(0xd9a427); led.emissive.setHex(0xd9a427); led.emissiveIntensity = 0.7;
       } else {
-        s.ring.color.setHex(RING[state]);
-        s.ring.emissive.setHex(state === 'active' ? 0x0c4a22 : 0x000000);
+        led.color.setHex(RING[state]);
+        led.emissive.setHex(state === 'idle' ? 0x000000 : RING[state]);
+        led.emissiveIntensity = state === 'active' ? 1.1 : 0.5;
       }
-      s.visual.update(prog);
+      s.visual.update(done);
     }
     if (clockRef.current) clockRef.current.textContent = `${formatTime(t)} / ${formatTime(ctx.total || 0)}`;
     if (sliderRef.current && playingRef.current) sliderRef.current.value = t;
@@ -702,8 +752,8 @@ export default function Floor() {
       if (iv) {
         const spots = ctx.benchSpots.get(iv.template);
         if (spots) { target = iv.role === 'help' ? spots.helper : spots.primary; working = true; activeCount++; }
-        const stn = ctx.stations.find(x => x.stepId === iv.template);
-        if (stn) lines.push(`${c.name} → ${stn.seq}. ${stn.name}${sm.quantity > 1 ? ` #${(iv.unit ?? 0) + 1}` : ''}${iv.role === 'help' ? ' (helping)' : ''}`);
+        const si = ctx.stepInfo && ctx.stepInfo.get(iv.template);
+        if (si) lines.push(`${c.name} → ${si.seq}. ${si.name} @S${si.station}${sm.quantity > 1 ? ` #${(iv.unit ?? 0) + 1}` : ''}${iv.role === 'help' ? ' (helping)' : ''}`);
       }
       const k = 1 - Math.exp(-dt * 3);
       c.fig.position.x += (target.x - c.fig.position.x) * k;

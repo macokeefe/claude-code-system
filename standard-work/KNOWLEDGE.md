@@ -137,6 +137,26 @@ shows cycle time / units-per-shift / operators / balance % and flags
 precedence violations. Next: a 'line mode' in the 3D floor where
 operators are fixed at stations and units flow past.
 
+## 3D Floor presentation restyle (2026-06)
+
+The engineer wants the 3D Floor boss-presentable: "simple… super good for
+visualization… nothing childish." Also: **the real floor has 8 stations.**
+Restyle decisions: steps are grouped onto ≤8 benches in ONE straight row
+along a yellow-taped aisle (saved Line Designer layout `sw-line-<sku>` wins,
+else contiguous auto-balance by build order); station signs are white cards
+with a navy STATION n header + total time + up to 3 step lines; status =
+slim andon LED strip on the bench front edge (green active / blue done /
+amber no-time) instead of the floor torus ring; muted palette (single navy
+trim, steel-grey racking, polished light concrete, soft daylight, fill
+light); racks only far behind the line; crew tags are white cards with a
+color spine. Sim is still per-step — stations aggregate their steps' unit
+instances for LED/progress; `ctx.stepInfo` maps stepId→{seq,name,station}
+for the crew ticker. A Higgsfield static render (job
+17804648-9f8f-4fdb-8b10-5b8586012900) exists as a style reference; the
+engineer chose restyling the interactive floor over static images. Floor
+photos from the earlier session are NOT in the repo — ask the user to
+re-share if needed for reference-matched renders.
+
 ## Workflows + optimizer (2026-06)
 
 A **Workflow** is a named, saved process plan for a product: the precedence
