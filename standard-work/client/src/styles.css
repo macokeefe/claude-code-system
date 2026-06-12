@@ -195,6 +195,8 @@ label { display: block; font-weight: 600; font-size: 12px; margin-bottom: 4px; c
 .chip-mini.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .chip-mini.help.on { background: #1c7c3c; border-color: #1c7c3c; }
 
+.wf-step { font-size: 12px; background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 4px 7px; line-height: 1.25; }
+
 .solution-row { border-top: 1px solid var(--border); padding: 10px 0; }
 .solution-row:first-of-type { border-top: none; }
 .target-adder { margin-top: 8px; }

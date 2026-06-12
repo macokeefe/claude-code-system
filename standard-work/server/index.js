@@ -582,6 +582,67 @@ app.delete('/api/operators/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+/* ---------------- Workflows (saved process plans) ---------------- */
+
+const rowToWorkflow = w => w && ({
+  ...w,
+  deps: w.deps ? JSON.parse(w.deps) : {},
+  line: w.line ? JSON.parse(w.line) : null,
+  metrics: w.metrics ? JSON.parse(w.metrics) : null,
+});
+
+app.get('/api/workflows', (req, res) => {
+  const { sku_id } = req.query;
+  const rows = sku_id
+    ? db.prepare('SELECT * FROM workflows WHERE sku_id = ? ORDER BY id DESC').all(sku_id)
+    : db.prepare('SELECT * FROM workflows ORDER BY id DESC').all();
+  res.json(rows.map(rowToWorkflow));
+});
+
+app.post('/api/workflows', (req, res) => {
+  const { sku_id, name, size, deps, line, metrics, notes } = req.body;
+  if (!db.prepare('SELECT 1 FROM skus WHERE id = ?').get(sku_id)) return res.status(400).json({ error: 'Unknown product' });
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Workflow name is required' });
+  const info = db.prepare('INSERT INTO workflows (sku_id, name, size, deps, line, metrics, notes) VALUES (?,?,?,?,?,?,?)')
+    .run(sku_id, name.trim(), size ?? null, JSON.stringify(deps || {}),
+         line ? JSON.stringify(line) : null, metrics ? JSON.stringify(metrics) : null, notes || null);
+  res.json(rowToWorkflow(db.prepare('SELECT * FROM workflows WHERE id = ?').get(info.lastInsertRowid)));
+});
+
+app.put('/api/workflows/:id', (req, res) => {
+  const wf = db.prepare('SELECT * FROM workflows WHERE id = ?').get(req.params.id);
+  if (!wf) return res.status(404).json({ error: 'Workflow not found' });
+  const { name, size, deps, line, metrics, notes } = req.body;
+  db.prepare('UPDATE workflows SET name = ?, size = ?, deps = ?, line = ?, metrics = ?, notes = ?, updated_at = datetime(\'now\') WHERE id = ?')
+    .run(name ?? wf.name, size !== undefined ? size : wf.size,
+         deps !== undefined ? JSON.stringify(deps) : wf.deps,
+         line !== undefined ? (line ? JSON.stringify(line) : null) : wf.line,
+         metrics !== undefined ? (metrics ? JSON.stringify(metrics) : null) : wf.metrics,
+         notes !== undefined ? notes : wf.notes, wf.id);
+  res.json(rowToWorkflow(db.prepare('SELECT * FROM workflows WHERE id = ?').get(wf.id)));
+});
+
+app.delete('/api/workflows/:id', (req, res) => {
+  db.prepare('DELETE FROM workflows WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+app.post('/api/workflows/:id/apply', (req, res) => {
+  const wf = rowToWorkflow(db.prepare('SELECT * FROM workflows WHERE id = ?').get(req.params.id));
+  if (!wf) return res.status(404).json({ error: 'Workflow not found' });
+  const steps = db.prepare('SELECT id, sequence FROM sku_steps WHERE sku_id = ?').all(wf.sku_id);
+  const seqToId = {}; steps.forEach(s => { seqToId[s.sequence] = s.id; });
+  const upd = db.prepare('UPDATE sku_steps SET depends_on = ?, updated_at = datetime(\'now\') WHERE id = ?');
+  const tx = db.transaction(() => {
+    for (const s of steps) {
+      const ids = (wf.deps[s.sequence] || []).map(q => seqToId[q]).filter(Boolean);
+      upd.run(JSON.stringify(ids), s.id);
+    }
+  });
+  tx();
+  res.json({ ok: true });
+});
+
 /* ---------------- Photos ---------------- */
 
 app.post('/api/photos', photoUpload.single('photo'), (req, res) => {

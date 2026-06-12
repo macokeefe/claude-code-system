@@ -103,6 +103,19 @@ CREATE TABLE IF NOT EXISTS operators (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS workflows (
+  id INTEGER PRIMARY KEY,
+  sku_id INTEGER NOT NULL REFERENCES skus(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  size TEXT,
+  deps TEXT,
+  line TEXT,
+  metrics TEXT,
+  notes TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_steps_sku ON sku_steps(sku_id, sequence);
 CREATE INDEX IF NOT EXISTS idx_steps_tag ON sku_steps(tag_id);
 CREATE INDEX IF NOT EXISTS idx_history ON time_history(entity_type, entity_id);

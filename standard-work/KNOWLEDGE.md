@@ -137,6 +137,30 @@ shows cycle time / units-per-shift / operators / balance % and flags
 precedence violations. Next: a 'line mode' in the 3D floor where
 operators are fixed at stations and units flow past.
 
+## Workflows + optimizer (2026-06)
+
+A **Workflow** is a named, saved process plan for a product: the precedence
+snapshot (which steps must precede others, stored by step *sequence* so it
+survives id changes) + optional generated line design + metrics. Backed by a
+real store (`state.workflows` in localApi, `workflows` table on the server) —
+GET/POST/PUT/DELETE + POST `/apply` (re-applies the saved precedence to the
+SKU's steps). Included in backup/restore automatically.
+
+The **optimizer** (`shared/optimize.js` → `optimizeLine`) turns a process into
+a realistic assembly line: topological order of the steps, DP contiguous
+partition into stations (contiguous over a topo order guarantees precedence is
+respected — every prerequisite lands in an earlier-or-same station), then
+spends the spare crew on whichever station's bottleneck it shrinks most (same
+diminishing-returns help model as the Line Designer / sim: 2 people ≈ 1.6× via
+`help_seconds` or default base×0.62, capped 3/station). It only adds people who
+actually cut the bottleneck, so it can report fewer operators than offered.
+Goal = max throughput (min cycle time) but realistic (operators stay at one
+station; a unit flows station→station; output = slowest station). The
+Workflows page runs it, shows cycle/units-per-shift/operators/balance +
+per-station breakdown, and "Open in Line Designer to tweak" writes the result
+into `localStorage['sw-line-<sku>']`. Engineer's stated goal: "most throughput
+but also realistic"; optimizer style: generate + let me tweak.
+
 ## Open items
 
 - Meritage: not yet modeled — waiting on a readable copy (app Export Excel →

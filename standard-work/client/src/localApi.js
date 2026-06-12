@@ -719,6 +719,67 @@ async function handle(method, url, body) {
     }
   }
 
+  /* ----- Workflows (saved process plans) ----- */
+  if (path === '/api/workflows') {
+    state.workflows = state.workflows || [];
+    if (method === 'GET') {
+      const skuId = u.searchParams.get('sku_id');
+      return [...state.workflows]
+        .filter(w => !skuId || w.sku_id === Number(skuId))
+        .sort((a, b) => b.id - a.id);
+    }
+    if (method === 'POST') {
+      const sku = skuById(body.sku_id);
+      if (!sku) httpError(400, { error: 'Unknown product' });
+      if (!body.name || !body.name.trim()) httpError(400, { error: 'Workflow name is required' });
+      const wf = {
+        id: nextId(), sku_id: sku.id, name: body.name.trim(),
+        size: body.size ?? null, deps: body.deps || {}, line: body.line || null,
+        metrics: body.metrics || null, notes: body.notes || null,
+        created_at: now(), updated_at: now(),
+      };
+      state.workflows.push(wf);
+      await persist();
+      return wf;
+    }
+  }
+  if ((m = path.match(/^\/api\/workflows\/(\d+)$/))) {
+    state.workflows = state.workflows || [];
+    const wf = state.workflows.find(w => w.id === Number(m[1]));
+    if (!wf) httpError(404, { error: 'Workflow not found' });
+    if (method === 'GET') return wf;
+    if (method === 'PUT') {
+      Object.assign(wf, {
+        name: body.name ?? wf.name, size: body.size !== undefined ? body.size : wf.size,
+        deps: body.deps !== undefined ? body.deps : wf.deps,
+        line: body.line !== undefined ? body.line : wf.line,
+        metrics: body.metrics !== undefined ? body.metrics : wf.metrics,
+        notes: body.notes !== undefined ? body.notes : wf.notes,
+        updated_at: now(),
+      });
+      await persist();
+      return wf;
+    }
+    if (method === 'DELETE') {
+      state.workflows = state.workflows.filter(w => w.id !== wf.id);
+      await persist();
+      return { ok: true };
+    }
+  }
+  if (method === 'POST' && (m = path.match(/^\/api\/workflows\/(\d+)\/apply$/))) {
+    const wf = (state.workflows || []).find(w => w.id === Number(m[1]));
+    if (!wf) httpError(404, { error: 'Workflow not found' });
+    const steps = state.steps.filter(s => s.sku_id === wf.sku_id);
+    const seqToId = {}; steps.forEach(s => { seqToId[s.sequence] = s.id; });
+    for (const s of steps) {
+      const prereqSeqs = wf.deps[s.sequence] || [];
+      s.depends_on = prereqSeqs.map(q => seqToId[q]).filter(Boolean);
+      s.updated_at = now();
+    }
+    await persist();
+    return { ok: true, total_seconds: skuTotal(wf.sku_id) };
+  }
+
   /* ----- Photos ----- */
   if (method === 'POST' && path === '/api/photos') {
     const file = body.get('photo');
