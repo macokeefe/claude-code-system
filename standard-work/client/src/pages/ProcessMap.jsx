@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, formatTime } from '@backend';
 import { criticalPath } from '../../../shared/precedence.js';
 import { sizeLabel } from '../sizeLabel.js';
+import { getActiveSku, setActiveSku } from '../activeSku.js';
 
 const NW = 172, NH = 78; // note size
 const COLORS = ['#fff3b0', '#ffd6a5', '#caffbf', '#9bf6ff', '#bdb2ff', '#ffc6ff', '#fdffb6', '#a0e7e5'];
@@ -10,6 +12,7 @@ const loadPos = id => { try { return JSON.parse(localStorage.getItem(`sw-map-${i
 const savePos = (id, p) => { try { localStorage.setItem(`sw-map-${id}`, JSON.stringify(p)); } catch {} };
 
 export default function ProcessMap() {
+  const navigate = useNavigate();
   const boardRef = useRef();
   const [skus, setSkus] = useState([]);
   const [skuId, setSkuId] = useState(null);
@@ -25,8 +28,8 @@ export default function ProcessMap() {
   const [zoom, setZoom] = useState(1);
 
   const load = useCallback(() => { if (skuId != null) return api.get(`/api/skus/${skuId}`).then(setDetail); }, [skuId]);
-  useEffect(() => { api.get('/api/skus').then(list => { setSkus(list); if (list.length) setSkuId(p => p ?? list[0].id); }); }, []);
-  useEffect(() => { if (skuId == null) return; setSize(null); setSelected(new Set()); api.get(`/api/skus/${skuId}`).then(setDetail); }, [skuId]);
+  useEffect(() => { api.get('/api/skus').then(list => { setSkus(list); if (list.length) { const a = getActiveSku(); setSkuId(p => p ?? (list.some(s => s.id === a) ? a : list[0].id)); } }); }, []);
+  useEffect(() => { if (skuId == null) return; setActiveSku(skuId); setSize(null); setSelected(new Set()); api.get(`/api/skus/${skuId}`).then(setDetail); }, [skuId]);
 
   const sizes = detail ? [...new Set(detail.steps.flatMap(s => s.size_times ? Object.keys(s.size_times) : []))] : [];
   const activeSize = size ?? (sizes.length ? sizes[Math.floor((sizes.length - 1) / 2)] : null);
@@ -202,6 +205,7 @@ export default function ProcessMap() {
           <button className="small" title="fit to screen" onClick={() => fitView(pos)}>{Math.round(zoom * 100)}%</button>
           <button className="small" title="zoom in" onClick={() => setZoom(z => Math.min(1.6, Number((z + 0.1).toFixed(2))))}>＋</button>
         </span>
+        <button className="primary small" title="Use these prerequisites to design an optimized line" onClick={() => navigate('/workflows')}>⚙ Optimize this process →</button>
       </div>
       <p className="subtitle">Drag sticky notes anywhere. Drag a box around several to select them, or <strong>shift-click</strong> to add/remove — then drag any one to move the whole group. To set a prerequisite, drag from a note's <strong>● right handle</strong> onto another note (the arrow means “must finish before”). To delete an arrow, click its <strong>✕</strong>. These arrows are the real dependencies: they drive the critical path, the simulation, and the line. Red = on the critical path.{selected.size > 1 && <strong style={{ color: '#1a56b0' }}> · {selected.size} selected</strong>}</p>
 
@@ -282,7 +286,7 @@ export default function ProcessMap() {
         </div>
       </div>
       <p className="muted" style={{ fontSize: 12 }}>
-        Fastest possible (critical path): <strong>{formatTime(cp.criticalSeconds)}</strong>. Note positions are saved per product on this computer; the arrows (dependencies) are saved in your data and used everywhere.
+        Fastest possible (critical path): <strong>{formatTime(cp.criticalSeconds)}</strong>. <strong>This is the source of truth:</strong> every arrow is saved as that step's prerequisite <em>for this piece of furniture</em> the moment you draw it, and it's what the optimizer, the simulation, the critical path and the line all read. No separate save needed. (Note positions are saved per product on this computer.)
       </p>
     </>
   );

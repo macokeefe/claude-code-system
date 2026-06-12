@@ -4,6 +4,7 @@ import { api, formatTime, formatLong } from '@backend';
 import { criticalPath } from '../../../shared/precedence.js';
 import { optimizeLine } from '../../../shared/optimize.js';
 import { sizeLabel } from '../sizeLabel.js';
+import { getActiveSku, setActiveSku } from '../activeSku.js';
 
 // Snapshot the SKU's current precedence as {sequence: [prereqSequences]} so a
 // saved workflow survives even if step ids change.
@@ -31,10 +32,10 @@ export default function Workflows() {
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
 
-  useEffect(() => { api.get('/api/skus').then(list => { setSkus(list); if (list.length) setSkuId(p => p ?? list[0].id); }); }, []);
+  useEffect(() => { api.get('/api/skus').then(list => { setSkus(list); if (list.length) { const a = getActiveSku(); setSkuId(p => p ?? (list.some(s => s.id === a) ? a : list[0].id)); } }); }, []);
   const loadDetail = () => api.get(`/api/skus/${skuId}`).then(setDetail);
   const loadWorkflows = () => api.get(`/api/workflows?sku_id=${skuId}`).then(setWorkflows);
-  useEffect(() => { if (skuId == null) return; setSize(null); setResult(null); setMsg(''); loadDetail(); loadWorkflows(); }, [skuId]); // eslint-disable-line
+  useEffect(() => { if (skuId == null) return; setActiveSku(skuId); setSize(null); setResult(null); setMsg(''); loadDetail(); loadWorkflows(); }, [skuId]); // eslint-disable-line
 
   const sizes = detail ? [...new Set(detail.steps.flatMap(s => s.size_times ? Object.keys(s.size_times) : []))] : [];
   const activeSize = size ?? (sizes.length ? sizes[Math.floor((sizes.length - 1) / 2)] : null);
@@ -130,7 +131,7 @@ export default function Workflows() {
           </select>
         )}
       </div>
-      <p className="subtitle">A workflow saves <strong>how this product is built</strong> — which steps must come before others — as a named plan. From that the software models the process and designs an optimized assembly line. Build the precedence on the <strong>Process Map</strong>, save it here, then optimize.</p>
+      <p className="subtitle">The prerequisites you draw on the <strong>Process Map</strong> are this product's process — the software reads them straight from there. Below it uses them to design an optimized assembly line. You can also save a <strong>named snapshot</strong> of the current prerequisites (a workflow) to keep a version or compare alternatives.</p>
 
       {error && <div className="alert error">{error}</div>}
       {msg && <div className="alert info">{msg}</div>}
