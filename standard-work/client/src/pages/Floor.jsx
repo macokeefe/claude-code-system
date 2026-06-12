@@ -54,8 +54,8 @@ function initMats() {
   MAT.matEdge = new THREE.MeshStandardMaterial({ color: 0xc7b53e, roughness: 0.9 });
   MAT.tape = new THREE.MeshStandardMaterial({ color: 0xd9c544, roughness: 0.85 });
   MAT.column = new THREE.MeshStandardMaterial({ color: 0xf0f0ee, roughness: 0.85 });
-  MAT.rackPost = new THREE.MeshStandardMaterial({ color: 0x8b9098, roughness: 0.7 });    // steel-grey racking
-  MAT.rackBeam = new THREE.MeshStandardMaterial({ color: 0x6f747c, roughness: 0.7 });
+  MAT.rackPost = new THREE.MeshStandardMaterial({ color: 0x2b5fa8, roughness: 0.6, metalness: 0.2 }); // blue racking
+  MAT.rackBeam = new THREE.MeshStandardMaterial({ color: 0xd2762a, roughness: 0.6, metalness: 0.2 }); // orange beams
   MAT.box = new THREE.MeshStandardMaterial({ color: 0xcbb08a, roughness: 0.95 });        // cardboard
   MAT.boxWhite = new THREE.MeshStandardMaterial({ color: 0xf2f2ef, roughness: 0.9 });
   MAT.hose = new THREE.MeshStandardMaterial({ color: 0xa83d33, roughness: 0.55 });
@@ -292,6 +292,79 @@ function visGeneric() {
   return { g, update: p => { frame.visible = p > 0.05; const s = Math.max(0.05, Math.min(1, p)); frame.scale.set(s, 1, s); } };
 }
 
+/* Progressive sofa: the SAME product shown at increasing completeness across
+   the line — bare frame at station 1, finished cushioned sofa at station 8 —
+   matching the reference render. update(prog 0..1) reveals parts in order. */
+function makeSofaProduct() {
+  const g = new THREE.Group();
+  const W = 1.9, D = 0.95;
+  const cushion = new THREE.MeshStandardMaterial({ color: 0xcabfa6, roughness: 0.92 });
+  const parts = [];
+  const add = (mesh, from, grow = false) => { mesh.visible = false; mesh.userData.from = from; mesh.userData.grow = grow; parts.push(mesh); g.add(mesh); return mesh; };
+
+  // base perimeter frame (built first)
+  add(bx(W, 0.08, 0.08, MAT.cherry), 0.0).position.set(0, 0.34, -D / 2 + 0.06);
+  add(bx(W, 0.08, 0.08, MAT.cherry), 0.0).position.set(0, 0.34, D / 2 - 0.06);
+  add(bx(0.08, 0.08, D, MAT.cherry), 0.02).position.set(-W / 2 + 0.06, 0.34, 0);
+  add(bx(0.08, 0.08, D, MAT.cherry), 0.02).position.set(W / 2 - 0.06, 0.34, 0);
+  // legs
+  for (const [x, z] of [[-W / 2 + 0.12, -D / 2 + 0.12], [W / 2 - 0.12, -D / 2 + 0.12], [-W / 2 + 0.12, D / 2 - 0.12], [W / 2 - 0.12, D / 2 - 0.12]])
+    add(bx(0.09, 0.34, 0.09, MAT.cherry), 0.12).position.set(x, 0.17, z);
+  // arms (left/right): two posts + a top rail each
+  for (const sx of [-1, 1]) {
+    const x = sx * (W / 2 - 0.06);
+    add(bx(0.08, 0.34, 0.08, MAT.cherry), 0.24).position.set(x, 0.55, -D / 2 + 0.12);
+    add(bx(0.08, 0.34, 0.08, MAT.cherry), 0.24).position.set(x, 0.55, D / 2 - 0.12);
+    add(bx(0.11, 0.08, D - 0.08, MAT.cherry), 0.32).position.set(x, 0.72, 0);
+  }
+  // back frame: posts + top rail along the back edge
+  const bz = -D / 2 + 0.07;
+  add(bx(0.08, 0.5, 0.08, MAT.cherry), 0.42).position.set(-W / 2 + 0.16, 0.6, bz);
+  add(bx(0.08, 0.5, 0.08, MAT.cherry), 0.42).position.set(W / 2 - 0.16, 0.6, bz);
+  add(bx(W - 0.24, 0.09, 0.09, MAT.cherry), 0.48).position.set(0, 0.86, bz);
+  // seat deck — chrome cross bars
+  for (let i = 0; i < 7; i++) {
+    const bar = cy(0.02, D - 0.18, MAT.chrome); bar.rotation.x = Math.PI / 2;
+    add(bar, 0.55 + i * 0.012).position.set(-W / 2 + 0.2 + i * ((W - 0.4) / 6), 0.39, 0.04);
+  }
+  // back slats — chrome verticals
+  for (let i = 0; i < 6; i++) {
+    const s = cy(0.018, 0.46, MAT.chrome);
+    add(s, 0.66 + i * 0.012).position.set(-W / 2 + 0.28 + i * ((W - 0.56) / 5), 0.63, bz);
+  }
+  // cushions last (scale up in their slot)
+  add(bx(W - 0.32, 0.18, D - 0.26, cushion), 0.82, true).position.set(0, 0.49, 0.05);
+  add(bx(W - 0.36, 0.36, 0.18, cushion), 0.9, true).position.set(0, 0.66, bz + 0.17);
+
+  return {
+    g,
+    update(p) {
+      for (const m of parts) {
+        const on = p >= m.userData.from;
+        m.visible = on;
+        if (on && m.userData.grow) { const s = Math.max(0.05, Math.min(1, (p - m.userData.from) / 0.1)); m.scale.set(1, s, 1); }
+      }
+    },
+  };
+}
+
+/* Rolling parts cart (steel frame, bins, casters) — feeds the line. */
+function makePartsCart() {
+  const g = new THREE.Group();
+  for (const [x, z] of [[-0.46, -0.3], [0.46, -0.3], [-0.46, 0.3], [0.46, 0.3]]) {
+    const post = bx(0.05, 0.92, 0.05, MAT.steel); post.position.set(x, 0.5, z); g.add(post);
+  }
+  for (const y of [0.34, 0.78]) { const sh = bx(1.0, 0.04, 0.68, MAT.steel); sh.position.set(0, y, 0); g.add(sh); }
+  for (const y of [0.34, 0.78]) for (let i = 0; i < 3; i++) {
+    const bin = bx(0.28, 0.16, 0.52, i % 2 ? MAT.binBlue : MAT.binYellow); bin.position.set(-0.32 + i * 0.32, y + 0.1, 0); g.add(bin);
+  }
+  for (const [x, z] of [[-0.46, -0.3], [0.46, -0.3], [-0.46, 0.3], [0.46, 0.3]]) {
+    const c = cy(0.07, 0.05, MAT.pants); c.rotation.x = Math.PI / 2; c.position.set(x, 0.07, z); g.add(c);
+  }
+  const handle = bx(0.05, 0.05, 0.68, MAT.steel); handle.position.set(-0.52, 0.92, 0); g.add(handle);
+  return g;
+}
+
 function stationVisualFor(step) {
   const n = ((step.tag_id ? step.tag_name : step.name) || '').toLowerCase();
   if (n.includes('ppe')) return visPPE();
@@ -511,8 +584,8 @@ export default function Floor() {
     scene.background = new THREE.Color(0xe9edf1);
     scene.fog = new THREE.Fog(0xe9edf1, 55, 130);
 
-    const camera = new THREE.PerspectiveCamera(46, w / h, 0.1, 240);
-    camera.position.set(3, 11, 21);
+    const camera = new THREE.PerspectiveCamera(44, w / h, 0.1, 260);
+    camera.position.set(7, 15, 31);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(w, h);
@@ -545,12 +618,17 @@ export default function Floor() {
     floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true;
     scene.add(floor);
 
-    // central aisle in front of the single station row
-    for (const z of [-0.4, 3.6]) {
-      const tape = new THREE.Mesh(new THREE.BoxGeometry(48, 0.012, 0.13), MAT.tape);
-      tape.position.set(0, 0.006, z);
-      scene.add(tape);
-    }
+    // yellow-taped travel lanes in the aisle in front of the line
+    const addLane = (w, d, x, z) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.012, d), MAT.tape);
+      m.position.set(x, 0.006, z); scene.add(m);
+    };
+    for (const z of [2.6, 4.4, 6.2]) addLane(50, 0.12, 0, z);     // parallel lanes
+    addLane(0.12, 3.8, -24.5, 4.4); addLane(0.12, 3.8, 24.5, 4.4); // closed rectangle
+    // a parts cart staged in the aisle, feeding the line
+    const cart = makePartsCart(); cart.position.set(-7.5, 0, 3.5); cart.rotation.y = 0.18;
+    scene.add(cart);
+    three.current.cart = cart;
     for (const [cx, cz] of [[-26, -11], [26, -11], [-26, 10], [26, 10]]) {
       const col = new THREE.Mesh(new THREE.BoxGeometry(0.6, 8, 0.6), MAT.column);
       col.position.set(cx, 4, cz); col.castShadow = true;
@@ -651,10 +729,11 @@ export default function Floor() {
       const { st, led } = makeBench();
       st.position.set(px, 0, -2.6); // one row, mats facing the aisle
 
-      const longest = g.reduce((a, s) => (durOfStep(s) > durOfStep(a) ? s : a), g[0]);
-      const visual = stationVisualFor(longest);
-      visual.g.position.y = 1.06;
-      visual.update(0);
+      // One product progressing down the line: station k rests at k/N built
+      // and advances toward (k+1)/N as its work completes.
+      const visual = makeSofaProduct();
+      visual.g.position.y = 1.04;
+      visual.update(k / groups.length);
       st.add(visual.g);
 
       const totalDur = g.reduce((a, s) => a + durOfStep(s), 0);
@@ -732,7 +811,7 @@ export default function Floor() {
         led.emissive.setHex(state === 'idle' ? 0x000000 : RING[state]);
         led.emissiveIntensity = state === 'active' ? 1.1 : 0.5;
       }
-      s.visual.update(done);
+      s.visual.update((s.idx + Math.min(1, done)) / (ctx.stations.length || 1));
     }
     if (clockRef.current) clockRef.current.textContent = `${formatTime(t)} / ${formatTime(ctx.total || 0)}`;
     if (sliderRef.current && playingRef.current) sliderRef.current.value = t;
