@@ -70,6 +70,13 @@ export default function ProcessMap() {
   const cp = detail ? criticalPath(detail.steps.map(s => ({ id: s.id, depends_on: s.depends_on || [], effective_seconds: timeOf(s) }))) : { criticalStepIds: [] };
   const criticalSet = new Set(cp.criticalStepIds);
 
+  // The prerequisites are shared across sizes; only the times differ. Critical
+  // path per size lets the one map show it serves Small/Medium/Large at once.
+  const critForSize = sz => detail ? criticalPath(detail.steps.map(s => ({
+    id: s.id, depends_on: s.depends_on || [],
+    effective_seconds: (sz && s.size_times && s.size_times[sz] != null) ? s.size_times[sz] : (s.effective_seconds || 0),
+  }))).criticalSeconds : 0;
+
   function boardXY(e) {
     const r = boardRef.current.getBoundingClientRect();
     return {
@@ -195,9 +202,12 @@ export default function ProcessMap() {
           {skus.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
         {sizes.length > 0 && (
-          <select value={activeSize || ''} onChange={e => setSize(e.target.value)} style={{ width: 160 }}>
-            {sizes.map(sz => <option key={sz} value={sz}>{sizeLabel(sz)}</option>)}
-          </select>
+          <>
+            <span className="muted" style={{ fontSize: 12 }}>times for</span>
+            <select value={activeSize || ''} onChange={e => setSize(e.target.value)} style={{ width: 150 }} title="The prerequisites apply to every size — this only changes the times shown">
+              {sizes.map(sz => <option key={sz} value={sz}>{sizeLabel(sz)}</option>)}
+            </select>
+          </>
         )}
         <button className="small" onClick={() => { const a = autoArrange(); setPos(a); fitView(a); }}>⤢ Auto-arrange</button>
         <span className="zoom-ctl">
@@ -286,7 +296,10 @@ export default function ProcessMap() {
         </div>
       </div>
       <p className="muted" style={{ fontSize: 12 }}>
-        Fastest possible (critical path): <strong>{formatTime(cp.criticalSeconds)}</strong>. <strong>This is the source of truth:</strong> every arrow is saved as that step's prerequisite <em>for this piece of furniture</em> the moment you draw it, and it's what the optimizer, the simulation, the critical path and the line all read. No separate save needed. (Note positions are saved per product on this computer.)
+        {sizes.length > 1
+          ? <>Fastest possible (critical path) — {sizes.map((sz, i) => <span key={sz}>{i ? ' · ' : ''}<strong>{sizeLabel(sz)}</strong> {formatTime(critForSize(sz))}</span>)}. </>
+          : <>Fastest possible (critical path): <strong>{formatTime(cp.criticalSeconds)}</strong>. </>}
+        <strong>One process, every size:</strong> these prerequisites apply to <em>all sizes</em> of this piece (only the times change by size). Every arrow is saved as that step's prerequisite the moment you draw it — it's the source of truth the optimizer, simulation, critical path and line all read. (Note positions are saved per product on this computer.)
       </p>
     </>
   );
