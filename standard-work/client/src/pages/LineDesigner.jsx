@@ -16,7 +16,7 @@ export default function LineDesigner() {
   const [shiftHours, setShiftHours] = useState(8);
   const [assign, setAssign] = useState({});   // stepId -> stationIndex
   const [workers, setWorkers] = useState({});  // stepId -> count
-  const [stationCount, setStationCount] = useState(5);
+  const [stationCount, setStationCount] = useState(8);
   const [dragId, setDragId] = useState(null);
 
   useEffect(() => { api.get('/api/skus').then(list => { setSkus(list); if (list.length) setSkuId(p => p ?? list[0].id); }); }, []);
@@ -31,9 +31,9 @@ export default function LineDesigner() {
     if (!detail) return;
     const saved = loadLayout(skuId);
     if (saved && saved.assign) {
-      setAssign(saved.assign); setWorkers(saved.workers || {}); setStationCount(saved.stationCount || 5);
+      setAssign(saved.assign); setWorkers(saved.workers || {}); setStationCount(saved.stationCount || 8);
     } else {
-      autoBalance(5, true);
+      autoBalance(8, true);
     }
   }, [detail]); // eslint-disable-line
 
