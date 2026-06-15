@@ -72,7 +72,7 @@ export default function Compare() {
   const maxTime = Math.max(1, ...rows.map(r => Math.max(r.a ? A.timeOf(r.a) : 0, r.b ? B.timeOf(r.b) : 0)));
   const totalA = rows.reduce((s, r) => s + (r.a ? A.timeOf(r.a) : 0), 0);
   const totalB = rows.reduce((s, r) => s + (r.b ? B.timeOf(r.b) : 0), 0);
-  const critOf = (sku) => sku.detail ? criticalPath(sku.detail.steps.map(s => ({ id: s.id, depends_on: s.depends_on || [], effective_seconds: sku.timeOf(s) }))).criticalSeconds : 0;
+  const critOf = (sku) => sku.detail ? criticalPath(sku.detail.steps.map(s => ({ id: s.id, depends_on: s.depends_on || [], dep_overlap: s.dep_overlap || null, dep_need_at: s.dep_need_at || null, effective_seconds: sku.timeOf(s) }))).criticalSeconds : 0;
   const critA = critOf(A), critB = critOf(B);
 
   const COL_A = '#1a56b0', COL_B = '#1c7c3c';

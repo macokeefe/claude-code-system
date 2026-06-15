@@ -129,6 +129,7 @@ for (const stmt of [
   'ALTER TABLE sku_steps ADD COLUMN size_times TEXT',
   'ALTER TABLE sku_steps ADD COLUMN depends_on TEXT',
   'ALTER TABLE sku_steps ADD COLUMN dep_overlap TEXT',
+  'ALTER TABLE sku_steps ADD COLUMN dep_need_at TEXT',
   'ALTER TABLE sku_steps ADD COLUMN helpable INTEGER DEFAULT 0',
   'ALTER TABLE sku_steps ADD COLUMN help_seconds INTEGER',
 ]) {

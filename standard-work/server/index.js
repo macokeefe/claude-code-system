@@ -69,6 +69,7 @@ app.get('/api/skus/:id', (req, res) => {
     size_times: s.size_times ? JSON.parse(s.size_times) : null,
     depends_on: s.depends_on ? JSON.parse(s.depends_on) : [],
     dep_overlap: s.dep_overlap ? JSON.parse(s.dep_overlap) : null,
+    dep_need_at: s.dep_need_at ? JSON.parse(s.dep_need_at) : null,
     photos: db.prepare("SELECT * FROM photos WHERE owner_type = 'sku_step' AND owner_id = ? ORDER BY sort_order").all(s.id),
   }));
   res.json({ ...sku, steps, total_seconds: getSkuTotal(sku.id) });
@@ -126,7 +127,7 @@ app.post('/api/skus/:id/steps', (req, res) => {
 app.put('/api/steps/:id', (req, res) => {
   const step = db.prepare('SELECT * FROM sku_steps WHERE id = ?').get(req.params.id);
   if (!step) return res.status(404).json({ error: 'Step not found' });
-  const { name, description, time, override_time, station, parallel_notes, tag_id, quantity, size_times, depends_on, dep_overlap, helpable, help_time, needs_review, note } = req.body;
+  const { name, description, time, override_time, station, parallel_notes, tag_id, quantity, size_times, depends_on, dep_overlap, dep_need_at, helpable, help_time, needs_review, note } = req.body;
 
   let helpableVal = step.helpable;
   let helpSecondsVal = step.help_seconds;
@@ -219,16 +220,30 @@ app.put('/api/steps/:id', (req, res) => {
     for (const d of curDeps) if (o[d] != null) keep[d] = o[d];
     overlapJson = Object.keys(keep).length ? JSON.stringify(keep) : null;
   }
+  let needAtJson = step.dep_need_at;
+  if (dep_need_at !== undefined) {
+    const clean = {};
+    for (const [d, f] of Object.entries(dep_need_at || {})) {
+      const fr = Number(f);
+      if (Number.isFinite(fr) && fr > 0 && fr < 1) clean[Number(d)] = fr;
+    }
+    needAtJson = Object.keys(clean).length ? JSON.stringify(clean) : null;
+  }
+  if (needAtJson) {
+    const o = JSON.parse(needAtJson); const keep = {};
+    for (const d of curDeps) if (o[d] != null) keep[d] = o[d];
+    needAtJson = Object.keys(keep).length ? JSON.stringify(keep) : null;
+  }
 
   db.prepare(`UPDATE sku_steps SET name = ?, description = ?, time_seconds = ?, override_time_seconds = ?,
-              station = ?, parallel_notes = ?, tag_id = ?, quantity = ?, size_times = ?, depends_on = ?, dep_overlap = ?,
+              station = ?, parallel_notes = ?, tag_id = ?, quantity = ?, size_times = ?, depends_on = ?, dep_overlap = ?, dep_need_at = ?,
               helpable = ?, help_seconds = ?, needs_review = ?, updated_at = datetime('now')
               WHERE id = ?`)
     .run(name ?? step.name, description ?? step.description, ownSeconds, override,
          station ?? step.station, parallel_notes ?? step.parallel_notes,
          tag_id !== undefined ? tag_id : step.tag_id,
          quantity !== undefined ? (quantity === null || quantity === '' ? null : Number(quantity)) : step.quantity,
-         sizeTimesJson, dependsJson, overlapJson, helpableVal, helpSecondsVal,
+         sizeTimesJson, dependsJson, overlapJson, needAtJson, helpableVal, helpSecondsVal,
          needs_review !== undefined ? (needs_review ? 1 : 0) : step.needs_review, step.id);
   res.json({ ok: true, total_seconds: getSkuTotal(step.sku_id) });
 });

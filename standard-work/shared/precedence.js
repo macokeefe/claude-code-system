@@ -12,6 +12,10 @@ export function criticalPath(steps) {
   // overlap(s, d): fraction of prerequisite d that must be done before s starts.
   // Default 1 (d must fully finish). < 1 lets s start partway through d.
   const ovOf = (s, d) => (s.dep_overlap && s.dep_overlap[d] != null) ? s.dep_overlap[d] : 1;
+  // dep_need_at(s, d): fraction INTO s at which prerequisite d is actually
+  // needed. 0 = needed at the start (classic). 0.9 = "only needed for the last
+  // 10% of s" — so s can run almost to the end before d must be ready.
+  const needAtOf = (s, d) => (s.dep_need_at && s.dep_need_at[d] != null) ? s.dep_need_at[d] : 0;
   const esMemo = new Map();
   const efMemo = new Map();
   const inStack = new Set();
@@ -28,11 +32,13 @@ export function criticalPath(steps) {
     for (const d of (s.depends_on || [])) {
       if (!byId.has(d)) continue;
       const ov = ovOf(s, d);
-      // partial overlap: ready when d reaches its fraction; full dependency:
-      // ready only when d is truly finished (ef, not es+dur — d's own finish
-      // may itself be pushed out by a partial supplier).
-      start = Math.max(start, ov < 1 ? es(d) + ov * dur(byId.get(d)) : ef(d));
+      // when d's output is available: partial overlap → when d reaches its
+      // fraction; full dependency → d's true finish (ef).
+      const ready = ov < 1 ? es(d) + ov * dur(byId.get(d)) : ef(d);
+      // minus how late into s the prerequisite is actually needed
+      start = Math.max(start, ready - needAtOf(s, d) * dur(s));
     }
+    start = Math.max(0, start);
     inStack.delete(id);
     esMemo.set(id, start);
     return start;
@@ -66,7 +72,8 @@ export function criticalPath(steps) {
     let best = null, bestVal = -1;
     for (const d of (s.depends_on || [])) {
       if (!byId.has(d)) continue;
-      const v = ovOf(s, d) < 1 ? es(d) + ovOf(s, d) * dur(byId.get(d)) : ef(d);
+      const ready = ovOf(s, d) < 1 ? es(d) + ovOf(s, d) * dur(byId.get(d)) : ef(d);
+      const v = ready - needAtOf(s, d) * dur(s);
       if (v > bestVal) { bestVal = v; best = d; }
     }
     if (best != null && bestVal >= es(id) - 1e-6) walk(best);

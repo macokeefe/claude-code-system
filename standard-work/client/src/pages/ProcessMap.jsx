@@ -68,15 +68,15 @@ export default function ProcessMap() {
     return next;
   }
 
-  const cp = detail ? criticalPath(detail.steps.map(s => ({ id: s.id, depends_on: s.depends_on || [], effective_seconds: timeOf(s) }))) : { criticalStepIds: [] };
+  const cpStep = (s, secs) => ({ id: s.id, depends_on: s.depends_on || [], dep_overlap: s.dep_overlap || null, dep_need_at: s.dep_need_at || null, effective_seconds: secs });
+  const cp = detail ? criticalPath(detail.steps.map(s => cpStep(s, timeOf(s)))) : { criticalStepIds: [] };
   const criticalSet = new Set(cp.criticalStepIds);
 
   // The prerequisites are shared across sizes; only the times differ. Critical
   // path per size lets the one map show it serves Small/Medium/Large at once.
-  const critForSize = sz => detail ? criticalPath(detail.steps.map(s => ({
-    id: s.id, depends_on: s.depends_on || [],
-    effective_seconds: (sz && s.size_times && s.size_times[sz] != null) ? s.size_times[sz] : (s.effective_seconds || 0),
-  }))).criticalSeconds : 0;
+  const critForSize = sz => detail ? criticalPath(detail.steps.map(s =>
+    cpStep(s, (sz && s.size_times && s.size_times[sz] != null) ? s.size_times[sz] : (s.effective_seconds || 0))
+  )).criticalSeconds : 0;
 
   function boardXY(e) {
     const r = boardRef.current.getBoundingClientRect();
@@ -191,6 +191,16 @@ export default function ProcessMap() {
     await api.put(`/api/steps/${toId}`, { dep_overlap: cur });
     await load();
   }
+  // "needed for the last X%": frac = the point INTO the dependent where the
+  // prerequisite is needed (0 = whole step).
+  async function setNeedAt(fromId, toId, frac) {
+    const target = detail.steps.find(s => s.id === toId);
+    const cur = { ...(target.dep_need_at || {}) };
+    if (frac <= 0) delete cur[fromId]; else cur[fromId] = frac;
+    setEditArrow(null);
+    await api.put(`/api/steps/${toId}`, { dep_need_at: cur });
+    await load();
+  }
 
   // arrows: prerequisite (from) -> dependent (to)
   const arrows = [];
@@ -199,6 +209,7 @@ export default function ProcessMap() {
       fromId: d, toId: s.id,
       critical: criticalSet.has(d) && criticalSet.has(s.id),
       overlap: (s.dep_overlap && s.dep_overlap[d] != null) ? s.dep_overlap[d] : 1,
+      needAt: (s.dep_need_at && s.dep_need_at[d] != null) ? s.dep_need_at[d] : 0,
     });
   }
   const anchor = (id, side) => {
@@ -309,26 +320,34 @@ export default function ProcessMap() {
             );
           })}
 
-          {/* overlap pills — set how much of a prerequisite must be done first */}
+          {/* timing pills — how a prerequisite gates the next step */}
           {arrows.map((a, i) => {
             const s = anchor(a.fromId, 'out'), t = anchor(a.toId, 'in');
             const mx = (s.x + t.x) / 2, my = (s.y + t.y) / 2 + 17;
             const key = `${a.fromId}-${a.toId}`;
-            const partial = a.overlap < 1;
+            const partial = a.overlap < 1, lateNeed = a.needAt > 0;
+            const toName = (() => { const st = detail.steps.find(x => x.id === a.toId); return st ? (st.tag_id ? st.tag_name : st.name) : 'next'; })();
+            const label = lateNeed ? `needed: last ${Math.round((1 - a.needAt) * 100)}%`
+              : partial ? `start @ ${Math.round(a.overlap * 100)}%` : 'after 100%';
             return (
               <div key={key} className="ov-anchor" style={{ left: mx, top: my }}>
-                <button className={`ov-pill ${partial ? 'on' : ''}`}
-                  title="When can the next step start? Click to set how much of this prerequisite must be done first."
+                <button className={`ov-pill ${partial || lateNeed ? 'on' : ''}`}
+                  title="Click to set the timing between these two steps"
                   onPointerDown={e => e.stopPropagation()}
                   onClick={e => { e.stopPropagation(); setEditArrow(editArrow === key ? null : key); }}>
-                  {partial ? `start @ ${Math.round(a.overlap * 100)}%` : 'after 100%'}
+                  {label}
                 </button>
                 {editArrow === key && (
                   <div className="ov-menu" onPointerDown={e => e.stopPropagation()}>
-                    <div className="ov-menu-title">Next step can start when this is…</div>
-                    {[[1, 'fully done (100%)'], [0.75, '75% done'], [0.5, 'half done (50%)'], [0.25, '25% done'], [0.1, 'just started (10%)']].map(([f, lbl]) => (
+                    <div className="ov-menu-title">The next step can <strong>start</strong> when this one is…</div>
+                    {[[1, 'fully done (100%)'], [0.5, 'half done (50%)'], [0.25, '25% done'], [0.1, 'just started (10%)']].map(([f, lbl]) => (
                       <button key={f} className={`ov-opt ${a.overlap === f ? 'sel' : ''}`}
                         onClick={() => setOverlap(a.fromId, a.toId, f)}>{lbl}</button>
+                    ))}
+                    <div className="ov-menu-title" style={{ marginTop: 6, borderTop: '1px solid var(--border)', paddingTop: 6 }}>This is only <strong>needed for</strong>… of “{toName}”</div>
+                    {[[0, 'the whole step'], [0.5, 'the last half'], [0.75, 'the last 25%'], [0.9, 'just the last 10%']].map(([f, lbl]) => (
+                      <button key={f} className={`ov-opt ${(a.needAt || 0) === f ? 'sel' : ''}`}
+                        onClick={() => setNeedAt(a.fromId, a.toId, f)}>{lbl}</button>
                     ))}
                   </div>
                 )}

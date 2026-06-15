@@ -206,6 +206,19 @@ backends alongside depends_on (server col `dep_overlap TEXT`). Honored by:
 NOT yet in workflow snapshots or the optimizer (line balance is station-level;
 overlap is cross-station start timing). schedule.js is unused.
 
+**Consumer-side overlap (`dep_need_at`, 2026-06):** complements producer-side.
+Per dependent step, `dep_need_at: {prereqId: fraction}` = the point INTO the
+dependent at which the prerequisite is actually needed (0 = at the start =
+classic; 0.9 = "only needed for the last 10%"). Engineer example: "legs are
+only needed for the last 10% of seat-frame assembly." Combined start rule:
+es(B) = max over deps of (ready(d) − need_at·dur(B)), where ready(d) = full
+finish (or producer fraction if overlap<1). Set on the Process Map arrow popover
+(second section "only needed for… the last X%"); pill shows "needed: last X%".
+Honored by criticalPath and simulateLine (station-level, min need_at across
+crossing edges: start[u][k] ≥ finish[u][k'] − need_at·stime[k]). Stored/pruned
+in both backends (server col `dep_need_at TEXT`). Free-flow sim does NOT honor
+it yet (only producer overlap).
+
 ## Layout tester (2026-06)
 
 `Layout.jsx` — top-down floor plan (metres, FW30×FH17) to test physical

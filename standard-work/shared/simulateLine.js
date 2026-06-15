@@ -30,9 +30,15 @@ export function simulateLine(stations, opts = {}) {
   const stationOf = new Map();
   stations.forEach((st, k) => (st.steps || []).forEach(s => stationOf.set(s.id, k)));
   const deps = stations.map(() => new Set());
+  // needAt[k][k'] = earliest fraction into station k at which it needs upstream
+  // station k' (min across the crossing edges) — lets k overlap k'.
+  const needAt = stations.map(() => new Map());
   stations.forEach((st, k) => (st.steps || []).forEach(s => (s.depends_on || []).forEach(d => {
     const kk = stationOf.get(d);
-    if (kk != null && kk !== k) deps[k].add(kk);
+    if (kk == null || kk === k) return;
+    deps[k].add(kk);
+    const na = (s.dep_need_at && s.dep_need_at[d] != null) ? s.dep_need_at[d] : 0;
+    needAt[k].set(kk, Math.min(needAt[k].has(kk) ? needAt[k].get(kk) : 1, na));
   })));
 
   // topological order over stations (so a station is computed after its deps)
@@ -52,8 +58,10 @@ export function simulateLine(stations, opts = {}) {
   for (let u = 0; u < Q; u++) {
     for (const k of seq) {
       let s0 = u > 0 ? finish[u - 1][k] : 0;          // station free (single bench)
-      for (const k2 of deps[k]) s0 = Math.max(s0, finish[u][k2]); // upstream sub-assemblies ready
-      start[u][k] = s0;
+      // upstream sub-assemblies must be ready by the point this station needs
+      // them — so a late-needed input lets this station start earlier.
+      for (const k2 of deps[k]) s0 = Math.max(s0, finish[u][k2] - (needAt[k].get(k2) || 0) * stime[k]);
+      start[u][k] = Math.max(0, s0);
       finish[u][k] = s0 + stime[k];
     }
   }

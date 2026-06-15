@@ -405,6 +405,22 @@ async function handle(method, url, body) {
         for (const d of nextDepends) if (nextOverlap[d] != null) keep[d] = nextOverlap[d];
         nextOverlap = Object.keys(keep).length ? keep : null;
       }
+      // dep_need_at: {depId: fraction in (0,1)} — how late into THIS step the
+      // prerequisite is needed (0 = at the start). Lets the step overlap its dep.
+      let nextNeedAt = step.dep_need_at || null;
+      if (body.dep_need_at !== undefined) {
+        const clean = {};
+        for (const [d, f] of Object.entries(body.dep_need_at || {})) {
+          const fr = Number(f);
+          if (Number.isFinite(fr) && fr > 0 && fr < 1) clean[Number(d)] = fr;
+        }
+        nextNeedAt = Object.keys(clean).length ? clean : null;
+      }
+      if (nextNeedAt) {
+        const keep = {};
+        for (const d of nextDepends) if (nextNeedAt[d] != null) keep[d] = nextNeedAt[d];
+        nextNeedAt = Object.keys(keep).length ? keep : null;
+      }
       let nextSizeTimes = step.size_times;
       let nextOwn = step.time_seconds;
       if (body.size_times !== undefined) {
@@ -433,7 +449,7 @@ async function handle(method, url, body) {
         station: station ?? step.station, parallel_notes: parallel_notes ?? step.parallel_notes,
         tag_id: tag_id !== undefined ? tag_id : step.tag_id,
         quantity: quantity !== undefined ? (quantity === null || quantity === '' ? null : Number(quantity)) : step.quantity,
-        size_times: nextSizeTimes, time_seconds: nextOwn, depends_on: nextDepends, dep_overlap: nextOverlap,
+        size_times: nextSizeTimes, time_seconds: nextOwn, depends_on: nextDepends, dep_overlap: nextOverlap, dep_need_at: nextNeedAt,
         helpable: body.helpable !== undefined ? (body.helpable ? 1 : 0) : (step.helpable || 0),
         help_seconds: body.help_time !== undefined
           ? (body.help_time === null || body.help_time === '' ? null : (() => { const h = timeInput(body.help_time); if (h.ambiguous) httpError(400, { error: `Could not parse helper time "${body.help_time}"` }); return h.seconds; })())
@@ -453,6 +469,8 @@ async function handle(method, url, body) {
         .forEach(s => { s.depends_on = s.depends_on.filter(d => d !== step.id); });
       state.steps.filter(s => s.sku_id === step.sku_id && s.dep_overlap)
         .forEach(s => { if (s.dep_overlap[step.id] != null) { const n = { ...s.dep_overlap }; delete n[step.id]; s.dep_overlap = Object.keys(n).length ? n : null; } });
+      state.steps.filter(s => s.sku_id === step.sku_id && s.dep_need_at)
+        .forEach(s => { if (s.dep_need_at[step.id] != null) { const n = { ...s.dep_need_at }; delete n[step.id]; s.dep_need_at = Object.keys(n).length ? n : null; } });
       await persist();
       return { ok: true, total_seconds: skuTotal(step.sku_id) };
     }

@@ -45,7 +45,7 @@ export default function Workflows() {
   const stepBySeq = useMemo(() => Object.fromEntries(steps.map(s => [s.sequence, s])), [steps]);
   const stepName = s => (s.tag_id ? s.tag_name : s.name) || `Step ${s.sequence}`;
 
-  const cp = detail ? criticalPath(steps.map(s => ({ id: s.id, depends_on: s.depends_on || [], effective_seconds: timeOf(s) }))) : { criticalSeconds: 0 };
+  const cp = detail ? criticalPath(steps.map(s => ({ id: s.id, depends_on: s.depends_on || [], dep_overlap: s.dep_overlap || null, dep_need_at: s.dep_need_at || null, effective_seconds: timeOf(s) }))) : { criticalSeconds: 0 };
   const withPrereqs = steps.filter(s => (s.depends_on || []).length).length;
   const totalWork = steps.reduce((a, s) => a + timeOf(s), 0);
 
