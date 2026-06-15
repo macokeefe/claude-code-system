@@ -603,7 +603,7 @@ export default function Floor() {
     if (!stationGroups.length) return null;
     const stations = stationGroups.map(sg => ({
       workers: sg.workers,
-      steps: sg.steps.map(s => ({ id: s.id, effective_seconds: durOfStep(s), helpable: true, help_seconds: s.help_seconds || 0 })),
+      steps: sg.steps.map(s => ({ id: s.id, depends_on: s.depends_on || [], effective_seconds: durOfStep(s), helpable: true, help_seconds: s.help_seconds || 0 })),
     }));
     return simulateLine(stations, { quantity, shiftSeconds: Math.round(shiftHours * 3600) });
   }, [stationGroups, quantity, shiftHours]); // eslint-disable-line

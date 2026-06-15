@@ -231,8 +231,14 @@ The 3D Floor now has TWO simulations, toggled top-right (default **Line**):
   `ctx.stationSpots`; assignment panel + auto-helping hidden in this mode.
 - **Free-flow** (`simulate.js`, the original): operators roam and pull ready
   work across all units; honors precedence + overlap; uses the own/help panel.
-A compare strip shows both (makespan, units/shift, util, ops) so they can be
-weighed side by side. `activeSim` (mode-selected) drives the 3D playback,
+Line mode is **precedence-driven, not station-order-driven**: each station's
+upstream dependencies are derived from its steps' depends_on, and a station
+starts unit u once it's free AND its upstream stations finished unit u. So a
+prerequisite-free station (seat-support frame, legs, connector prep) runs
+flat-out from t=0 stockpiling sub-assemblies (engineer 2026-06: "they should be
+doing that 24/7"). Stations are computed in topological order; cycle time =
+bottleneck station. A compare strip shows both (makespan, units/shift, util,
+ops) side by side. `activeSim` (mode-selected) drives the 3D playback,
 stats, workload bars, slider. NOTE: free-flow has no single-bench capacity
 (can over-parallelize) and honors overlap; line mode enforces one-unit-per-
 station but does NOT yet honor cross-station overlap — two different models on
