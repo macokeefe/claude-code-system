@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
 import { api, formatTime, formatLong } from '@backend';
 import { criticalPath } from '../../../shared/precedence.js';
+import { simulateBuild } from '../../../shared/simulate.js';
 import { sizeLabel } from '../sizeLabel.js';
+
+// The staffing standard: a line normally runs with this many people.
+const STANDARD_CREW = 8;
 
 export default function Dashboard() {
   const [skus, setSkus] = useState([]);
@@ -13,6 +17,7 @@ export default function Dashboard() {
   const [selectedId, setSelectedId] = useState(null);
   const [selectedSize, setSelectedSize] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [crewTimes, setCrewTimes] = useState({}); // skuId -> build time (s) with STANDARD_CREW
 
   const famOf = s => s.family || 'Other';
   // Configuration label = product name with the family prefix stripped
@@ -32,6 +37,31 @@ export default function Dashboard() {
   useEffect(() => {
     if (skus.length && pickFamily == null) setPickFamily(famOf(skus[0]));
   }, [skus]); // eslint-disable-line
+
+  // Build time with the standard crew of 8 — how long ONE unit really takes when
+  // 8 people work it in parallel (vs. the raw sum of every hands-on second).
+  useEffect(() => {
+    if (!skus.length) return;
+    let cancelled = false;
+    Promise.all(skus.map(s => api.get(`/api/skus/${s.id}`).catch(() => null))).then(details => {
+      if (cancelled) return;
+      const out = {};
+      for (const d of details) {
+        if (!d || !d.steps || !d.steps.length) continue;
+        const steps = d.steps.map(s => ({
+          id: s.id,
+          depends_on: s.depends_on || [],
+          effective_seconds: s.effective_seconds || 0,
+          helpable: !!s.helpable,
+          help_seconds: s.help_seconds || 0,
+        }));
+        const sim = simulateBuild(steps, STANDARD_CREW, { helping: true });
+        out[d.id] = (sim && sim.makespan) || 0;
+      }
+      setCrewTimes(out);
+    });
+    return () => { cancelled = true; };
+  }, [skus]);
 
   // When the family changes (or products load), pick the first configuration in it.
   useEffect(() => {
@@ -53,7 +83,12 @@ export default function Dashboard() {
   const families = [...new Set(skus.map(s => s.family).filter(Boolean))];
   const filtered = family ? skus.filter(s => s.family === family) : skus;
   const skuData = filtered
-    .map(s => ({ name: s.name, minutes: +(s.total_seconds / 60).toFixed(1), seconds: s.total_seconds }))
+    .map(s => ({
+      name: s.name,
+      minutes: +(s.total_seconds / 60).toFixed(1),
+      crew: crewTimes[s.id] != null ? +(crewTimes[s.id] / 60).toFixed(1) : null,
+      seconds: s.total_seconds,
+    }))
     .sort((a, b) => b.seconds - a.seconds);
   const impactData = tagImpact
     .filter(t => t.aggregate_seconds > 0)
@@ -98,6 +133,17 @@ export default function Dashboard() {
     id: s.id, depends_on: s.depends_on || [], dep_overlap: s.dep_overlap || null, dep_need_at: s.dep_need_at || null, effective_seconds: effFor(s),
   }))).criticalSeconds : 0, [detail, selectedSize]); // eslint-disable-line
 
+  // Realistic build time for the selected product with the standard crew of 8.
+  const buildTime8 = useMemo(() => {
+    if (!detail || !detail.steps.length) return 0;
+    const steps = detail.steps.map(s => ({
+      id: s.id, depends_on: s.depends_on || [], effective_seconds: effFor(s),
+      helpable: !!s.helpable, help_seconds: s.help_seconds || 0,
+    }));
+    const sim = simulateBuild(steps, STANDARD_CREW, { helping: true });
+    return (sim && sim.makespan) || 0;
+  }, [detail, selectedSize]); // eslint-disable-line
+
   return (
     <>
       <h1>Dashboard</h1>
@@ -137,13 +183,14 @@ export default function Dashboard() {
         ) : (
           <>
             <div className="muted" style={{ marginBottom: 8 }}>
-              {detail.steps.length} steps · <strong>build time</strong> (with a crew, work in parallel) <strong className="time">{formatTime(buildTime)}</strong>
+              {detail.steps.length} steps · <strong>with {STANDARD_CREW} people</strong> <strong className="time" style={{ color: '#1c7c3c' }}>{formatTime(buildTime8)}</strong>
+              {' · '}ideal build time (unlimited crew) <span className="time">{formatTime(buildTime)}</span>
               {' · '}total hands-on labor <span className="time">{formatTime(shownTotal)}</span>
               {activeSize ? <> · size <strong>{sizeLabel(activeSize)}</strong></> : null} ·{' '}
               <Link to={`/skus/${detail.id}`}>open / edit</Link>
             </div>
             <p className="muted" style={{ fontSize: 12, marginTop: -2, marginBottom: 10 }}>
-              Build time is how long one piece takes when people work in parallel (the critical path). Total hands-on labor is every step added up (person-time) — bigger, because several people work at once.
+              <strong>With {STANDARD_CREW} people</strong> is how long one piece really takes on the floor with the standard crew (green). Ideal build time is the theoretical floor if you had unlimited people (the critical path). Total hands-on labor is every step added up (person-time) — much bigger, because several people work at once.
             </p>
             <ResponsiveContainer width="100%" height={420}>
               <BarChart data={stepData} margin={{ top: 10, right: 20, left: 10, bottom: 130 }}>
@@ -162,7 +209,7 @@ export default function Dashboard() {
 
       <div className="card">
         <div className="toolbar">
-          <h2 style={{ margin: 0 }}>Total labor time by SKU</h2>
+          <h2 style={{ margin: 0 }}>Total labor vs. build time with {STANDARD_CREW} people</h2>
           <div className="spacer" />
           {families.length > 0 && (
             <select style={{ width: 220 }} value={family} onChange={e => setFamily(e.target.value)}>
@@ -171,13 +218,20 @@ export default function Dashboard() {
             </select>
           )}
         </div>
+        <p className="muted" style={{ fontSize: 13, marginTop: -2 }}>
+          The big bar is <strong>total hands-on labor</strong> — every step added up (person-time). The green bar is how long
+          one unit actually takes on the floor with the standard crew of <strong>{STANDARD_CREW}</strong> working in parallel.
+          A high labor total doesn't mean a long build: with {STANDARD_CREW} people the unit comes off far sooner.
+        </p>
         {skuData.length === 0 ? <div className="empty">No SKUs yet — create one or import a spreadsheet.</div> : (
-          <ResponsiveContainer width="100%" height={Math.max(120, skuData.length * 56)}>
-            <BarChart data={skuData} layout="vertical" margin={{ left: 40, right: 40 }}>
+          <ResponsiveContainer width="100%" height={Math.max(160, skuData.length * 64)}>
+            <BarChart data={skuData} layout="vertical" margin={{ left: 40, right: 40 }} barGap={2}>
               <XAxis type="number" unit=" min" />
               <YAxis type="category" dataKey="name" width={220} tick={{ fontSize: 13 }} />
-              <Tooltip formatter={v => [`${v} min`, 'Total labor']} />
-              <Bar dataKey="minutes" fill="#1a56b0" radius={[0, 4, 4, 0]} barSize={26} />
+              <Tooltip formatter={(v, n) => [`${v} min`, n === 'crew' ? `Build time · ${STANDARD_CREW} people` : 'Total hands-on labor']} />
+              <Legend formatter={n => n === 'crew' ? `Build time · ${STANDARD_CREW} people` : 'Total hands-on labor'} />
+              <Bar dataKey="minutes" name="minutes" fill="#c2cfe6" radius={[0, 4, 4, 0]} barSize={18} />
+              <Bar dataKey="crew" name="crew" fill="#1c7c3c" radius={[0, 4, 4, 0]} barSize={18} />
             </BarChart>
           </ResponsiveContainer>
         )}
