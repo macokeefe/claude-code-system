@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { api, formatTime, formatLong } from '@backend';
+import { criticalPath } from '../../../shared/precedence.js';
 import { sizeLabel } from '../sizeLabel.js';
 
 export default function Dashboard() {
@@ -91,6 +92,11 @@ export default function Dashboard() {
   }, [detail, selectedSize]); // eslint-disable-line
 
   const shownTotal = detail ? detail.steps.reduce((a, s) => a + effFor(s), 0) : 0;
+  // Build time = critical path (the fastest a crew can finish ONE unit with
+  // work in parallel) — not the sum of all hands-on labor.
+  const buildTime = useMemo(() => detail ? criticalPath(detail.steps.map(s => ({
+    id: s.id, depends_on: s.depends_on || [], dep_overlap: s.dep_overlap || null, dep_need_at: s.dep_need_at || null, effective_seconds: effFor(s),
+  }))).criticalSeconds : 0, [detail, selectedSize]); // eslint-disable-line
 
   return (
     <>
@@ -131,10 +137,14 @@ export default function Dashboard() {
         ) : (
           <>
             <div className="muted" style={{ marginBottom: 8 }}>
-              {detail.steps.length} steps · total <strong className="time">{formatTime(shownTotal)}</strong> ({formatLong(shownTotal)})
+              {detail.steps.length} steps · <strong>build time</strong> (with a crew, work in parallel) <strong className="time">{formatTime(buildTime)}</strong>
+              {' · '}total hands-on labor <span className="time">{formatTime(shownTotal)}</span>
               {activeSize ? <> · size <strong>{sizeLabel(activeSize)}</strong></> : null} ·{' '}
               <Link to={`/skus/${detail.id}`}>open / edit</Link>
             </div>
+            <p className="muted" style={{ fontSize: 12, marginTop: -2, marginBottom: 10 }}>
+              Build time is how long one piece takes when people work in parallel (the critical path). Total hands-on labor is every step added up (person-time) — bigger, because several people work at once.
+            </p>
             <ResponsiveContainer width="100%" height={420}>
               <BarChart data={stepData} margin={{ top: 10, right: 20, left: 10, bottom: 130 }}>
                 <XAxis type="category" dataKey="name" interval={0} angle={-40} textAnchor="end" height={130} tick={{ fontSize: 11 }} />
@@ -193,7 +203,7 @@ export default function Dashboard() {
       <div className="card">
         <h2 style={{ marginTop: 0 }}>SKUs</h2>
         <table className="data">
-          <thead><tr><th>SKU</th><th>Name</th><th>Family</th><th>Steps</th><th>Total time</th></tr></thead>
+          <thead><tr><th>SKU</th><th>Name</th><th>Family</th><th>Steps</th><th>Total labor (person-time)</th></tr></thead>
           <tbody>
             {filtered.map(s => (
               <tr key={s.id}>

@@ -60,7 +60,7 @@ export const seedSkus = [
       {
         name: 'Frame Sub-Assembly',
         description: 'Lay both frame sections flat on the work surface — the 3/4-leg section and the 5-piece section. Apply a bar clamp to each section to hold extrusions flush and aligned. Drive screws into each leg joint using the pre-installed connectors from the previous step until fully seated. Repeat for all joints on both sections. 8:30 for 4-legged piece + 10:30 for 5-legged.',
-        raw: '8:30 + 10:30 (in description)', needsReview: true,
+        seconds: 1140, raw: '8:30 + 10:30',
       },
       {
         name: 'Frame Assembly',

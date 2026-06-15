@@ -154,6 +154,22 @@ async function ensureInit() {
         }
         if (added) await persist();
       }
+      // Fill seeded step times that were left blank (e.g. Right Arm's
+      // Frame Sub-Assembly) from the seed — only where the step currently has
+      // no own time, so user-entered values are never overwritten.
+      if (!state.dataFix_v1) {
+        for (const sku of state.skus) {
+          const seed = seedSkus.find(x => x.sku_number === sku.sku_number);
+          if (!seed) continue;
+          const steps = state.steps.filter(s => s.sku_id === sku.id).sort((a, b) => a.sequence - b.sequence);
+          seed.steps.forEach((sd, i) => {
+            const st = steps[i];
+            if (st && !st.tag_id && st.time_seconds == null && sd.seconds != null) { st.time_seconds = sd.seconds; st.needs_review = 0; }
+          });
+        }
+        state.dataFix_v1 = true;
+        await persist();
+      }
       // Re-apply corrected build-order precedence to the seeded Sola SKUs
       // (matched by sku_number + step sequence). Skips user-created/imported SKUs.
       if (state.prereqVersion !== PRECEDENCE_VERSION) {

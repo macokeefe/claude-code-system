@@ -257,6 +257,23 @@ stats, workload bars, slider. NOTE: free-flow has no single-bench capacity
 station but does NOT yet honor cross-station overlap — two different models on
 purpose, kept for comparison.
 
+## Metric clarity + data fixes (2026-06)
+
+Engineer flagged "Meritage shows 2h too long; Sola varies weirdly." Root cause
+= the headline was **total hands-on labor** (sum of steps = person-time), not
+**build time** (critical path = wall-clock with a crew). Meritage: 4:24 labor
+vs **2:05 build**. Fix: Dashboard now leads with build time (critical path,
+honoring overlap/need_at), labels the sum as "total hands-on labor (person-
+time)". Meritage step data is COMPLETE (only PPE blank); its precedence is
+inferred so build time depends on it — verify.
+Sola variance was data gaps: **Right Arm's Frame Sub-Assembly had no time** →
+filled to 19:00 (1140s, per its own "8:30+10:30" note); seed updated +
+`state.dataFix_v1` migration fills blank seeded step own-times from seed
+(never overwrites user values). STILL MISSING on all Solas: **Seat Support
+Frame Assembly** and **Frame Prep** (no time anywhere — need a real
+measurement; not invented). Only legit Sola config variance is connector count
+(14/16/18 → Connector Pre 11:40/13:20/15:00).
+
 ## Open items
 
 - Meritage: not yet modeled — waiting on a readable copy (app Export Excel →
