@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { api, formatTime, formatLong } from '@backend';
 import { simulateBuild } from '../../../shared/simulate.js';
+import { simulateLine } from '../../../shared/simulateLine.js';
 import { sizeLabel } from '../sizeLabel.js';
 
 // Status colors for the floor ring under each bench
@@ -534,6 +535,7 @@ export default function Floor() {
   const [quantity, setQuantity] = useState(3);
   const [assignments, setAssignments] = useState({}); // opId -> {own:[seq], help:[seq]}
   const [showAssign, setShowAssign] = useState(false);
+  const [mode, setMode] = useState('line'); // 'line' (assembly line) | 'free' (operators roam)
 
   useEffect(() => {
     api.get('/api/skus').then(list => { setSkus(list); if (list.length) setSkuId(p => p ?? list[0].id); });
@@ -568,12 +570,52 @@ export default function Floor() {
     return simulateBuild(simSteps, activeOps.length, { helping, assignments: assignArr, quantity });
   }, [simSteps, activeOps.length, assignments, helping, detail, quantity]); // eslint-disable-line
 
+  // Stations for LINE mode: same grouping as the 3D benches (saved Line
+  // Designer layout, else auto-balance), with per-station worker counts.
+  const stationGroups = useMemo(() => {
+    if (!detail) return [];
+    const steps = detail.steps;
+    const STN = 8;
+    let groups = null, workers = null;
+    try {
+      const saved = JSON.parse(localStorage.getItem(`sw-line-${skuId}`));
+      if (saved?.assign && Object.keys(saved.assign).length) {
+        const n = Math.min(STN, Math.max(1, saved.stationCount || STN));
+        const arr = Array.from({ length: n }, () => []);
+        for (const s of steps) arr[Math.min(n - 1, saved.assign[s.id] ?? 0)].push(s);
+        groups = arr.filter(g => g.length);
+        const w = saved.workers || {};
+        workers = groups.map(g => Math.max(1, ...g.map(s => w[s.id] || 1)));
+      }
+    } catch { /* ignore */ }
+    if (!groups) {
+      const total = steps.reduce((a, s) => a + durOfStep(s), 0);
+      const target = total / Math.min(STN, steps.length || 1);
+      groups = [[]]; let acc = 0;
+      for (const s of steps) { const t = durOfStep(s); if (acc > 0 && acc + t > target * 1.2 && groups.length < STN) { groups.push([]); acc = 0; } groups[groups.length - 1].push(s); acc += t; }
+      workers = groups.map(() => 1);
+    }
+    groups.forEach(g => g.sort((a, b) => a.sequence - b.sequence));
+    return groups.map((g, k) => ({ steps: g, workers: workers[k] }));
+  }, [detail, activeSize, skuId]); // eslint-disable-line
+
+  const lineSim = useMemo(() => {
+    if (!stationGroups.length) return null;
+    const stations = stationGroups.map(sg => ({
+      workers: sg.workers,
+      steps: sg.steps.map(s => ({ id: s.id, effective_seconds: durOfStep(s), helpable: true, help_seconds: s.help_seconds || 0 })),
+    }));
+    return simulateLine(stations, { quantity, shiftSeconds: Math.round(shiftHours * 3600) });
+  }, [stationGroups, quantity, shiftHours]); // eslint-disable-line
+
+  const activeSim = mode === 'line' ? lineSim : sim;
+
   // keep the render loop fed
   useEffect(() => {
-    simRef.current = sim;
-    if (three.current) three.current.total = sim ? sim.makespan : 0;
-    if (sliderRef.current && sim) { sliderRef.current.max = sim.makespan; if (tRef.current > sim.makespan) { tRef.current = 0; sliderRef.current.value = 0; } }
-  }, [sim]);
+    simRef.current = activeSim;
+    if (three.current) three.current.total = activeSim ? activeSim.makespan : 0;
+    if (sliderRef.current && activeSim) { sliderRef.current.max = activeSim.makespan; if (tRef.current > activeSim.makespan) { tRef.current = 0; sliderRef.current.value = 0; } }
+  }, [activeSim]);
 
   // ---- Scene setup (once) ----
   useEffect(() => {
@@ -691,39 +733,15 @@ export default function Floor() {
     const group = new THREE.Group();
     ctx.scene.add(group);
 
-    const steps = detail.steps;
-    // The real floor has 8 stations: group the steps onto at most 8 benches in
-    // a single line. Use the Line Designer layout when one is saved for this
-    // product; otherwise auto-balance contiguously by build order.
-    const STATIONS = 8;
-    let groups = null;
-    try {
-      const saved = JSON.parse(localStorage.getItem(`sw-line-${skuId}`));
-      if (saved && saved.assign && Object.keys(saved.assign).length) {
-        const n = Math.min(STATIONS, Math.max(1, saved.stationCount || STATIONS));
-        const arr = Array.from({ length: n }, () => []);
-        for (const s of steps) arr[Math.min(n - 1, saved.assign[s.id] ?? 0)].push(s);
-        groups = arr.filter(g => g.length);
-      }
-    } catch { /* fall through to auto-balance */ }
-    if (!groups || !groups.length) {
-      const total = steps.reduce((a, s) => a + durOfStep(s), 0);
-      const target = total / Math.min(STATIONS, steps.length);
-      groups = [[]];
-      let acc = 0;
-      for (const s of steps) {
-        const t = durOfStep(s);
-        if (acc > 0 && acc + t > target * 1.2 && groups.length < STATIONS) { groups.push([]); acc = 0; }
-        groups[groups.length - 1].push(s); acc += t;
-      }
-    }
-    groups.forEach(g => g.sort((a, b) => a.sequence - b.sequence));
+    const groups = stationGroups.map(sg => sg.steps);
+    if (!groups.length) return;
 
     const spacing = 5.4;
     const offset = ((groups.length - 1) * spacing) / 2;
     const stations = [];
     const benchSpots = new Map(); // stepId -> { primary: Vector3, helper: Vector3 }
     const stepInfo = new Map();   // stepId -> { seq, name, station }
+    const stationSpots = [];      // per-station operator stand positions (line mode)
     groups.forEach((g, k) => {
       const px = k * spacing - offset;
       const { st, led } = makeBench();
@@ -748,6 +766,7 @@ export default function Floor() {
         });
         stepInfo.set(s.id, { seq: s.sequence, name: shortName(s), station: k + 1 });
       });
+      stationSpots.push([-0.85, -0.1, 0.65].map(dx => st.localToWorld(new THREE.Vector3(dx, 0, 1.6))));
       stations.push({
         idx: k, stepIds: g.map(s => s.id), durs: g.map(s => durOfStep(s)),
         totalDur, led, visual, noTime: totalDur <= 0,
@@ -759,8 +778,9 @@ export default function Floor() {
     ctx.stations = stations;
     ctx.benchSpots = benchSpots;
     ctx.stepInfo = stepInfo;
+    ctx.stationSpots = stationSpots;
     tRef.current = 0; if (sliderRef.current) sliderRef.current.value = 0;
-  }, [detail, size]); // eslint-disable-line
+  }, [stationGroups]); // eslint-disable-line
 
   // ---- Crew figures (named, colored) ----
   useEffect(() => {
@@ -787,6 +807,27 @@ export default function Floor() {
     if (!ctx.stations || !sm) return;
     const t = tRef.current;
     const Q = sm.quantity || 1;
+    if (sm.kind === 'line') {
+      const N = ctx.stations.length || 1;
+      for (const s of ctx.stations) {
+        const ls = sm.stations[s.idx];
+        let active = false, prog = 0, doneCount = 0;
+        if (ls) {
+          const iv = ls.intervals.find(e => t >= e.start && t < e.finish);
+          if (iv) { active = true; prog = iv.finish > iv.start ? (t - iv.start) / (iv.finish - iv.start) : 1; }
+          doneCount = ls.intervals.filter(e => e.finish > 0 && t >= e.finish).length;
+        }
+        const allDone = ls && doneCount >= Q;
+        const state = active ? 'active' : (allDone ? 'done' : 'idle');
+        const led = s.led;
+        if (s.noTime && t > 0) { led.color.setHex(0xd9a427); led.emissive.setHex(0xd9a427); led.emissiveIntensity = 0.7; }
+        else { led.color.setHex(RING[state]); led.emissive.setHex(state === 'idle' ? 0x000000 : RING[state]); led.emissiveIntensity = active ? 1.1 : 0.5; }
+        s.visual.update((s.idx + (active ? prog : (allDone ? 1 : 0))) / N);
+      }
+      if (clockRef.current) clockRef.current.textContent = `${formatTime(t)} / ${formatTime(ctx.total || 0)}`;
+      if (sliderRef.current && playingRef.current) sliderRef.current.value = t;
+      return;
+    }
     for (const s of ctx.stations) {
       // a station holds several steps; each step has Q unit-instances
       let active = false, done = 0;
@@ -824,6 +865,36 @@ export default function Floor() {
     const t = tRef.current;
     const lines = [];
     let activeCount = 0;
+    if (sm.kind === 'line') {
+      // operators are pinned to stations (by each station's worker count)
+      const assignMap = []; let ci = 0;
+      for (let k = 0; k < sm.stations.length; k++) { const w = sm.stations[k].workers || 1; for (let sl = 0; sl < w && ci < ctx.crew.length; sl++) assignMap[ci++] = { k, slot: sl }; }
+      ctx.crew.forEach((c, i) => {
+        const a = assignMap[i];
+        let target = c.home, working = false;
+        if (a && ctx.stationSpots && ctx.stationSpots[a.k]) {
+          const spots = ctx.stationSpots[a.k];
+          target = spots[Math.min(a.slot, spots.length - 1)];
+          working = sm.stations[a.k].intervals.some(e => t >= e.start && t < e.finish);
+          if (working) activeCount++;
+        } else { target = new THREE.Vector3((i - (ctx.crew.length - 1) / 2) * 1.4, 0, 4.4); } // surplus stands back
+        const kk = 1 - Math.exp(-dt * 3);
+        c.fig.position.x += (target.x - c.fig.position.x) * kk;
+        c.fig.position.z += (target.z - c.fig.position.z) * kk;
+        const distSq = (target.x - c.fig.position.x) ** 2 + (target.z - c.fig.position.z) ** 2;
+        c.fig.position.y = working && distSq < 0.05 ? Math.abs(Math.sin(t * 3 + i)) * 0.05 : 0;
+      });
+      if (activeRef.current) {
+        const desc = sm.stations.filter(ls => ls.intervals.some(e => t >= e.start && t < e.finish))
+          .map(ls => { const u = ls.intervals.find(e => t >= e.start && t < e.finish); return `S${ls.idx + 1} #${(u.unit ?? 0) + 1}`; });
+        activeRef.current.textContent = desc.length ? `working: ${desc.join('  ·  ')}` : (t >= (ctx.total || 0) && ctx.total ? 'all units complete' : 'line idle');
+      }
+      if (idleCountRef.current) {
+        const unitsDone = sm.unitFinishes.filter(f => t >= f && f > 0).length;
+        idleCountRef.current.textContent = `${activeCount} working · ${ctx.crew.length - activeCount} idle  ·  units finished ${unitsDone}/${sm.quantity}`;
+      }
+      return;
+    }
     ctx.crew.forEach((c, i) => {
       const intervals = sm.operators[i]?.intervals || [];
       const iv = intervals.find(v => t >= v.start && t < v.end);
@@ -853,9 +924,12 @@ export default function Floor() {
 
   const noTimeSteps = detail ? detail.steps.filter(s => durOfStep(s) <= 0) : [];
   const shiftSeconds = Math.round(shiftHours * 3600);
-  const unitsPerShift = sim && sim.makespan > 0 ? Math.floor((quantity / sim.makespan) * shiftSeconds) : 0;
+  const view = activeSim;
+  const freeUnitsPerShift = sim && sim.makespan > 0 ? Math.floor((quantity / sim.makespan) * shiftSeconds) : 0;
+  const lineUnitsPerShift = lineSim ? lineSim.unitsPerShift : 0;
+  const unitsPerShift = mode === 'line' ? lineUnitsPerShift : freeUnitsPerShift;
   const hitsTarget = unitsPerShift >= target;
-  const neverStarted = sim && detail ? detail.steps.filter(s => {
+  const neverStarted = (mode === 'free' && sim && detail) ? detail.steps.filter(s => {
     const insts = sim.byTemplate.get(s.id) || [];
     return insts.length > 0 && insts.every(e => e.start == null);
   }) : [];
@@ -877,6 +951,10 @@ export default function Floor() {
       <div className="toolbar">
         <h1 style={{ margin: 0 }}>3D Floor — simulation</h1>
         <div className="spacer" />
+        <div className="seg">
+          <button className={mode === 'line' ? 'on' : ''} onClick={() => { setMode('line'); tRef.current = 0; setPlaying(false); }}>Line</button>
+          <button className={mode === 'free' ? 'on' : ''} onClick={() => { setMode('free'); tRef.current = 0; setPlaying(false); }}>Free-flow</button>
+        </div>
         <select value={skuId || ''} onChange={e => setSkuId(Number(e.target.value))} style={{ width: 240 }}>
           {skus.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
@@ -886,13 +964,25 @@ export default function Floor() {
           </select>
         )}
       </div>
-      <p className="subtitle">Your crew, simulated: named operators walk between benches, helping where you send them and peeling off when their own task is ready. Change assignments below and the whole run recomputes.</p>
+      <p className="subtitle">{mode === 'line'
+        ? 'Assembly LINE: each operator stays at one of the 8 stations, a unit flows station to station (one unit per bench), and output is paced by the slowest station. This is the line you design in the Line Designer / Workflows.'
+        : 'FREE-FLOW: named operators roam between benches, helping where you send them and peeling off when their own task is ready. Set assignments below.'}</p>
+
+      {sim && lineSim && (
+        <div className="card" style={{ padding: '10px 14px' }}>
+          <div className="cmp-strip">
+            <strong>Compare (build {quantity}, {shiftHours}h shift):</strong>
+            <span className={mode === 'line' ? 'pick' : ''}>Line — {formatLong(lineSim.makespan)} · {lineSim.unitsPerShift}/shift · {Math.round(lineSim.utilization * 100)}% util · {lineSim.operatorsCount} ops</span>
+            <span className={mode === 'free' ? 'pick' : ''}>Free-flow — {formatLong(sim.makespan)} · {freeUnitsPerShift}/shift · {Math.round(sim.utilization * 100)}% util · {activeOps.length} ops</span>
+          </div>
+        </div>
+      )}
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div ref={mountRef} style={{ width: '100%', height: 520, position: 'relative' }} />
       </div>
 
-      {sim && (
+      {view && (
         <div className="card">
           <div className="row" style={{ gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div className="field" style={{ maxWidth: 130 }}>
@@ -900,16 +990,22 @@ export default function Floor() {
               <input type="number" min="1" max="30" value={quantity} onChange={e => setQuantity(Math.max(1, Math.min(30, Number(e.target.value))))} />
             </div>
             <div className="stat" style={{ borderLeftColor: '#1a56b0' }}>
-              <div className="stat-value">{formatLong(sim.makespan)}</div>
-              <div className="stat-label">to build {quantity} with {activeOps.length} operators{helping ? ' + helping' : ''}</div>
+              <div className="stat-value">{formatLong(view.makespan)}</div>
+              <div className="stat-label">to build {quantity} — {mode === 'line' ? `${view.operatorsCount} on the line` : `${activeOps.length} operators${helping ? ' + helping' : ''}`}</div>
             </div>
+            {mode === 'line' && (
+              <div className="stat" style={{ borderLeftColor: '#b3261e' }}>
+                <div className="stat-value">{formatTime(view.cycleTime)}</div>
+                <div className="stat-label">cycle time (bottleneck = Station {view.bottleneck + 1})</div>
+              </div>
+            )}
             <div className="stat" style={{ borderLeftColor: hitsTarget ? '#1c7c3c' : '#b3261e' }}>
               <div className="stat-value">{unitsPerShift} / {target}</div>
               <div className="stat-label">units/{shiftHours}h vs target</div>
             </div>
-            <div className="stat" style={{ borderLeftColor: sim.utilization < 0.5 ? '#b3261e' : sim.utilization < 0.75 ? '#e0913d' : '#1c7c3c' }}>
-              <div className="stat-value">{Math.round(sim.utilization * 100)}%</div>
-              <div className="stat-label">crew utilization ({formatLong(sim.idleSeconds)} idle total)</div>
+            <div className="stat" style={{ borderLeftColor: view.utilization < 0.5 ? '#b3261e' : view.utilization < 0.75 ? '#e0913d' : '#1c7c3c' }}>
+              <div className="stat-value">{Math.round(view.utilization * 100)}%</div>
+              <div className="stat-label">crew utilization ({formatLong(view.idleSeconds)} idle total)</div>
             </div>
             <div className="field" style={{ maxWidth: 90 }}>
               <label>Target</label>
@@ -919,13 +1015,15 @@ export default function Floor() {
               <label>Shift (h)</label>
               <input type="number" min="0.5" step="0.5" value={shiftHours} onChange={e => setShiftHours(Math.max(0.5, Number(e.target.value)))} />
             </div>
-            <div className="field" style={{ maxWidth: 150 }}>
-              <label>Auto-helping</label>
-              <label style={{ display: 'flex', gap: 6, alignItems: 'center', textTransform: 'none', fontWeight: 400, marginTop: 6 }}>
-                <input type="checkbox" style={{ width: 'auto' }} checked={helping} onChange={e => setHelping(e.target.checked)} />
-                idle ops help
-              </label>
-            </div>
+            {mode === 'free' && (
+              <div className="field" style={{ maxWidth: 150 }}>
+                <label>Auto-helping</label>
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', textTransform: 'none', fontWeight: 400, marginTop: 6 }}>
+                  <input type="checkbox" style={{ width: 'auto' }} checked={helping} onChange={e => setHelping(e.target.checked)} />
+                  idle ops help
+                </label>
+              </div>
+            )}
           </div>
           {neverStarted.length > 0 && (
             <div className="alert error" style={{ marginTop: 8 }}>
@@ -935,17 +1033,25 @@ export default function Floor() {
         </div>
       )}
 
-      {sim && (
+      {view && (
         <div className="card">
           <h2 style={{ marginTop: 0 }}>Operator workload <span className="muted" style={{ fontWeight: 400 }}>— building {quantity} unit{quantity > 1 ? 's' : ''}; who works and who waits</span></h2>
           {activeOps.map((op, i) => {
-            const o = sim.operators[i] || { busySeconds: 0, idleSeconds: 0 };
-            const busyPct = sim.makespan > 0 ? (o.busySeconds / sim.makespan) * 100 : 0;
+            let o, stationLabel = '';
+            if (mode === 'line') {
+              let ci = 0, st = null;
+              for (const ls of view.stations) { if (i >= ci && i < ci + ls.workers) { st = ls; break; } ci += ls.workers; }
+              o = st ? { busySeconds: st.busy, idleSeconds: st.idle } : { busySeconds: 0, idleSeconds: view.makespan };
+              stationLabel = st ? ` · Station ${st.idx + 1}` : ' · spare';
+            } else {
+              o = sim.operators[i] || { busySeconds: 0, idleSeconds: 0 };
+            }
+            const busyPct = view.makespan > 0 ? (o.busySeconds / view.makespan) * 100 : 0;
             return (
               <div key={op.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                <span style={{ width: 110, fontWeight: 600 }}>
+                <span style={{ width: 130, fontWeight: 600 }}>
                   <span style={{ display: 'inline-block', width: 11, height: 11, borderRadius: 6, background: '#' + OP_COLORS[i % OP_COLORS.length].toString(16).padStart(6, '0'), marginRight: 6 }} />
-                  {op.name}
+                  {op.name}<span className="muted" style={{ fontWeight: 400, fontSize: 11 }}>{stationLabel}</span>
                 </span>
                 <div style={{ flex: 1, height: 20, background: '#e7e3da', borderRadius: 5, overflow: 'hidden' }}>
                   <div style={{ width: `${busyPct}%`, height: '100%', background: busyPct < 35 ? '#b3261e' : busyPct < 70 ? '#e0913d' : '#1c7c3c' }} />
@@ -969,18 +1075,20 @@ export default function Floor() {
             setPlaying(p => !p);
           }}>{playing ? '⏸ Pause' : '▶ Play'}</button>
           <button className="small" onClick={() => { tRef.current = 0; if (sliderRef.current) sliderRef.current.value = 0; setPlaying(false); }}>⟲ Reset</button>
-          <span ref={clockRef} className="time" style={{ fontSize: 16, minWidth: 150 }}>0:00 / {formatTime(sim ? sim.makespan : 0)}</span>
+          <span ref={clockRef} className="time" style={{ fontSize: 16, minWidth: 150 }}>0:00 / {formatTime(view ? view.makespan : 0)}</span>
           <div className="spacer" />
-          <button className={showAssign ? 'small primary' : 'small'} onClick={() => setShowAssign(v => !v)}>
-            {showAssign ? 'Hide assignments' : '⚙ Assignments'}{anyAssigned ? ' •' : ''}
-          </button>
+          {mode === 'free' && (
+            <button className={showAssign ? 'small primary' : 'small'} onClick={() => setShowAssign(v => !v)}>
+              {showAssign ? 'Hide assignments' : '⚙ Assignments'}{anyAssigned ? ' •' : ''}
+            </button>
+          )}
           <label style={{ display: 'flex', gap: 8, alignItems: 'center', textTransform: 'none', fontWeight: 400, minWidth: 230 }}>
             Speed <strong style={{ minWidth: 52, textAlign: 'right' }}>{speed}×</strong>
             <input type="range" min="5" max="1200" step="5" value={speed} style={{ width: 120 }}
               onChange={e => setSpeed(Number(e.target.value))} />
           </label>
         </div>
-        <input ref={sliderRef} type="range" min="0" max={sim ? sim.makespan : 1} defaultValue="0" style={{ width: '100%' }}
+        <input ref={sliderRef} type="range" min="0" max={view ? view.makespan : 1} defaultValue="0" style={{ width: '100%' }}
           onInput={e => { tRef.current = Number(e.target.value); setPlaying(false); }} />
         <div className="muted" style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <span>Crew: <strong ref={activeRef}>idle</strong></span>
@@ -997,7 +1105,7 @@ export default function Floor() {
         </div>
       </div>
 
-      {showAssign && detail && (
+      {showAssign && detail && mode === 'free' && (
         <div className="card">
           <h2 style={{ marginTop: 0 }}>Operator assignments <span className="muted" style={{ fontWeight: 400 }}>— OWN: only they run it. HELP: where they go when idle (until their own task is ready). Blank = automatic.</span></h2>
           <table className="data">

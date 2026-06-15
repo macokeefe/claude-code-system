@@ -213,6 +213,25 @@ station from a cart (flagged >7 m). Presets: Single row / Two rows
 NOT yet wired to drive the 3D floor's bench positions (3D still lays one row);
 possible future link.
 
+## Line mode vs free-flow simulation (2026-06)
+
+The 3D Floor now has TWO simulations, toggled top-right (default **Line**):
+- **Line** (`shared/simulateLine.js`): flow-shop. Operators pinned to the ≤8
+  stations (same grouping as benches: saved Line Designer layout else
+  auto-balance; per-station worker counts from the saved `workers` map). One
+  unit per station; unit u starts station k at max(finish[u][k-1],
+  finish[u-1][k]); cycle time = slowest station; units/shift = shift/cycle.
+  Matches the Line Designer / Workflow optimizer model. Operators stand at
+  `ctx.stationSpots`; assignment panel + auto-helping hidden in this mode.
+- **Free-flow** (`simulate.js`, the original): operators roam and pull ready
+  work across all units; honors precedence + overlap; uses the own/help panel.
+A compare strip shows both (makespan, units/shift, util, ops) so they can be
+weighed side by side. `activeSim` (mode-selected) drives the 3D playback,
+stats, workload bars, slider. NOTE: free-flow has no single-bench capacity
+(can over-parallelize) and honors overlap; line mode enforces one-unit-per-
+station but does NOT yet honor cross-station overlap — two different models on
+purpose, kept for comparison.
+
 ## Open items
 
 - Meritage: not yet modeled — waiting on a readable copy (app Export Excel →
