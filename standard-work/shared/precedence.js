@@ -26,7 +26,12 @@ export function criticalPath(steps) {
     const s = byId.get(id);
     let start = 0;
     for (const d of (s.depends_on || [])) {
-      if (byId.has(d)) start = Math.max(start, es(d) + ovOf(s, d) * dur(byId.get(d)));
+      if (!byId.has(d)) continue;
+      const ov = ovOf(s, d);
+      // partial overlap: ready when d reaches its fraction; full dependency:
+      // ready only when d is truly finished (ef, not es+dur — d's own finish
+      // may itself be pushed out by a partial supplier).
+      start = Math.max(start, ov < 1 ? es(d) + ov * dur(byId.get(d)) : ef(d));
     }
     inStack.delete(id);
     esMemo.set(id, start);
@@ -61,7 +66,7 @@ export function criticalPath(steps) {
     let best = null, bestVal = -1;
     for (const d of (s.depends_on || [])) {
       if (!byId.has(d)) continue;
-      const v = Math.max(es(d) + ovOf(s, d) * dur(byId.get(d)), ovOf(s, d) < 1 ? ef(d) : 0);
+      const v = ovOf(s, d) < 1 ? es(d) + ovOf(s, d) * dur(byId.get(d)) : ef(d);
       if (v > bestVal) { bestVal = v; best = d; }
     }
     if (best != null && bestVal >= es(id) - 1e-6) walk(best);

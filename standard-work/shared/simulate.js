@@ -80,6 +80,12 @@ export function simulateBuild(templateSteps, operatorCount, opts = {}) {
     return (1 - x.remaining / total) >= ov - 1e-9;
   };
   const depsDone = s => (s.depends_on || []).every(d => depReady(s, d));
+  // A step that started early via overlap can't actually COMPLETE until its
+  // partial suppliers finish (you can't deliver the last unit before it's made).
+  const partialDepsDone = s => (s.depends_on || []).every(d => {
+    if (ovOf(s, d) >= 1) return true;
+    const x = st.get(d); return !x || x.status === 'done';
+  });
   const ownsSomethingLeft = op => [...op.ownSet].some(tid => steps.some(s => s.template === tid && st.get(s.id).status !== 'done'));
   const isGeneralist = op => op.ownSet.size === 0 || !ownsSomethingLeft(op);
 
@@ -136,14 +142,14 @@ export function simulateBuild(templateSteps, operatorCount, opts = {}) {
       if (op.on != null) continue;
       let target = null;
       for (const tid of op.helpSet) {
-        const s = steps.find(s => s.template === tid && st.get(s.id).status === 'active' && s.helpable && st.get(s.id).workers.length < maxWorkers(s));
+        const s = steps.find(s => s.template === tid && st.get(s.id).status === 'active' && s.helpable && st.get(s.id).remaining > 1e-6 && st.get(s.id).workers.length < maxWorkers(s));
         if (s) { target = s; break; }
       }
       if (!target && helping) {
         let bestRem = -1;
         for (const s of steps) {
           const x = st.get(s.id);
-          if (x.status === 'active' && s.helpable && x.workers.length < maxWorkers(s) && x.remaining > bestRem) { target = s; bestRem = x.remaining; }
+          if (x.status === 'active' && s.helpable && x.remaining > 1e-6 && x.workers.length < maxWorkers(s) && x.remaining > bestRem) { target = s; bestRem = x.remaining; }
         }
       }
       if (target) setOp(i, target, 'help');
@@ -155,7 +161,7 @@ export function simulateBuild(templateSteps, operatorCount, opts = {}) {
     let dt = Infinity;
     for (const s of steps) {
       const x = st.get(s.id);
-      if (x.status === 'active' && x.workers.length > 0) { const tt = x.remaining / power(s, x.workers.length); if (tt < dt) dt = tt; }
+      if (x.status === 'active' && x.workers.length > 0 && x.remaining > 1e-6) { const tt = x.remaining / power(s, x.workers.length); if (tt < dt) dt = tt; }
     }
     // also stop at the next moment a waiting step's partial dependency crosses
     // its overlap threshold, so the downstream can start right then
@@ -179,9 +185,20 @@ export function simulateBuild(templateSteps, operatorCount, opts = {}) {
     for (const s of steps) { const x = st.get(s.id); if (x.status === 'active' && x.workers.length > 0) x.remaining -= power(s, x.workers.length) * dt; }
     for (let i = 0; i < N; i++) if (ops[i].on != null) ops[i].busy += dt;
     t += dt;
+    // hands-on work done → free the crew; mark the step complete only once its
+    // partial suppliers have finished (fixpoint so a finishing supplier can
+    // release everything waiting on it in the same instant).
     for (const s of steps) {
       const x = st.get(s.id);
-      if (x.status === 'active' && x.remaining <= 1e-6) { x.status = 'done'; x.finish = t; done++; for (const w of [...x.workers]) setOp(w, null, null); }
+      if (x.status === 'active' && x.remaining <= 1e-6 && x.workers.length) { for (const w of [...x.workers]) setOp(w, null, null); }
+    }
+    let settled = true;
+    while (settled) {
+      settled = false;
+      for (const s of steps) {
+        const x = st.get(s.id);
+        if (x.status === 'active' && x.remaining <= 1e-6 && partialDepsDone(s)) { x.status = 'done'; x.finish = t; done++; settled = true; }
+      }
     }
     assign();
   }
