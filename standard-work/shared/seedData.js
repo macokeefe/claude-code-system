@@ -166,6 +166,41 @@ export const seedSkus = [
       },
     ],
   },
+  {
+    // Imported from "SWI MeritageSW 3 seater.xlsx" (no-pictures copy, 2026-06).
+    // Times are in MINUTES on the sheet (sum 264.25 = stated total); stored as
+    // seconds. Precedence below is INFERRED from the step descriptions —
+    // confirm/adjust on the Process Map.
+    sku_number: 'MERITAGE-3S',
+    name: 'MeritageSW 3 Seater',
+    family: 'Meritage',
+    description: 'Imported from "SWI MeritageSW 3 seater.xlsx". Total process time 264.25 min. SKU number is a placeholder.',
+    steps: [
+      { tag: 'PPE', parallel: 'No' },
+      { name: 'Connector Prep', seconds: 1155, // 19.25 min
+        description: 'Swap incorrect screw for correct on 2 classic connectors. Swap incorrect screw for correct on 2 directional connectors. Re-orient left connector from right to left configuration. On 12 small connectors, enlarge holes with 1/2" bit, insert screw through both holes, seat rectangle nut flat-side out, then insert screw with washer into each open space and tighten.' },
+      { name: 'Leg Assembly', seconds: 480, // 8 min
+        description: 'Lay components flat. Deburr extrusion edges. Press plastic sleeve into each end of extrusion. Drive set screws into dowel pin on both sides. Repeat for all 4 legs.' },
+      { name: 'Arms Assembly', seconds: 3840, // 64 min
+        description: 'Insert and secure inner spacer pin connectors to outer face of each arm. Tighten connectors at each arm end. Connect vertical side extrusions to completed arm assembly. Tighten through open leg portion with extra-long wrench. Attach top/bottom piece and hammer into place. Tighten corner connector screw. Attach and tighten bars.' },
+      { name: 'Seat Frame Assembly', seconds: 2820, // 47 min
+        description: 'Insert and tighten connectors into seat frame. Place rings around connectors. Attach side pieces and hammer flush. Tighten with long wrench. Enlarge corner holes. Position 4 leg bases and attach 2 pegs per base. Apply hook screws.' },
+      { name: 'Back Frame Assembly', seconds: 2610, // 43.5 min
+        description: 'Clamp bottom back bar. Position 3 mini side connectors, insert and drive long screws. Insert connectors on each side, hammer flush, tighten. Adjust hole sizes, paint exposed areas. Attach short sides, tighten through side pieces with long wrench. Insert 10 screws. Connect top extrusion to complete frame. Attach bars to all 10 screws and tighten individually.' },
+      { name: 'Attaching Arms', seconds: 1080, // 18 min
+        description: 'Mate seat frame pegs to side connectors on arm bottom bar. Hammer flush, tighten with wrench, secure with hook screws. Repeat for second arm.' },
+      { name: 'Attaching Back Support', seconds: 300, // 5 min
+        description: 'Align pegs to holes, hammer into place. Tighten connector around peg until secure.' },
+      { name: 'Leg Finishing', seconds: 480, // 8 min
+        description: 'Attach outer shell to each leg. Wrap strap around shell and twist tight until flush. Wrap each leg in bubble wrap, secure with 3 pieces of tape.' },
+      { name: 'Seat Support Frame Assembly', seconds: 1950, // 32.5 min
+        description: 'Set up holding structure. Lay side frame pieces, insert 6 placeholder screws. Adjust end holes, paint exposed areas. Place first and last flat bars and secure. Place remaining bars, drive 2 screws per side. Complete one side fully before moving to other. Tighten any bars not flush. Remove placeholder screws.' },
+      { name: 'Attaching Seat Frame', seconds: 1080, // 18 min
+        description: 'Grab support frame and align into place. Insert and tighten each screw, and use hammer if necessary to insert screws into the exact right place.' },
+      { name: 'Attach TUUCI Plate', seconds: 60, // 1 min
+        description: 'Apply adhesive sheet to TUUCI plate and stick to the piece to finish it. (May arrive with adhesive already applied.)' },
+    ],
+  },
 ];
 
 // Build-order dependencies, keyed by SKU number then step sequence → the
@@ -181,6 +216,9 @@ export const seedDeps = {
   'SOLA-RA':   { 4: [2, 3], 5: [2, 3], 6: [4, 5], 7: [6], 9: [8], 10: [9, 7] },
   'SOLA-NA':   { 4: [2, 3], 5: [2, 3], 6: [4, 5], 7: [6], 8: [7], 9: [7], 11: [10], 12: [11, 7] },
   'SOLA-BASE': { 4: [2, 3], 5: [2, 3], 6: [4, 5], 7: [6], 8: [7], 10: [9], 11: [10, 7] },
+  // Meritage precedence is INFERRED from the step text — confirm on the map.
+  // roots: 2 (connector prep), 3 (legs), 10 (seat support frame).
+  'MERITAGE-3S': { 4: [2], 5: [2, 3], 6: [2], 7: [4, 5], 8: [6, 7], 9: [3], 11: [10, 8], 12: [11, 9] },
 };
 
 // Bump when seedDeps changes so existing databases re-apply the corrected

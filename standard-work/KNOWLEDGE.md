@@ -37,10 +37,16 @@ facts arrive (corrections, new SKUs, Meritage), update BOTH this file and
   - **Middle leg**: present or not
   - **Size**: small = 3.5 (also "S LC 3.5 R C"); medium = 4.5, 5.5, 6.5;
     large = 7.5
-- **Meritage** (e.g. "MeritageSW 3 seater") — sheet exists
-  (`SWI MeritageSW 3 seater.xlsx`, ~98 MB, unreadable via Drive extraction;
-  import via the app's in-browser importer, then Export Excel → Drive for a
-  readable copy). NOT yet in seed data.
+- **Meritage** ("MeritageSW 3 Seater") — NOW SEEDED (sku_number MERITAGE-3S,
+  family "Meritage"). From the no-pictures sheet (2026-06): 12 steps, times in
+  MINUTES (sum 264.25 = stated total), stored as seconds. Steps: PPE; Connector
+  Prep 19.25; Leg Assembly 8; Arms Assembly 64; Seat Frame Assembly 47; Back
+  Frame Assembly 43.5; Attaching Arms 18; Attaching Back Support 5; Leg
+  Finishing 8; Seat Support Frame Assembly 32.5; Attaching Seat Frame 18;
+  Attach TUUCI Plate 1. Precedence in seedDeps is INFERRED from the step text
+  (roots: connector prep, legs, seat-support frame) — NOT engineer-confirmed;
+  verify on the Process Map. Existing browser DBs get it via the
+  add-missing-seeded-SKUs migration (tracked in state.seededSkuNumbers).
 
 ## Sola rules (authoritative, from the engineer)
 

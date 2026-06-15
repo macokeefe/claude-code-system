@@ -90,32 +90,38 @@ function freshStateFromSeed() {
     tagIds[t.name] = id;
     s.tags.push({ id, name: t.name, description: t.description, canonical_time_seconds: t.seconds, unit_seconds: t.unitSeconds ?? null, unit_label: t.unitLabel ?? null, photo_path: null, created_at: now(), updated_at: now() });
   }
-  for (const sku of seedSkus) {
-    const skuId = s.nextId++;
-    s.skus.push({ id: skuId, sku_number: sku.sku_number, name: sku.name, family: sku.family, description: sku.description, version: 1, status: 'active', photo_path: null, created_at: now(), updated_at: now() });
-    const seqToId = {};
-    sku.steps.forEach((step, i) => {
-      const id = s.nextId++;
-      seqToId[i + 1] = id;
-      s.steps.push({
-        id, sku_id: skuId, sequence: i + 1,
-        tag_id: step.tag ? tagIds[step.tag] : null,
-        name: step.name || null, description: step.description || null,
-        time_seconds: step.seconds ?? null, time_raw_text: step.raw || null,
-        override_time_seconds: step.override ?? null, quantity: step.quantity ?? null,
-        size_times: step.sizeTimes ?? null, depends_on: [], helpable: 0, help_seconds: null,
-        station: null, parallel_notes: step.parallel || null,
-        photo_path: null, needs_review: step.needsReview ? 1 : 0,
-        created_at: now(), updated_at: now(),
-      });
-    });
-    const deps = seedDeps[sku.sku_number];
-    if (deps) for (const [seq, prereqs] of Object.entries(deps)) {
-      const st = s.steps.find(x => x.id === seqToId[seq]);
-      if (st) st.depends_on = prereqs.map(p => seqToId[p]).filter(Boolean);
-    }
-  }
+  for (const sku of seedSkus) seedOneSku(s, sku, tagIds);
+  s.seededSkuNumbers = seedSkus.map(x => x.sku_number);
   return s;
+}
+
+// Create one seeded SKU (its steps + dependencies) into `state`. Shared by the
+// first-run seed and the "add SKUs introduced later" migration (e.g. Meritage).
+function seedOneSku(state, sku, tagIds) {
+  const skuId = state.nextId++;
+  state.skus.push({ id: skuId, sku_number: sku.sku_number, name: sku.name, family: sku.family, description: sku.description, version: 1, status: 'active', photo_path: null, created_at: now(), updated_at: now() });
+  const seqToId = {};
+  sku.steps.forEach((step, i) => {
+    const id = state.nextId++;
+    seqToId[i + 1] = id;
+    state.steps.push({
+      id, sku_id: skuId, sequence: i + 1,
+      tag_id: step.tag ? (tagIds[step.tag] ?? null) : null,
+      name: step.name || null, description: step.description || null,
+      time_seconds: step.seconds ?? null, time_raw_text: step.raw || null,
+      override_time_seconds: step.override ?? null, quantity: step.quantity ?? null,
+      size_times: step.sizeTimes ?? null, depends_on: [], helpable: 0, help_seconds: null,
+      station: null, parallel_notes: step.parallel || null,
+      photo_path: null, needs_review: step.needsReview ? 1 : 0,
+      created_at: now(), updated_at: now(),
+    });
+  });
+  const deps = seedDeps[sku.sku_number];
+  if (deps) for (const [seq, prereqs] of Object.entries(deps)) {
+    const st = state.steps.find(x => x.id === seqToId[seq]);
+    if (st) st.depends_on = prereqs.map(p => seqToId[p]).filter(Boolean);
+  }
+  return skuId;
 }
 
 async function ensureInit() {
@@ -133,6 +139,20 @@ async function ensureInit() {
           state.operators.push({ id: state.nextId++, name: `Operator ${i}`, skills: null, active: 1, sort_order: i, created_at: now() });
         }
         await persist();
+      }
+      // Add seeded SKUs introduced after this database was created (e.g.
+      // Meritage). Tracked by sku_number so a SKU the user deletes won't return.
+      state.seededSkuNumbers = state.seededSkuNumbers || state.skus.map(x => x.sku_number);
+      {
+        const tagIds = Object.fromEntries(state.tags.map(t => [t.name, t.id]));
+        let added = false;
+        for (const sku of seedSkus) {
+          if (state.seededSkuNumbers.includes(sku.sku_number)) continue;
+          seedOneSku(state, sku, tagIds);
+          state.seededSkuNumbers.push(sku.sku_number);
+          added = true;
+        }
+        if (added) await persist();
       }
       // Re-apply corrected build-order precedence to the seeded Sola SKUs
       // (matched by sku_number + step sequence). Skips user-created/imported SKUs.
