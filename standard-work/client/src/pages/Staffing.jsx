@@ -66,7 +66,8 @@ export default function Staffing() {
   async function setHelpable(step, on) { await api.put(`/api/steps/${step.id}`, { helpable: on }); load(); }
   async function setHelpTime(step, v) { await api.put(`/api/steps/${step.id}`, { help_time: v, helpable: true }); load(); }
 
-  const helpedInSim = sim ? new Set([...sim.perStep.entries()].filter(([, v]) => v.maxWorkers > 1).map(([id]) => id)) : new Set();
+  // step ids that received a helper during the current sim (role 'help')
+  const helpedInSim = sim ? new Set(sim.operators.flatMap(o => (o.intervals || []).filter(iv => iv.role === 'help').map(iv => iv.template))) : new Set();
 
   return (
     <>
