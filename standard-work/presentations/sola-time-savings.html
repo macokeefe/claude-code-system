@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Sola Lounge — Where We Can Save Time</title>
+<title>Sola Lounge — A Look at the Build</title>
 <style>
   :root{
     --ink:#13212e; --muted:#5e6e7d; --line:#e6ecf3; --soft:#f4f7fb;
@@ -15,59 +15,53 @@
   .deck{max-width:1120px;margin:0 auto}
   .slide{background:#fff;min-height:100vh;display:none;flex-direction:column;position:relative;padding:56px 70px 58px}
   .slide.active{display:flex}
-  .body{flex:1;display:flex;flex-direction:column;justify-content:center}   /* vertical centering = no dead space */
+  .body{flex:1;display:flex;flex-direction:column;justify-content:center}
 
   h1{font-size:48px;line-height:1.06;margin:0 0 16px;letter-spacing:-.5px}
-  h2{font-size:32px;margin:0 0 18px;letter-spacing:-.3px}
+  h2{font-size:32px;margin:0 0 16px;letter-spacing:-.3px}
+  h3{font-size:18px;margin:0 0 4px}
   p{font-size:18px;line-height:1.5;margin:8px 0}
   .lead{font-size:23px;line-height:1.42}
-  .sub{color:var(--muted);font-size:18px}
+  .sub{color:var(--muted);font-size:17px}
   .muted{color:var(--muted)}
   .kicker{text-transform:uppercase;letter-spacing:.16em;font-size:13px;color:var(--blue);font-weight:700;margin-bottom:16px}
   .accent{color:var(--blue);font-weight:700}
   .save{color:var(--green);font-weight:800}
+  .q{font-size:24px;line-height:1.35;color:var(--blue);font-weight:700;margin-top:22px}
+  .check{color:var(--green);font-weight:800}
   .footer{position:absolute;bottom:20px;left:70px;right:70px;display:flex;justify-content:space-between;color:var(--muted);font-size:12.5px;border-top:1px solid var(--line);padding-top:10px}
 
   .pill{display:inline-block;padding:3px 11px;border-radius:999px;font-size:12.5px;font-weight:700}
+  .pill.std{background:#e9f6ee;color:var(--green)}
   .pill.flow{background:#e8f1ff;color:var(--blue)}
-  .pill.labor{background:#e9f6ee;color:var(--green)}
-  .pill.std{background:#fbf0df;color:var(--amber)}
+  .pill.labor{background:#fbf0df;color:var(--amber)}
 
-  /* two-column content */
-  .cols{display:grid;grid-template-columns:1.05fr .95fr;gap:46px;align-items:center}
-  .cols.wide{grid-template-columns:1fr 1fr}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}
 
-  /* stat cards */
   .stat{border:1px solid var(--line);border-radius:16px;padding:22px 24px;background:var(--soft)}
-  .stat .big{font-size:48px;font-weight:800;line-height:1;letter-spacing:-1px}
-  .stat .big.green{color:var(--green)} .stat .big.blue{color:var(--blue)} .stat .big.amber{color:var(--amber)}
+  .stat .big{font-size:46px;font-weight:800;line-height:1;letter-spacing:-1px}
+  .stat .big.blue{color:var(--blue)} .stat .big.green{color:var(--green)} .stat .big.amber{color:var(--amber)}
   .stat .lab{color:var(--muted);font-size:15px;margin-top:8px}
   .stack{display:flex;flex-direction:column;gap:16px}
 
-  /* bar chart */
   .bars{display:flex;flex-direction:column;gap:9px}
   .bar-row{display:flex;align-items:center;gap:13px}
   .bar-label{width:240px;text-align:right;font-size:15px}
-  .bar-track{flex:1;background:#eef2f7;border-radius:6px;height:25px;overflow:hidden}
+  .bar-track{flex:1;background:#eef2f7;border-radius:6px;height:26px;overflow:hidden}
   .bar-fill{height:100%;border-radius:6px;display:flex;align-items:center;justify-content:flex-end;padding-right:9px;color:#fff;font-size:12.5px;font-weight:700}
-  .bar-tag{width:92px;font-size:12.5px;color:var(--muted)}
+  .bar-tag{width:96px;font-size:12.5px;color:var(--muted)}
 
-  ul{font-size:18.5px;line-height:1.5;margin:10px 0;padding-left:22px}
-  li{margin:9px 0}
-
-  /* before / after */
-  .ba{display:flex;flex-direction:column;gap:14px}
-  .ba .row{display:flex;align-items:center;gap:12px}
-  .chip{border-radius:8px;padding:11px 14px;font-size:14px;font-weight:700;color:#fff}
+  .ba{display:flex;flex-direction:column;gap:13px}
+  .ba .row{display:flex;align-items:center;gap:10px}
+  .chip{border-radius:8px;padding:10px 13px;font-size:14px;font-weight:700;color:#fff}
   .chip.b{background:var(--blue)} .chip.b2{background:var(--blue2)} .chip.g{background:var(--green)}
   .chip.ghost{background:#eef2f7;color:var(--muted)}
-  .eq{color:var(--muted);font-weight:700;font-size:15px}
+  .eq{color:var(--muted);font-weight:700;font-size:14px}
 
-  /* chain diagram */
   .chain{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap}
   .node{flex:1;min-width:118px;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:14px 12px;text-align:center}
-  .node .t{font-weight:700;font-size:14px} .node .v{color:var(--blue);font-weight:800;font-size:20px;margin-top:6px}
-  .node.target{border-color:#cfe0f6;background:#eef5ff}
+  .node .t{font-weight:700;font-size:14px} .node .v{color:var(--muted);font-weight:800;font-size:20px;margin-top:6px}
+  .node.hot{border-color:#f3d9bd;background:#fcf3e7} .node.hot .v{color:var(--amber)}
 
   table{border-collapse:collapse;width:100%;font-size:17px}
   th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line)}
@@ -79,11 +73,7 @@
   .nav button:disabled{opacity:.35;cursor:default}
   .count{position:fixed;bottom:26px;left:22px;color:#c4d0de;font-size:13px;z-index:10}
 
-  @media print{
-    body{background:#fff}
-    .slide{display:flex !important;page-break-after:always;min-height:0;height:100vh}
-    .nav,.count{display:none}
-  }
+  @media print{ body{background:#fff} .slide{display:flex !important;page-break-after:always;min-height:0;height:100vh} .nav,.count{display:none} }
 </style>
 </head>
 <body>
@@ -92,147 +82,119 @@
   <!-- 1 · TITLE -->
   <section class="slide active">
     <div class="body">
-      <div class="kicker">Standard Work · Continuous Improvement</div>
-      <h1>Sola Lounge<br/>Where we can save time</h1>
-      <p class="lead muted" style="max-width:760px">Where the hours go when we build a Sola, what we should standardize, and the
-        handful of changes that take the most time out of every sofa.</p>
+      <div class="kicker">Sola Lounge · Standard Work</div>
+      <h1>A look at how we<br/>build the Sola</h1>
+      <p class="lead muted" style="max-width:720px">Let's walk through the numbers and see what they tell us.</p>
     </div>
-    <div class="footer"><span>Sola Lounge — Time Savings</span><span>2026-06-16</span></div>
+    <div class="footer"><span>Sola Lounge — Walking the Numbers</span><span>2026-06-16</span></div>
   </section>
 
-  <!-- 2 · THE NUMBERS -->
+  <!-- 2 · THE SETUP (plants the question) -->
   <section class="slide">
     <div class="body">
-      <div class="kicker">The picture today</div>
-      <h2>Two numbers that frame the work</h2>
-      <div class="cols wide" style="margin-top:8px">
+      <div class="kicker">Start here</div>
+      <h2>Two numbers for one sofa</h2>
+      <div class="cols" style="margin-top:6px">
         <div class="stack">
-          <div class="stat"><div class="big blue">151 min</div><div class="lab">Total hands-on labor in one sofa — about 2½ hours of work across the crew</div></div>
-          <div class="stat"><div class="big blue">~75 min</div><div class="lab">Build time for one sofa the way the floor actually runs it (crew in parallel)</div></div>
+          <div class="stat"><div class="big blue">151 min</div><div class="lab">Total hands-on labor — work across the whole crew</div></div>
+          <div class="stat"><div class="big blue">~75 min</div><div class="lab">Time from start to finished sofa (crew working in parallel)</div></div>
         </div>
         <div>
-          <p class="lead">The gap between them is the opportunity.</p>
-          <p>151 minutes of work, but only ~75 minutes on the clock — because people work in parallel
-            and the feeder work is kept ahead. <span class="accent">Shrink the longest chain and the sofa comes off sooner.</span></p>
-          <p class="sub">Right Arm configuration, medium size. Numbers from the Standard Work build simulation.</p>
+          <p class="lead">Most of the labor happens in parallel — that's why the sofa is done in ~75, not 151.</p>
+          <p class="q">So the real question is: what sets that 75-minute clock?</p>
         </div>
       </div>
+      <p class="sub" style="margin-top:18px">Right Arm configuration, medium size · from the Standard Work data.</p>
     </div>
-    <div class="footer"><span>Sola Lounge — Time Savings</span><span>2 / 7</span></div>
+    <div class="footer"><span>Sola Lounge — Walking the Numbers</span><span>2 / 6</span></div>
   </section>
 
-  <!-- 3 · WHERE TIME GOES -->
+  <!-- 3 · THE DATA (no conclusions) -->
   <section class="slide">
     <div class="body">
-      <div class="kicker">Where the time goes</div>
-      <h2>The step times, biggest first</h2>
+      <div class="kicker">The data</div>
+      <h2>Where the minutes go, biggest first</h2>
       <div class="bars" style="margin-top:6px">
-        <div class="bar-row"><div class="bar-label">Seat Support Frame Assembly</div><div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--amber)">51:00</div></div><div class="bar-tag">run with 2</div></div>
-        <div class="bar-row"><div class="bar-label">Frame Sub-Assembly</div><div class="bar-track"><div class="bar-fill" style="width:37%;background:var(--blue)">19:00</div></div><div class="bar-tag">on path</div></div>
-        <div class="bar-row"><div class="bar-label">Frame Assembly</div><div class="bar-track"><div class="bar-fill" style="width:37%;background:var(--blue)">19:00</div></div><div class="bar-tag">on path</div></div>
-        <div class="bar-row"><div class="bar-label">Connector Plate Installation</div><div class="bar-track"><div class="bar-fill" style="width:29%;background:var(--blue)">14:52</div></div><div class="bar-tag">on path</div></div>
-        <div class="bar-row"><div class="bar-label">Connector Pre-Assembly</div><div class="bar-track"><div class="bar-fill" style="width:26%;background:var(--amber)">13:20</div></div><div class="bar-tag">kept ahead</div></div>
-        <div class="bar-row"><div class="bar-label">Leg Assembly Installation</div><div class="bar-track"><div class="bar-fill" style="width:26%;background:var(--blue)">13:15</div></div><div class="bar-tag">on path</div></div>
-        <div class="bar-row"><div class="bar-label">Rivet Nut Installation</div><div class="bar-track"><div class="bar-fill" style="width:17%;background:var(--blue2)">8:30</div></div><div class="bar-tag">on path</div></div>
+        <div class="bar-row"><div class="bar-label">Seat Support Frame Assembly</div><div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--blue2)">51:00</div></div><div class="bar-tag"></div></div>
+        <div class="bar-row"><div class="bar-label">Frame Sub-Assembly</div><div class="bar-track"><div class="bar-fill" style="width:37%;background:var(--blue)">19:00</div></div><div class="bar-tag"></div></div>
+        <div class="bar-row"><div class="bar-label">Frame Assembly</div><div class="bar-track"><div class="bar-fill" style="width:37%;background:var(--blue)">19:00</div></div><div class="bar-tag"></div></div>
+        <div class="bar-row"><div class="bar-label">Connector Plate Installation</div><div class="bar-track"><div class="bar-fill" style="width:29%;background:var(--blue)">14:52</div></div><div class="bar-tag"></div></div>
+        <div class="bar-row"><div class="bar-label">Connector Pre-Assembly</div><div class="bar-track"><div class="bar-fill" style="width:26%;background:var(--blue)">13:20</div></div><div class="bar-tag"></div></div>
+        <div class="bar-row"><div class="bar-label">Leg Assembly Installation</div><div class="bar-track"><div class="bar-fill" style="width:26%;background:var(--blue)">13:15</div></div><div class="bar-tag"></div></div>
+        <div class="bar-row"><div class="bar-label">Rivet Nut Installation</div><div class="bar-track"><div class="bar-fill" style="width:17%;background:var(--blue2)">8:30</div></div><div class="bar-tag"></div></div>
         <div class="bar-row"><div class="bar-label">Corner Cap &amp; End Cap</div><div class="bar-track"><div class="bar-fill" style="width:13%;background:var(--blue2)">6:40</div></div><div class="bar-tag"></div></div>
       </div>
-      <p class="sub" style="margin-top:14px">The two biggest — <span style="color:var(--amber);font-weight:700">Seat Support</span> and <span style="color:var(--amber);font-weight:700">Connector Pre-Assembly</span> — the floor already handles (next slide).
-        The <span class="accent">blue steps</span> are the real critical path, where build time is won.</p>
+      <p class="q">A handful of steps carry almost all the time. Which ones actually hold up the line?</p>
     </div>
-    <div class="footer"><span>Sola Lounge — Time Savings</span><span>3 / 7</span></div>
+    <div class="footer"><span>Sola Lounge — Walking the Numbers</span><span>3 / 6</span></div>
   </section>
 
-  <!-- 4 · TWO THINGS THE FLOOR ALREADY HANDLES -->
+  <!-- 4 · ELIMINATE THE TWO BIGGEST (hint by subtraction) -->
   <section class="slide">
     <div class="body">
-      <div class="kicker">Already handled · just make them the standard</div>
-      <h2>The two biggest steps aren't our constraint</h2>
-      <div class="cols wide" style="margin-top:6px">
+      <div class="kicker">Look closer at the top two</div>
+      <h2>The two biggest — are they really the holdup?</h2>
+      <div class="cols" style="margin-top:6px">
         <div class="stat">
-          <h3>Seat Support Frame Assembly <span class="pill std">2-person standard</span></h3>
-          <p>Most labor in the sofa — but the team already puts <strong>two people on it.</strong> The slats are independent, so it splits cleanly.</p>
-          <div class="ba" style="margin-top:8px">
+          <h3>Seat Support Frame Assembly — 51 min</h3>
+          <div class="ba" style="margin-top:10px">
             <div class="row"><div class="chip ghost" style="width:64px">1 person</div><div class="chip b" style="flex:1">51:00</div></div>
             <div class="row"><div class="chip ghost" style="width:64px">2 people</div><div class="chip g" style="width:52%">~25:30</div></div>
           </div>
-          <p class="sub" style="margin-top:8px">Rule: on Sola-heavy days, always two.</p>
+          <p class="sub" style="margin-top:10px">We already run it with two. <span class="check">Not the holdup. ✓</span></p>
         </div>
         <div class="stat">
-          <h3>Connector Pre-Assembly <span class="pill std">kept ahead</span></h3>
-          <p>The connector lady builds to a <strong>buffer</strong> and tops up wherever stock runs low — so the line pulls finished connectors off the shelf and <strong>never waits.</strong></p>
-          <p>It costs labor, but it isn't on the line's clock — so it shouldn't count as a bottleneck.</p>
-          <p class="sub" style="margin-top:8px">Rule: keep the connector buffer ahead of the line.</p>
+          <h3>Connector Pre-Assembly — 13 min</h3>
+          <p style="margin-top:8px">The feeder keeps a <strong>buffer stocked ahead</strong> and tops it up where it runs low. The line pulls finished connectors off the shelf.</p>
+          <p class="sub" style="margin-top:6px">The line never waits on it. <span class="check">Not the holdup. ✓</span></p>
         </div>
       </div>
-      <p class="lead" style="margin-top:18px">Set those two as standard and <span class="accent">move on</span> — the time to chase is elsewhere.</p>
+      <p class="q">So if the two biggest steps aren't holding us up… what is?</p>
     </div>
-    <div class="footer"><span>Sola Lounge — Time Savings</span><span>4 / 7</span></div>
+    <div class="footer"><span>Sola Lounge — Walking the Numbers</span><span>4 / 6</span></div>
   </section>
 
-  <!-- 5 · THE REAL TARGET: THE FRAME CHAIN -->
+  <!-- 5 · THE FRAME REVEALS ITSELF (the hinted conclusion) -->
   <section class="slide">
     <div class="body">
-      <div class="kicker">The real target</div>
-      <h2>Build time lives in the frame work</h2>
-      <p class="lead" style="max-width:860px">Once the buffer is kept ahead, the ~75-minute clock is set by this chain — and the two
-        <span class="accent">frame steps alone are 38 minutes, over half of it:</span></p>
-      <div class="chain" style="margin:22px 0">
+      <div class="kicker">What's left sets the clock</div>
+      <h2>It comes down to the frame</h2>
+      <div class="chain" style="margin:14px 0 6px">
         <div class="node"><div class="t">Rivet Nut</div><div class="v">8:30</div></div>
         <div class="node"><div class="t">Connector Plate</div><div class="v">14:52</div></div>
-        <div class="node target"><div class="t">Frame Sub-Asm</div><div class="v">19:00</div></div>
-        <div class="node target"><div class="t">Frame Assembly</div><div class="v">19:00</div></div>
+        <div class="node hot"><div class="t">Frame Sub-Asm</div><div class="v">19:00</div></div>
+        <div class="node hot"><div class="t">Frame Assembly</div><div class="v">19:00</div></div>
         <div class="node"><div class="t">Leg Assembly</div><div class="v">13:15</div></div>
       </div>
-      <p class="lead">The frame is where the next changes aim. The connector <em>plate</em> step also has an easy labor win
-        (pre-drilled plates) that helps <strong>every Sola config.</strong></p>
+      <p class="lead"><span class="accent">Frame Sub-Assembly + Frame Assembly = 38 min</span> — more than the entire rest of the chain combined.</p>
+      <p>And one detail in the work instructions stands out for Frame Sub-Assembly:</p>
+      <p class="q">It's two separate pieces — 8:30, then 10:30 — built one after the other, by one person. The pieces don't depend on each other.</p>
     </div>
-    <div class="footer"><span>Sola Lounge — Time Savings</span><span>5 / 7</span></div>
+    <div class="footer"><span>Sola Lounge — Walking the Numbers</span><span>5 / 6</span></div>
   </section>
 
-  <!-- 6 · FRAME WORK -->
+  <!-- 6 · NOW THE PROPOSAL -->
   <section class="slide">
     <div class="body">
-      <div class="kicker">The opportunity · one of these is free</div>
-      <h2>Frame work: overlap it, then fixture it <span class="pill flow">build time</span></h2>
-      <div class="cols">
-        <div>
-          <p class="lead">Frame Sub-Assembly is <strong>two separate pieces built back-to-back</strong> — 4-leg (8:30) then 5-leg (10:30). Build them at the same time and 19:00 becomes 10:30.</p>
-          <p>Then a <strong>frame-alignment fixture</strong> trims the 38 min of frame work further — less hand-clamping, less re-checking, fewer misalignments.</p>
-          <p class="lead save" style="margin-top:6px">Build time: ~75 → ~66 free, → ~60 with a fixture.</p>
-        </div>
-        <div class="ba">
-          <div class="row"><div class="chip ghost" style="width:78px">Today</div><div class="chip b" style="width:42%">4-leg · 8:30</div><div class="chip b2" style="width:52%">5-leg · 10:30</div><span class="eq">= 19:00</span></div>
-          <div class="row"><div class="chip ghost" style="width:78px">Parallel</div><div class="chip g" style="width:52%">5-leg · 10:30</div><span class="eq save">= 10:30 · ~8.5 min, free</span></div>
-        </div>
-      </div>
-    </div>
-    <div class="footer"><span>Sola Lounge — Time Savings</span><span>6 / 7</span></div>
-  </section>
-
-  <!-- 7 · ROADMAP / ASK -->
-  <section class="slide">
-    <div class="body">
-      <div class="kicker">The plan</div>
-      <h2>What to do, in order</h2>
-      <table style="margin-top:6px">
-        <thead><tr><th>Action</th><th>Type</th><th>Payoff</th><th>Effort</th></tr></thead>
+      <div class="kicker">So — what we'd try</div>
+      <h2>Three changes the data points to</h2>
+      <table style="margin-top:4px">
+        <thead><tr><th>Change</th><th>Why</th><th>Payoff</th><th>Effort</th></tr></thead>
         <tbody>
-          <tr><td>Two people on Seat Support on Sola-heavy days</td><td><span class="pill std">standard</span></td><td class="num">keeps the line flowing</td><td>None — staffing</td></tr>
-          <tr><td>Keep the connector buffer ahead of the line</td><td><span class="pill std">standard</span></td><td class="num">no line waiting</td><td>None — staffing</td></tr>
-          <tr><td>Build the two frame sub-pieces in parallel</td><td><span class="pill flow">build time</span></td><td class="num save">~8.5 min/sofa</td><td>None — staffing</td></tr>
-          <tr><td>Pre-drilled connector plates</td><td><span class="pill labor">labor</span></td><td class="num">time off every config</td><td>Med — supplier</td></tr>
-          <tr><td>Frame-alignment fixture</td><td><span class="pill flow">build time</span></td><td class="num">3–6 min/sofa</td><td>Med — tooling</td></tr>
+          <tr><td>Build the two frame sub-pieces at the same time</td><td>They're independent</td><td class="num save">~8.5 min/sofa</td><td>None — staffing</td></tr>
+          <tr><td>Frame-alignment fixture</td><td>38 min is hand-clamped today</td><td class="num">3–6 min/sofa</td><td>Med — tooling</td></tr>
+          <tr><td>Pre-drilled connector plates</td><td>We drill every plate on the line</td><td class="num">time off every config</td><td>Med — supplier</td></tr>
         </tbody>
       </table>
-      <p class="lead" style="margin-top:18px">The first three cost <span class="save">nothing</span> — they're just how we staff the line. Lock those in this week,
-        then quote the plates and the fixture. Build time per sofa moves from <strong>~75 toward ~60 min.</strong></p>
+      <p class="lead" style="margin-top:18px">Lock in what already works — <span class="save">two on Seat Support, the connector buffer kept ahead</span> — then take the frame down.</p>
+      <p class="lead">Build time per sofa: <strong>~75 → ~60 min.</strong></p>
     </div>
-    <div class="footer"><span>Sola Lounge — Time Savings · estimates to confirm on the floor</span><span>7 / 7</span></div>
+    <div class="footer"><span>Sola Lounge — Walking the Numbers · estimates to confirm on the floor</span><span>6 / 6</span></div>
   </section>
 
 </div>
 
-<div class="count"><span id="cur">1</span> / <span id="tot">7</span> &nbsp;·&nbsp; ← → navigate · P to print</div>
+<div class="count"><span id="cur">1</span> / <span id="tot">6</span> &nbsp;·&nbsp; ← → navigate · P to print</div>
 <div class="nav">
   <button id="prev" title="Previous">‹</button>
   <button id="next" title="Next">›</button>
