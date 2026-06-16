@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { Routes, Route, NavLink } from 'react-router-dom';
 import { isLocal, backupData, restoreData } from '@backend';
+import Insights from './pages/Insights.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import SkuList from './pages/SkuList.jsx';
 import SkuDetail from './pages/SkuDetail.jsx';
@@ -24,18 +25,20 @@ export default function App() {
     <div className="layout">
       <nav className="sidebar">
         <div className="brand">Standard Work<small>Labor time tracking</small></div>
-        <NavLink to="/" end>Dashboard</NavLink>
+        <NavLink to="/" end>⭐ Insights</NavLink>
+        <NavLink to="/dashboard">Labor &amp; Charts</NavLink>
         <NavLink to="/skus">SKUs</NavLink>
+        <NavLink to="/staffing">Staffing</NavLink>
+        <NavLink to="/line">Line Designer</NavLink>
+        <NavLink to="/floor">3D Floor</NavLink>
+        <div style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: '#7d8aa0', padding: '14px 12px 4px' }}>More tools</div>
         <NavLink to="/tags">Shared Steps</NavLink>
         <NavLink to="/compare">Compare</NavLink>
         <NavLink to="/planner">Day Planner</NavLink>
-        <NavLink to="/staffing">Staffing</NavLink>
-        <NavLink to="/line">Line Designer</NavLink>
         <NavLink to="/map">Process Map</NavLink>
         <NavLink to="/workflows">Workflows</NavLink>
         <NavLink to="/layout">Layout</NavLink>
         <NavLink to="/improvements">Improvements</NavLink>
-        <NavLink to="/floor">3D Floor</NavLink>
         <NavLink to="/import">Import</NavLink>
         <NavLink to="/assistant">Assistant</NavLink>
         {isLocal && (
@@ -59,7 +62,8 @@ export default function App() {
       </nav>
       <main className="main">
         <Routes>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/" element={<Insights />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/skus" element={<SkuList />} />
           <Route path="/skus/:id" element={<SkuDetail />} />
           <Route path="/tags" element={<Tags />} />
