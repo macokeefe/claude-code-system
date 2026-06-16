@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sola Lounge — Where We Can Save Time</title>
+<style>
+  :root{
+    --ink:#10202e; --muted:#5b6b7a; --line:#e4eaf1; --bg:#f4f7fb;
+    --blue:#1a56b0; --blue2:#5b8def; --green:#1c7c3c; --red:#b3261e;
+    --amber:#e0913d; --grey:#c2cfe6;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:#223;}
+  .deck{max-width:1100px;margin:0 auto;}
+  .slide{
+    background:#fff;min-height:100vh;padding:64px 72px;display:none;
+    flex-direction:column;position:relative;
+  }
+  .slide.active{display:flex}
+  h1{font-size:46px;line-height:1.08;margin:0 0 12px}
+  h2{font-size:30px;margin:0 0 6px}
+  h3{font-size:19px;margin:0 0 4px;color:var(--blue)}
+  p{font-size:18px;line-height:1.5;color:var(--ink);margin:8px 0}
+  .sub{color:var(--muted);font-size:18px}
+  .kicker{text-transform:uppercase;letter-spacing:.14em;font-size:13px;color:var(--blue);font-weight:700;margin-bottom:18px}
+  .muted{color:var(--muted)}
+  .fill{flex:1}
+  .footer{position:absolute;bottom:22px;left:72px;right:72px;display:flex;justify-content:space-between;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:10px}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:13px;font-weight:600}
+  .pill.flow{background:#e8f1ff;color:var(--blue)}
+  .pill.labor{background:#eaf7ee;color:var(--green)}
+  .pill.quality{background:#fdf0e3;color:var(--amber)}
+  .pill.measure{background:#eef0f3;color:var(--muted)}
+
+  /* bar chart */
+  .bars{margin-top:18px}
+  .bar-row{display:flex;align-items:center;gap:14px;margin:9px 0}
+  .bar-label{width:230px;text-align:right;font-size:15px;color:var(--ink)}
+  .bar-track{flex:1;background:#eef2f7;border-radius:6px;height:26px;position:relative;overflow:hidden}
+  .bar-fill{height:100%;border-radius:6px;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;color:#fff;font-size:13px;font-weight:600}
+  .bar-val{width:70px;font-size:14px;color:var(--muted)}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:14px}
+  .card{border:1px solid var(--line);border-radius:14px;padding:20px 22px;background:#fbfcfe}
+  .card.hot{border-color:#f1c9c4;background:#fdf4f3}
+  .big{font-size:54px;font-weight:800;line-height:1}
+  .big.green{color:var(--green)} .big.red{color:var(--red)} .big.blue{color:var(--blue)}
+  .stat-label{color:var(--muted);font-size:15px;margin-top:6px}
+
+  table{border-collapse:collapse;width:100%;margin-top:14px;font-size:16px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.05em}
+  td.num{font-variant-numeric:tabular-nums;font-weight:600}
+  tr.total td{border-top:2px solid var(--ink);font-weight:800}
+
+  ul{font-size:18px;line-height:1.55;margin:8px 0 8px 2px;padding-left:22px}
+  li{margin:7px 0}
+  .lead{font-size:22px;line-height:1.45}
+  .accent{color:var(--blue);font-weight:700}
+  .save{color:var(--green);font-weight:800}
+
+  /* serial-vs-parallel diagram */
+  .flowline{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:10px 0}
+  .blk{background:var(--blue);color:#fff;border-radius:6px;padding:8px 10px;font-size:13px;font-weight:600}
+  .blk.alt{background:var(--blue2)}
+  .blk.idle{background:#dfe6ee;color:var(--muted)}
+  .arrow{color:var(--muted);font-size:18px}
+
+  /* nav */
+  .nav{position:fixed;bottom:18px;right:22px;display:flex;gap:8px;z-index:10}
+  .nav button{border:none;background:#1a56b0;color:#fff;width:42px;height:42px;border-radius:50%;font-size:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+  .nav button:disabled{opacity:.35;cursor:default}
+  .count{position:fixed;bottom:26px;left:22px;color:#cfd9e6;font-size:13px;z-index:10}
+
+  @media print{
+    body{background:#fff}
+    .slide{display:flex !important;page-break-after:always;min-height:0;height:100vh}
+    .nav,.count{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="deck">
+
+  <!-- 1. TITLE -->
+  <section class="slide active">
+    <div class="kicker">Standard Work · Continuous Improvement</div>
+    <h1>Sola Lounge<br/>Where we can save time</h1>
+    <p class="lead muted" style="max-width:760px">A look at how the Sola Lounge is built today, where the time actually goes, and the
+      handful of changes that would take the most time out — ranked by impact.</p>
+    <div class="fill"></div>
+    <p class="muted">Based on the Sola Lounge SWI workbooks · Right&nbsp;Arm configuration, medium size (4.5–6.5).
+      Build-order precedence partly inferred — to confirm on the floor.</p>
+    <div class="footer"><span>Sola Lounge — Time Savings</span><span>2026-06-16</span></div>
+  </section>
+
+  <!-- 2. THE FRAMING -->
+  <section class="slide">
+    <div class="kicker">The picture today</div>
+    <h2>Lots of labor, but it's built as one long line</h2>
+    <div class="grid2" style="margin-top:26px">
+      <div class="card">
+        <div class="big blue">~93<span style="font-size:24px"> min</span></div>
+        <div class="stat-label">Total hands-on labor per unit<br/>(every step added up)</div>
+      </div>
+      <div class="card hot">
+        <div class="big red">~79<span style="font-size:24px"> min</span></div>
+        <div class="stat-label">Build time <strong>even with 8 people</strong><br/>(how long one unit actually takes)</div>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:26px">Those two numbers are almost the same — which means <span class="accent">extra people barely help.</span>
+      On average only about <strong>one person can work at a time</strong>, because Sola is built as a serial chain:
+      each step waits on the one before it.</p>
+    <p class="sub">The opportunity isn't "add people." It's <span class="save">make the work parallel</span> and <span class="save">shorten the few longest steps.</span></p>
+    <div class="footer"><span>Sola Lounge — Time Savings</span><span>2 / 10</span></div>
+  </section>
+
+  <!-- 3. WHERE THE TIME GOES -->
+  <section class="slide">
+    <div class="kicker">Where the time goes</div>
+    <h2>Six steps carry the whole build</h2>
+    <div class="bars">
+      <div class="bar-row"><div class="bar-label">Frame Sub-Assembly</div><div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--red)">19:00</div></div><div class="bar-val">on path</div></div>
+      <div class="bar-row"><div class="bar-label">Frame Assembly</div><div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--red)">19:00</div></div><div class="bar-val">on path</div></div>
+      <div class="bar-row"><div class="bar-label">Connector Plate Installation</div><div class="bar-track"><div class="bar-fill" style="width:78%;background:var(--blue)">14:52</div></div><div class="bar-val">on path</div></div>
+      <div class="bar-row"><div class="bar-label">Connector Pre-Assembly</div><div class="bar-track"><div class="bar-fill" style="width:70%;background:var(--blue)">13:20</div></div><div class="bar-val">on path</div></div>
+      <div class="bar-row"><div class="bar-label">Leg Assembly Installation</div><div class="bar-track"><div class="bar-fill" style="width:70%;background:var(--blue)">13:15</div></div><div class="bar-val">on path</div></div>
+      <div class="bar-row"><div class="bar-label">Rivet Nut Installation</div><div class="bar-track"><div class="bar-fill" style="width:50%;background:var(--blue2)">09:33</div></div><div class="bar-val"></div></div>
+      <div class="bar-row"><div class="bar-label">Attach Connectors to Legs</div><div class="bar-track"><div class="bar-fill" style="width:19%;background:var(--blue2)">03:40</div></div><div class="bar-val"></div></div>
+      <div class="bar-row"><div class="bar-label">Seat Support Frame / Frame Prep</div><div class="bar-track"><div class="bar-fill" style="width:14%;background:#aeb9c6">not&nbsp;timed</div></div><div class="bar-val">measure</div></div>
+    </div>
+    <p class="sub" style="margin-top:18px"><span style="color:var(--red);font-weight:700">Red</span> = on the critical path (shortening it shortens the whole build).
+      Two steps are <strong>still unmeasured</strong> — we're flying blind on them.</p>
+    <div class="footer"><span>Sola Lounge — Time Savings</span><span>3 / 10</span></div>
+  </section>
+
+  <!-- 4. THE CRITICAL PATH -->
+  <section class="slide">
+    <div class="kicker">The long pole</div>
+    <h2>The critical path is ~79 minutes</h2>
+    <p class="sub">This is the chain that sets the clock. Everything else can happen around it — but nothing finishes until this chain finishes.</p>
+    <div class="flowline" style="margin-top:24px">
+      <span class="blk">Connector Pre-Asm<br/>13:20</span><span class="arrow">→</span>
+      <span class="blk">Connector Plate<br/>14:52</span><span class="arrow">→</span>
+      <span class="blk">Frame Sub-Asm<br/>19:00</span><span class="arrow">→</span>
+      <span class="blk">Frame Assembly<br/>19:00</span><span class="arrow">→</span>
+      <span class="blk">Leg Assembly<br/>13:15</span>
+    </div>
+    <p class="lead" style="margin-top:26px">Four of these five are <span class="accent">connector and frame work</span>. That's the target.
+      Cut time out of this chain and the whole build gets shorter — cutting anything <em>off</em> the chain only saves labor, not clock.</p>
+    <div class="footer"><span>Sola Lounge — Time Savings</span><span>4 / 10</span></div>
+  </section>
+
+  <!-- 5. OPPORTUNITY 1 -->
+  <section class="slide">
+    <div class="kicker">Opportunity 1 · biggest quick win</div>
+    <h2>Build the two frame sub-pieces in parallel <span class="pill flow">flow</span></h2>
+    <p class="lead">Frame Sub-Assembly is <strong>two independent pieces</strong> built one after the other:
+      the 4-leg section (8:30) <em>then</em> the 5-leg section (10:30) = <strong>19:00</strong> by one person.</p>
+    <div style="margin-top:18px">
+      <p class="muted" style="margin-bottom:4px">Today — one person, serial:</p>
+      <div class="flowline"><span class="blk">4-leg · 8:30</span><span class="arrow">→</span><span class="blk alt">5-leg · 10:30</span><span class="muted">&nbsp;= 19:00</span></div>
+      <p class="muted" style="margin:14px 0 4px">Two people, in parallel:</p>
+      <div class="flowline"><span class="blk">4-leg · 8:30</span><span class="muted">&nbsp;</span></div>
+      <div class="flowline"><span class="blk alt">5-leg · 10:30</span><span class="muted">&nbsp;= 10:30 wall-clock</span></div>
+    </div>
+    <p class="lead" style="margin-top:20px">Same labor, no new tools — just overlap the work.
+      <span class="save">Saves ~8.5 min of build time per unit</span>, straight off the critical path.</p>
+    <div class="footer"><span>Sola Lounge — Time Savings</span><span>5 / 10</span></div>
+  </section>
+
+  <!-- 6. OPPORTUNITY 2 -->
+  <section class="slide">
+    <div class="kicker">Opportunity 2 · highest leverage</div>
+    <h2>Fix the connector workflow <span class="pill labor">labor</span> <span class="pill flow">flow</span></h2>
+    <p class="lead">Connector Pre-Assembly (13:20) + Connector Plate Installation (14:52) = <strong>~28 min</strong> of every Sola,
+      and both sit on the critical path.</p>
+    <ul>
+      <li><strong>Connector Pre-Assembly</strong> — 16 connectors hand-prepped one at a time. The SWI itself flags this
+        <em>"inefficient"</em> (and <em>"unnecessary"</em> on the no-arm configs). Batch it, fixture it, or have connectors arrive pre-assembled.</li>
+      <li><strong>Connector Plate Installation</strong> — drilling 4 holes in every plate <em>on the line</em>, then clearing debris.
+        <span class="accent">Pre-drilled plates</span> remove the drilling entirely.</li>
+    </ul>
+    <p class="lead" style="margin-top:14px">These are <strong>shared steps</strong> — the same work appears on <span class="accent">all three Sola configs</span>.
+      Fix it once, every Sola gets faster. <span class="save">Realistic target: 8–14 min/unit.</span></p>
+    <div class="footer"><span>Sola Lounge — Time Savings</span><span>6 / 10</span></div>
+  </section>
+
+  <!-- 7. OPPORTUNITY 3 -->
+  <section class="slide">
+    <div class="kicker">Opportunity 3</div>
+    <h2>Fixture the frame assemblies <span class="pill labor">labor</span> <span class="pill flow">flow</span></h2>
+    <p class="lead">Frame Sub-Assembly + Frame Assembly = <strong>38 min combined</strong>, both on the critical path.
+      Today they're aligned by hand with bar clamps — "hold extrusions flush and aligned," "verify no extrusions are misaligned."</p>
+    <ul>
+      <li>A dedicated <span class="accent">assembly fixture / jig</span> holds the extrusions square automatically — less clamping, less re-checking, less re-work.</li>
+      <li>Removes the most variable, operator-dependent part of the build (alignment), which also improves consistency.</li>
+    </ul>
+    <p class="lead" style="margin-top:14px"><span class="save">Estimated 3–6 min/unit</span>, plus fewer defects from misalignment.</p>
+    <div class="footer"><span>Sola Lounge — Time Savings</span><span>7 / 10</span></div>
+  </section>
+
+  <!-- 8. OPPORTUNITY 4 -->
+  <section class="slide">
+    <div class="kicker">Opportunity 4 · do this first</div>
+    <h2>Measure the two blind steps <span class="pill measure">visibility</span></h2>
+    <p class="lead"><strong>Seat Support Frame Assembly</strong> and <strong>Frame Prep</strong> have <span class="accent">no recorded time.</span>
+      They're real work that happens on every unit, but they're invisible in every number on these slides.</p>
+    <ul>
+      <li>We can't improve — or even correctly staff — what we haven't measured.</li>
+      <li>A quick time-study on both closes the gap and may surface a hidden chunk of time.</li>
+      <li>Cheapest action on the list: a stopwatch and one build.</li>
+    </ul>
+    <p class="sub" style="margin-top:14px">Every other estimate here is conservative <em>because</em> these two are still zero.</p>
+    <div class="footer"><span>Sola Lounge — Time Savings</span><span>8 / 10</span></div>
+  </section>
+
+  <!-- 9. THE ROADMAP -->
+  <section class="slide">
+    <div class="kicker">The plan</div>
+    <h2>Ranked by impact vs. effort</h2>
+    <table>
+      <thead><tr><th>Change</th><th>Type</th><th>Est. saving / unit</th><th>Effort</th></tr></thead>
+      <tbody>
+        <tr><td>Build the two frame sub-pieces in parallel</td><td><span class="pill flow">flow</span></td><td class="num">~8.5 min</td><td>Low — staffing only</td></tr>
+        <tr><td>Pre-drilled plates + batched/pre-kit connectors</td><td><span class="pill labor">labor</span></td><td class="num">8–14 min</td><td>Med — supplier / process</td></tr>
+        <tr><td>Frame assembly fixture / jig</td><td><span class="pill flow">flow</span></td><td class="num">3–6 min</td><td>Med — tooling</td></tr>
+        <tr><td>Time-study the two untimed steps</td><td><span class="pill measure">measure</span></td><td class="num">—</td><td>Low — do first</td></tr>
+        <tr class="total"><td>Combined potential</td><td></td><td class="num save">~20–28 min</td><td>≈ 25–35% faster</td></tr>
+      </tbody>
+    </table>
+    <p class="sub" style="margin-top:16px">Build time per unit could move from <strong>~79 min toward ~55 min</strong>, with the connector work also speeding up every other Sola config.</p>
+    <div class="footer"><span>Sola Lounge — Time Savings</span><span>9 / 10</span></div>
+  </section>
+
+  <!-- 10. ASK -->
+  <section class="slide">
+    <div class="kicker">The ask</div>
+    <h2>Recommended next steps</h2>
+    <ul style="font-size:21px">
+      <li><strong>This week:</strong> time-study Seat Support Frame Assembly &amp; Frame Prep — close the two blind spots.</li>
+      <li><strong>This week:</strong> trial the parallel frame sub-assembly — zero cost, ~8.5 min/unit.</li>
+      <li><strong>This month:</strong> get a quote on pre-drilled connector plates and pre-kitted connectors.</li>
+      <li><strong>Next:</strong> scope a frame-alignment fixture.</li>
+    </ul>
+    <p class="lead" style="margin-top:18px">The first two cost nothing and prove the model. The connector changes pay off across <span class="accent">the whole Sola family.</span></p>
+    <div class="fill"></div>
+    <p class="muted">Figures from the Sola Lounge SWI data. Savings are estimates to validate on the floor; precedence partly inferred from step descriptions.</p>
+    <div class="footer"><span>Sola Lounge — Time Savings</span><span>10 / 10</span></div>
+  </section>
+
+</div>
+
+<div class="count"><span id="cur">1</span> / <span id="tot">10</span> &nbsp;·&nbsp; ← → to navigate · P to print</div>
+<div class="nav">
+  <button id="prev" title="Previous">‹</button>
+  <button id="next" title="Next">›</button>
+</div>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  let i=0; const tot=slides.length;
+  document.getElementById('tot').textContent=tot;
+  function show(n){
+    i=Math.max(0,Math.min(tot-1,n));
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    document.getElementById('cur').textContent=i+1;
+    document.getElementById('prev').disabled=i===0;
+    document.getElementById('next').disabled=i===tot-1;
+    window.scrollTo(0,0);
+  }
+  document.getElementById('next').onclick=()=>show(i+1);
+  document.getElementById('prev').onclick=()=>show(i-1);
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' ')show(i+1);
+    else if(e.key==='ArrowLeft'||e.key==='PageUp')show(i-1);
+    else if(e.key==='Home')show(0);
+    else if(e.key==='End')show(tot-1);
+    else if(e.key.toLowerCase()==='p')window.print();
+  });
+  show(0);
+</script>
+</body>
+</html>
