@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Notched Rail + Retainer Trellis — Concept</title>
+<style>
+  body{margin:0;background:#586069;font-family:Arial,sans-serif}
+  .sheet{max-width:1320px;margin:16px auto;background:#fff;box-shadow:0 2px 14px rgba(0,0,0,.45)}
+  svg{display:block;width:100%;height:auto}
+  @media print{body{background:#fff}.sheet{box-shadow:none;margin:0;max-width:none}}
+</style>
+</head>
+<body>
+<div class="sheet">
+<svg id="d" viewBox="0 0 1320 980" font-family="Arial, sans-serif"></svg>
+</div>
+<script>
+const NS="http://www.w3.org/2000/svg",svg=document.getElementById("d");
+function E(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);(p||svg).appendChild(e);return e;}
+function T(x,y,s,o={},p){const e=E("text",{x,y,"font-size":o.fs||11,"font-weight":o.fw||"normal","text-anchor":o.ta||"start",fill:o.fill||"#111"},p);e.textContent=s;return e;}
+function L(x1,y1,x2,y2,o={},p){return E("line",{x1,y1,x2,y2,stroke:o.s||"#111","stroke-width":o.w||1,"stroke-dasharray":o.d||"","marker-end":o.me||"","marker-start":o.ms||""},p);}
+const defs=E("defs",{});
+function mk(id,d,f,rx){const m=E("marker",{id,markerWidth:12,markerHeight:12,refX:rx==null?9:rx,refY:4,orient:"auto"},defs);E("path",{d,fill:f},m);}
+mk("a","M0 1 L9 4 L0 7 Z","#111");mk("as","M9 1 L0 4 L9 7 Z","#111",0);mk("ga","M0 1 L9 4 L0 7 Z","#1c7c3c");
+const hp=E("pattern",{id:"h",width:7,height:7,patternUnits:"userSpaceOnUse",patternTransform:"rotate(45)"},defs);E("line",{x1:0,y1:0,x2:0,y2:7,stroke:"#111","stroke-width":0.7},hp);
+
+function mkIso(ox,oy,s){const c=Math.cos(Math.PI/6);return (x,y,z)=>[ox+(x-y)*s*c, oy+(x+y)*s*0.5 - z*s];}
+const PAL={
+ rail:{t:"#cdd6df",l:"#97a3af",r:"#717d8a",e:"#39424b"},   // side bar (notched)
+ slat:{t:"#c2cbd4",l:"#8b97a3",r:"#67737f",e:"#39424b"},   // existing extrusion
+ cap :{t:"#bcd4ea",l:"#86abd1",r:"#5d86b4",e:"#274a73"},   // retainer cap (new, blue)
+ scr :{t:"#caa64a",l:"#a8842f",r:"#86671f",e:"#5a4615"}
+};
+function poly(pts,fill,o={},g){E("polygon",{points:pts.map(p=>p.join(",")).join(" "),fill,stroke:o.s||"#2b333b","stroke-width":o.w||1,"stroke-linejoin":"round"},g);}
+function box(iso,x,y,z,dx,dy,dz,pal,g){const P=iso;
+ poly([P(x+dx,y,z),P(x+dx,y+dy,z),P(x+dx,y+dy,z+dz),P(x+dx,y,z+dz)],pal.r,{s:pal.e},g);
+ poly([P(x,y+dy,z),P(x+dx,y+dy,z),P(x+dx,y+dy,z+dz),P(x,y+dy,z+dz)],pal.l,{s:pal.e},g);
+ poly([P(x,y,z+dz),P(x+dx,y,z+dz),P(x+dx,y+dy,z+dz),P(x,y+dy,z+dz)],pal.t,{s:pal.e},g);}
+// a NOTCHED side bar along Y: solid base + teeth between slat gaps
+function notchedRail(iso,x,y0,len,thk,baseH,toothH,slatYs,slatW,pal,g){
+  box(iso,x,y0,0, thk,len,baseH,pal,g);                       // base strip
+  // teeth = everything not occupied by a slat gap
+  let edges=[y0]; slatYs.forEach(sy=>{edges.push(sy);edges.push(sy+slatW);}); edges.push(y0+len);
+  for(let i=0;i<edges.length;i+=2){const a=edges[i],b=edges[i+1];if(b-a>0.02)box(iso,x,a,baseH, thk,b-a,toothH,pal,g);}
+}
+
+/* FRAME */
+E("rect",{x:8,y:8,width:1304,height:964,fill:"none",stroke:"#111","stroke-width":2.5});
+E("rect",{x:18,y:18,width:1284,height:944,fill:"none",stroke:"#111","stroke-width":1});
+T(34,44,"TRELLIS — NOTCHED RAIL + TOP RETAINER  (concept)",{fs:17,fw:"bold"});
+T(34,62,"Slats drop into notched side bars (below flush); a retainer bar caps each side — screwed only at the ends. ~8–12 screws instead of 4 per slat.",{fs:11,fill:"#555"});
+L(28,72,1292,72,{w:1});
+
+/* ===== VIEW 1: ISO EXPLODED ===== */
+T(40,100,"EXPLODED ASSEMBLY",{fs:13,fw:"bold"});
+const g1=E("g",{}), iso=mkIso(330,500,27);
+const slatYs=[0.7,2.0,3.3,4.6,5.9], SW=0.7, RAILLEN=7.2, THK=0.55, BASE=0.25, TOOTH=1.55;
+// two notched side bars (at x=0 and x=9)
+notchedRail(iso,0,0.2,RAILLEN,THK,BASE,TOOTH,slatYs,SW,PAL.rail,g1);
+notchedRail(iso,9.0,0.2,RAILLEN,THK,BASE,TOOTH,slatYs,SW,PAL.rail,g1);
+// slats seated in notches (below flush), one shown lifted (exploded)
+slatYs.forEach((sy,i)=>{const z = i===2 ? 3.4 : 0.25;                 // middle slat lifted
+  box(iso,0.55,sy,z, 8.45,SW,1.55,PAL.slat,g1);
+  if(i===2){const a=iso(4.8,sy+0.35,z),b=iso(4.8,sy+0.35,0.4);L(a[0],a[1],b[0],b[1],{d:"3 4",w:1,s:"#1c7c3c",me:"url(#ga)"},g1);}
+});
+// retainer caps (blue), exploded up above each rail
+box(iso,-0.1,0.0,3.0, 0.75,RAILLEN+0.4,0.22,PAL.cap,g1);
+box(iso,8.9,0.0,3.0, 0.75,RAILLEN+0.4,0.22,PAL.cap,g1);
+// end screws through caps (2 per end shown)
+function endScrews(iso,x,g){[0.5,RAILLEN-0.1].forEach(sy=>{[0.05,0.4].forEach(dx=>{const p=iso(x+dx,sy,3.4);E("circle",{cx:p[0],cy:p[1],r:2.4,fill:"#a8842f",stroke:"#5a4615","stroke-width":0.6},g);const q=iso(x+dx,sy,3.22);L(p[0],p[1],q[0],q[1]+10,{w:0.8,s:"#a8842f",me:"url(#a)"},g);});});}
+endScrews(iso,0,g1); endScrews(iso,8.9,g1);
+// down arrows for caps
+[ [0.3,3.6],[9.2,3.6] ].forEach(([cx,cz])=>{const a=iso(cx,3.6,cz+0.2),b=iso(cx,3.6,1.9);L(a[0],a[1],b[0],b[1],{d:"4 4",w:1.2,s:"#274a73",me:"url(#a)"},g1);});
+// balloons
+function bal(x,y,n,tx,ty,g){L(tx,ty,x,y,{w:0.8},g);E("circle",{cx:tx,cy:ty,r:2.3,fill:"#111"},g);E("circle",{cx:x,cy:y,r:12,fill:"#fff",stroke:"#111","stroke-width":1.3},g);T(x,y+4,n,{ta:"middle",fw:"bold",fs:13},g);}
+bal(95,150,"1", iso(0.3,3.5,1.4)[0], iso(0.3,3.5,1.4)[1],g1);  // notched rail
+bal(95,235,"2", iso(4.8,3.3,3.9)[0], iso(4.8,3.3,3.9)[1],g1);  // slat
+bal(95,320,"3", iso(0.3,1.5,3.1)[0], iso(0.3,1.5,3.1)[1],g1);  // retainer cap
+bal(95,400,"4", iso(0.25,0.5,3.4)[0], iso(0.25,0.5,3.4)[1],g1);// screw
+T(150,150,"1  NOTCHED SIDE BAR (mod. MIL80174)",{fs:10},g1);
+T(150,235,"2  SLAT — 1012766 (unchanged)",{fs:10},g1);
+T(150,320,"3  RETAINER CAP (new flat bar)",{fs:10},g1);
+T(150,400,"4  SCREW 40274 — 2–3 per end only",{fs:10},g1);
+
+/* ===== VIEW 2: SECTION DETAIL ===== */
+T(720,100,"SECTION — ONE NOTCH (slat seated + capped)",{fs:13,fw:"bold"});
+const gx=E("g",{}), bx=770, by=160, U=58; // scale per inch
+// side bar (2.000 tall on edge, .188 thk shown wide for clarity) — section hatched
+E("rect",{x:bx,y:by,width:120,height:2.0*U,fill:"url(#h)",stroke:"#111","stroke-width":1.4},gx);
+// notch cut from top (slat width .938) down to leave .14 base
+E("rect",{x:bx+30,y:by,width:0.96*U*0.9,height:1.86*U,fill:"#fff",stroke:"#111","stroke-width":1.2},gx);
+// slat seated in notch (.938 x 1.840), top BELOW flush
+E("rect",{x:bx+30,y:by+0.16*U,width:0.96*U*0.9,height:1.84*U,fill:"#c2cbd4",stroke:"#111","stroke-width":1.3},gx);
+T(bx+30+0.45*U,by+1.0*U,"SLAT",{fs:9,ta:"middle",fill:"#333"},gx);
+// retainer cap on top, capping the notch mouth
+E("rect",{x:bx-6,y:by-0.34*U,width:132,height:0.34*U,fill:"#bcd4ea",stroke:"#274a73","stroke-width":1.3},gx);
+T(bx+132+6,by-0.12*U,"RETAINER CAP",{fs:9.5,fill:"#274a73"},gx);
+// screw at end (phantom, into bar top) shown as CL
+L(bx+105,by-0.34*U,bx+105,by+0.6*U,{d:"6 3 2 3",w:0.8,s:"#888"},gx);
+// DIMS
+// slat below flush
+L(bx-18,by,bx-18,by+0.16*U,{w:0.7,me:"url(#a)",ms:"url(#as)"},gx);
+T(bx-22,by+0.16*U/2+3,"≈.16 below flush",{fs:9,ta:"end"},gx);
+// bar height 2.000
+L(bx+150,by,bx+150,by+2.0*U,{w:0.7,me:"url(#a)",ms:"url(#as)"},gx);
+T(bx+154,by+1.0*U,"2.000  (MIL80174)",{fs:9.5},gx);
+// notch / slat width .938
+L(bx+30,by+2.0*U+16,bx+30+0.96*U*0.9,by+2.0*U+16,{w:0.7,me:"url(#a)",ms:"url(#as)"},gx);
+T(bx+30+0.45*U,by+2.0*U+30,"NOTCH .96 = slat .938 + clr",{fs:9.5,ta:"middle"},gx);
+T(bx,by+2.0*U+52,"Slat bottoms in the notch (located), sits ~.16 below the rail top, retainer cap blocks lift-out. Slat 1012766 unchanged.",{fs:10,fill:"#333"},gx);
+
+/* ===== VIEW 3: SCREW COUNT — BEFORE/AFTER ===== */
+T(720,420,"FASTENERS — BEFORE vs AFTER",{fs:13,fw:"bold"});
+const cy=440;
+E("rect",{x:720,y:cy,width:270,height:120,fill:"#fdf4f3",stroke:"#e6c4bf","stroke-width":1,rx:8});
+T(736,cy+24,"TODAY",{fs:12,fw:"bold",fill:"#b3261e"});
+T(736,cy+46,"4 screws per slat",{fs:12});
+T(736,cy+66,"13 / 15 / 19 / 22 slats by size",{fs:11,fill:"#555"});
+T(736,cy+92,"= 52 · 64 · 76 · 88 screws",{fs:15,fw:"bold",fill:"#b3261e"});
+T(736,cy+110,"(per the current drawing, item 3 qty)",{fs:9,fill:"#777"});
+E("rect",{x:1010,y:cy,width:282,height:120,fill:"#eef8f1",stroke:"#bfe3cb","stroke-width":1,rx:8});
+T(1026,cy+24,"PROPOSED",{fs:12,fw:"bold",fill:"#1c7c3c"});
+T(1026,cy+46,"2–3 screws per end of each retainer",{fs:12});
+T(1026,cy+66,"2 retainers × 2 ends",{fs:11,fill:"#555"});
+T(1026,cy+92,"= 8 to 12 screws total",{fs:16,fw:"bold",fill:"#1c7c3c"});
+T(1026,cy+110,"slats just drop into the notches",{fs:9,fill:"#777"});
+T(720,cy+150,"≈ 85% fewer fasteners — and slats self-locate, so no measuring or holding each one.",{fs:11,fw:"bold"});
+
+/* ===== VIEW 4: SEQUENCE ===== */
+T(40,600,"ASSEMBLY",{fs:13,fw:"bold"});
+L(28,612,700,612,{w:0.8});
+const steps=[["1","DROP SLATS","into the notched side bars — they self-locate at pitch"],
+ ["2","LAY RETAINER","one cap bar along each side, over the slat ends"],
+ ["3","SCREW THE ENDS","2–3 screws each end of each cap — done"]];
+steps.forEach((s,i)=>{const X=60+i*220,Y=632;const g=E("g",{});
+ E("rect",{x:X-22,y:Y,width:200,height:150,rx:8,fill:"#fbfcfd",stroke:"#e1e7ee"},g);
+ T(X-10,Y+22,s[0]+"  "+s[1],{fs:12,fw:"bold"},g);
+ const is=mkIso(X+78,Y+118,12);
+ notchedRail(is,0,0,6,0.5,0.2,1.2,[0.6,2.0,3.4,4.8],0.6,PAL.rail,g);
+ notchedRail(is,6,0,6,0.5,0.2,1.2,[0.6,2.0,3.4,4.8],0.6,PAL.rail,g);
+ if(i>=0)[0.6,2.0,3.4,4.8].forEach((sy,k)=>{const z=(i===0&&k===3)?2.4:0.2;box(is,0.5,sy,z,5.5,0.6,1.1,PAL.slat,g);if(i===0&&k===3){const a=is(3,sy+0.3,z),b=is(3,sy+0.3,1.4);L(a[0],a[1],b[0],b[1],{d:"3 3",w:1,s:"#1c7c3c",me:"url(#ga)"},g);}});
+ if(i>=1){const z=(i===1)?2.2:1.45;box(is,-0.1,-0.1,z,0.7,6.2,0.2,PAL.cap,g);box(is,6,-0.1,z,0.7,6.2,0.2,PAL.cap,g);
+   if(i===1){const a=is(0.25,3,2.2+0.2),b=is(0.25,3,1.7);L(a[0],a[1],b[0],b[1],{d:"3 3",w:1,s:"#274a73",me:"url(#a)"},g);}}
+ if(i===2){[0,6].forEach(rx=>{[0.4,5.6].forEach(sy=>{const p=is(rx+0.3,sy,1.7);E("circle",{cx:p[0],cy:p[1],r:3,fill:"#1c7c3c"},g);});});}
+ T(X-10,Y+170,"",{fs:1},g);
+ E("text",{x:X-10,y:Y+168,"font-size":9.5,fill:"#555"},g).textContent=s[2];
+});
+
+/* ===== BOM ===== */
+const ox2=760,oy2=640; T(ox2,oy2-6,"BILL OF MATERIALS",{fs:12,fw:"bold"});
+const rows=[["ITEM","PART","DESCRIPTION","QTY"],
+["1","MIL80174*","SIDE BAR — *ADD NOTCHES at slat pitch","2"],
+["2","1012766","TRELLIS SLAT — extrusion, UNCHANGED","per size"],
+["3","(new)","RETAINER CAP — from flat-bar stock","2"],
+["4","40274","#9 x 3/4 FH SCREW","8–12"]];
+const cw=[34,70,300,72],rh=21;
+rows.forEach((r,i)=>{let cx=ox2;r.forEach((c,j)=>{E("rect",{x:cx,y:oy2+i*rh,width:cw[j],height:rh,fill:i==0?"#e9eef4":"#fff",stroke:"#111","stroke-width":0.8});T(cx+4,oy2+i*rh+14,c,{fs:9,fw:i==0?"bold":"normal"});cx+=cw[j];});});
+
+/* ===== TITLE BLOCK ===== */
+const tx=760,ty=770;
+E("rect",{x:tx,y:ty,width:532,height:62,fill:"none",stroke:"#111","stroke-width":1.2});
+L(tx,ty+22,tx+532,ty+22,{w:0.8});L(tx,ty+42,tx+532,ty+42,{w:0.8});
+T(tx+8,ty+15,"TRELLIS — NOTCHED RAIL + RETAINER",{fs:11,fw:"bold"});T(tx+330,ty+15,"SOLA LOUNGE — BOTH ARMS",{fs:9.5});
+T(tx+8,ty+36,"Reuses slat 1012766. Modifies side bar; adds 1 cap bar. Fully detachable for service.",{fs:9.5});
+T(tx+8,ty+56,"DRAWN: Process Eng.   SCALE: NTS   REV: A — concept   based on TUUCI dwg item 1/2/3",{fs:9,fill:"#333"});
+
+/* ===== IMPACT ===== */
+E("rect",{x:40,y:846,width:680,height:108,fill:"#eef8f1",stroke:"#1c7c3c","stroke-width":1});
+T(54,868,"PROJECTED IMPACT",{fs:12,fw:"bold",fill:"#1c7c3c"});
+T(54,890,"Fasteners: ~52–88  →  8–12   (≈85% fewer).  Slats self-locate in notches — no measuring/holding.",{fs:11});
+T(54,910,"Seat Support: 32:30  →  est. ~8–10 min   ·   ~20+ min saved / sofa (~16% of Sola labor)",{fs:12,fw:"bold",fill:"#1c7c3c"});
+T(54,930,"Change is to the side bar + a cap bar only — slat extrusion and the sofa frame are untouched. CONCEPT — not to scale; dims per engineering.",{fs:9.5,fill:"#444"});
+</script>
+</body>
+</html>
