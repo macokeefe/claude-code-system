@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Slat-Spacing Comb — Jig Drawing</title>
+<style>
+  body{margin:0;background:#586069;font-family:Arial,sans-serif}
+  .sheet{max-width:1320px;margin:16px auto;background:#fff;box-shadow:0 2px 14px rgba(0,0,0,.45)}
+  svg{display:block;width:100%;height:auto}
+  @media print{body{background:#fff}.sheet{box-shadow:none;margin:0;max-width:none}}
+</style>
+</head>
+<body>
+<div class="sheet">
+<svg id="d" viewBox="0 0 1320 980" font-family="Arial, sans-serif"></svg>
+</div>
+<script>
+const NS="http://www.w3.org/2000/svg";
+const svg=document.getElementById("d");
+function E(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);(p||svg).appendChild(e);return e;}
+function T(x,y,s,o={},p){const e=E("text",{x,y,"font-size":o.fs||11,"font-weight":o.fw||"normal","text-anchor":o.ta||"start",fill:o.fill||"#111"},p);e.textContent=s;return e;}
+function L(x1,y1,x2,y2,o={},p){return E("line",{x1,y1,x2,y2,stroke:o.s||"#111","stroke-width":o.w||1,"stroke-dasharray":o.d||"","marker-end":o.me||"","marker-start":o.ms||""},p);}
+const defs=E("defs",{});
+function mk(id,d,f,rx){const m=E("marker",{id,markerWidth:12,markerHeight:12,refX:rx==null?9:rx,refY:4,orient:"auto"},defs);E("path",{d,fill:f},m);}
+mk("a","M0 1 L9 4 L0 7 Z","#111");mk("as","M9 1 L0 4 L9 7 Z","#111",0);mk("ga","M0 1 L9 4 L0 7 Z","#1c7c3c");
+const hp=E("pattern",{id:"h",width:7,height:7,patternUnits:"userSpaceOnUse",patternTransform:"rotate(45)"},defs);E("line",{x1:0,y1:0,x2:0,y2:7,stroke:"#111","stroke-width":0.7},hp);
+
+function mkIso(ox,oy,s){const c=Math.cos(Math.PI/6),h=0.5;return (x,y,z)=>[ox+(x-y)*s*c, oy+(x+y)*s*h - z*s];}
+const PAL={
+ steel:{t:"#d3dae1",l:"#9ba7b3",r:"#74808d",e:"#39424b"},
+ slat :{t:"#c6ced6",l:"#8f9ba7",r:"#6a7682",e:"#39424b"},
+ comb :{t:"#f3d27a",l:"#dcb14f",r:"#b98c33",e:"#6d5019"},   // jig = yellow tooling
+ grip :{t:"#3a3f45",l:"#2b3035",r:"#202428",e:"#111"}
+};
+function poly(pts,fill,o={},g){E("polygon",{points:pts.map(p=>p.join(",")).join(" "),fill,stroke:o.s||"#2b333b","stroke-width":o.w||1,"stroke-linejoin":"round"},g);}
+function box(iso,x,y,z,dx,dy,dz,pal,g){const P=iso;
+ poly([P(x+dx,y,z),P(x+dx,y+dy,z),P(x+dx,y+dy,z+dz),P(x+dx,y,z+dz)],pal.r,{s:pal.e},g);
+ poly([P(x,y+dy,z),P(x+dx,y+dy,z),P(x+dx,y+dy,z+dz),P(x,y+dy,z+dz)],pal.l,{s:pal.e},g);
+ poly([P(x,y,z+dz),P(x+dx,y,z+dz),P(x+dx,y+dy,z+dz),P(x,y+dy,z+dz)],pal.t,{s:pal.e},g);}
+// dark notch opening drawn on the +y (front) face of a comb bar that runs along X
+function notchFront(iso,x,w,yface,z,h,g){poly([iso(x,yface,z),iso(x+w,yface,z),iso(x+w,yface,z+h),iso(x,yface,z+h)],"#5b4410",{s:"#3a2c08",w:0.6},g);}
+
+/* FRAME */
+E("rect",{x:8,y:8,width:1304,height:964,fill:"none",stroke:"#111","stroke-width":2.5});
+E("rect",{x:18,y:18,width:1284,height:944,fill:"none",stroke:"#111","stroke-width":1});
+T(34,44,"SLAT-SPACING COMB — TRELLIS ASSEMBLY JIG",{fs:17,fw:"bold"});
+T(34,62,"Lays across the slats to set pitch & hold them flush while the ends are screwed to the side bars — then lifts off. No part changes.",{fs:11,fill:"#555"});
+L(28,72,1292,72,{w:1});
+
+/* ===== VIEW 1: ISO — COMB IN USE ===== */
+T(40,100,"PICTORIAL — COMB IN USE",{fs:13,fw:"bold"});
+const g1=E("g",{}); const iso=mkIso(300,470,26);
+// two side bars (run along Y) — these are the perpendicular flat bars the slats screw into
+box(iso,0,0,0, 1.0,8,0.6, PAL.steel,g1);          // left side bar
+box(iso,9.0,0,0, 1.0,8,0.6, PAL.steel,g1);        // right side bar
+// slats between them (run along X, coplanar, same height)
+for(let i=0;i<6;i++){const yy=0.8+i*1.15; box(iso,1.0,yy,0, 8.0,0.55,0.5, PAL.slat,g1);}
+// end screws (where slats meet side bars) — small marks both ends of each slat
+for(let i=0;i<6;i++){const yy=0.8+i*1.15+0.27;
+  [ [0.7,yy],[9.25,yy] ].forEach(([sx,sy])=>{const p=iso(sx,sy,0.55);E("circle",{cx:p[0],cy:p[1],r:2.2,fill:"#b3261e"},g1);});}
+// COMB shown lifted above the middle, about to drop on (yellow tooling), running along Y
+const cz=3.2, cx0=4.2;
+box(iso,cx0,-0.4,cz, 1.1,8.8,0.7, PAL.comb,g1);
+// notches on comb underside (front +y face won't show underside; show as dark slots on the long front face at each slat)
+for(let i=0;i<6;i++){const yy=0.8+i*1.15; // notch positions along Y on the comb's +x/front—approximate as dark ticks on front-left face
+  const p=iso(cx0,yy,cz);const q=iso(cx0,yy+0.55,cz);
+  poly([p,q,iso(cx0,yy+0.55,cz+0.28),iso(cx0,yy,cz+0.28)],"#5b4410",{s:"#3a2c08",w:0.5},g1);}
+// handles on top of comb
+[1.5,6.5].forEach(hy=>{box(iso,cx0+0.25,hy,cz+0.7,0.6,0.5,0.9,PAL.grip,g1);box(iso,cx0+0.15,hy-0.1,cz+1.6,0.8,0.7,0.25,PAL.grip,g1);});
+// drop arrow
+const aT=iso(4.75,4.0,cz-0.1), aB=iso(4.75,4.0,1.0);
+L(aT[0],aT[1],aB[0],aB[1],{d:"4 4",w:1.2,s:"#1c7c3c",me:"url(#ga)"},g1);
+T(aB[0]+8,aB[1]+2,"drop on → sets pitch & holds slats flush",{fs:9.5,fill:"#1c7c3c"},g1);
+// driver at an end joint
+const dp=iso(9.25,2.0,0.55);E("rect",{x:dp[0]-4,y:dp[1]-40,width:8,height:34,fill:"#333",rx:2},g1);E("rect",{x:dp[0]-6,y:dp[1]-8,width:12,height:9,fill:"#c9791f",rx:2},g1);
+T(dp[0]+10,dp[1]-18,"drive both ends",{fs:9.5,fill:"#555"},g1);
+// labels
+T(iso(0.5,8,0.6)[0]-70,iso(0.5,8,0.6)[1]+22,"side bar (slats screw into these)",{fs:9.5,fill:"#555"},g1);
+T(iso(5,8,0.5)[0]-20,iso(5,8.2,0.5)[1]+30,"slats",{fs:9.5,fill:"#555"},g1);
+E("circle",{cx:60,cy:150,r:4,fill:"#b3261e"},g1);T(70,154,"= end screws (2 each side, both ends)",{fs:10},g1);
+
+/* ===== VIEW 2: ISO — THE JIG ALONE ===== */
+T(720,100,"THE JIG — SLAT-SPACING COMB",{fs:13,fw:"bold"});
+const g2=E("g",{}); const iso2=mkIso(800,300,26);
+// comb bar along X
+box(iso2,0,0,0, 9,1.0,0.8, PAL.comb,g2);
+// notches on front (+y) face
+for(let i=0;i<6;i++){const xx=1.0+i*1.3; notchFront(iso2,xx,0.55,1.0,0,0.45,g2);}
+// handles
+[1.6,6.8].forEach(hx=>{box(iso2,hx,0.3,0.8,0.5,0.5,0.9,PAL.grip,g2);box(iso2,hx-0.1,0.2,1.7,0.7,0.7,0.25,PAL.grip,g2);});
+T(iso2(9,0.5,0.8)[0]+12,iso2(9,0.5,0.8)[1],"notches @ slat pitch",{fs:9.5,fill:"#555"},g2);
+T(iso2(1.6,0.5,2.0)[0]-6,iso2(1.6,0.5,2.0)[1]-8,"handles",{fs:9.5,fill:"#555"},g2);
+
+/* ===== VIEW 3: TOP VIEW (ortho, dimensioned) ===== */
+T(40,560,"TOP VIEW — DIMENSIONED",{fs:13,fw:"bold"});
+const ox=90,oy=620, P=70, W=14, N=6, barT=24, span=420;
+// side bars (vertical rectangles)
+E("rect",{x:ox,y:oy,width:barT,height:N*P+30,fill:"#cdd5dd",stroke:"#111","stroke-width":1.2});
+E("rect",{x:ox+span,y:oy,width:barT,height:N*P+30,fill:"#cdd5dd",stroke:"#111","stroke-width":1.2});
+// slats (horizontal) between bars
+for(let i=0;i<N;i++){const y=oy+20+i*P;E("rect",{x:ox+barT,y,width:span-barT,height:W,fill:"#dfe5ec",stroke:"#111","stroke-width":1});
+  // end screws
+  [ox+barT+10,ox+span-10].forEach(sx=>{E("circle",{cx:sx,cy:y+W/2,r:2.4,fill:"#b3261e"});});}
+// comb (phantom, dashed) across middle
+E("rect",{x:ox+span/2-12,y:oy-8,width:24,height:N*P+46,fill:"none",stroke:"#c9791f","stroke-width":1.4,"stroke-dasharray":"7 4"});
+T(ox+span/2+18,oy-12,"comb (phantom)",{fs:9.5,fill:"#c9791f"});
+// DIMS: pitch
+L(ox-26,oy+20+W/2,ox-26,oy+20+P+W/2,{w:0.7,me:"url(#a)",ms:"url(#as)"});
+L(ox-34,oy+20+W/2,ox+barT,oy+20+W/2,{w:0.6}); L(ox-34,oy+20+P+W/2,ox+barT,oy+20+P+W/2,{w:0.6});
+T(ox-40,oy+20+P/2+W/2,"PITCH",{fs:10,ta:"end"});
+// slat width
+L(ox+span+40,oy+20,ox+span+40,oy+20+W,{w:0.7,me:"url(#a)",ms:"url(#as)"});
+T(ox+span+46,oy+20+W,"SLAT W",{fs:10});
+// overall length (between side bars inner)
+L(ox+barT,oy+N*P+50,ox+span,oy+N*P+50,{w:0.7,me:"url(#a)",ms:"url(#as)"});
+T((ox+barT+ox+span)/2,oy+N*P+46,"CLEAR SPAN (per size)",{fs:10,ta:"middle"});
+// width across
+L(ox,oy+N*P+74,ox+span+barT,oy+N*P+74,{w:0.7,me:"url(#a)",ms:"url(#as)"});
+T((ox+ox+span+barT)/2,oy+N*P+70,"OVERALL WIDTH",{fs:10,ta:"middle"});
+
+/* ===== VIEW 4: NOTCH DETAIL (2:1) ===== */
+T(720,560,"DETAIL  C — NOTCH (2:1)",{fs:13,fw:"bold"});
+const dx0=760,dy0=600;
+// comb section (hatched) with a U notch and slat seated
+E("path",{d:`M${dx0} ${dy0} h220 v90 h-90 v-46 h-40 v46 h-90 z`,fill:"url(#h)",stroke:"#111","stroke-width":1.4});
+// slat seated in notch
+E("rect",{x:dx0+92,y:dy0+44,width:36,height:70,fill:"#dfe5ec",stroke:"#111","stroke-width":1.3});
+T(dx0+110,dy0+128,"slat (held flush)",{fs:9.5,ta:"middle",fill:"#555"});
+// dims: notch width
+L(dx0+90,dy0+30,dx0+130,dy0+30,{w:0.7,me:"url(#a)",ms:"url(#as)"});
+T(dx0+110,dy0+24,"W + clearance",{fs:9.5,ta:"middle"});
+// notch depth
+L(dx0+250,dy0,dx0+250,dy0+44,{w:0.7,me:"url(#a)",ms:"url(#as)"});
+L(dx0+220,dy0,dx0+256,dy0,{w:0.6});L(dx0+130,dy0+44,dx0+256,dy0+44,{w:0.6});
+T(dx0+256,dy0+26,"depth ≥ slat ht",{fs:9.5});
+T(dx0,dy0+150,"Notch width = slat width + ~0.5 mm so slats drop in but can't shift; one notch per slat at exact pitch.",{fs:10,fill:"#333"});
+
+/* ===== NOTES / USE ===== */
+T(720,720,"HOW IT'S USED",{fs:12,fw:"bold"});
+["1.  Lay both side bars + all slats in the work area (or in a base fixture).",
+ "2.  Drop the comb across the slats — every slat falls into its notch at correct pitch, held flush.",
+ "3.  Drive the end screws (both ends, both sides) — no holding or measuring each slat.",
+ "4.  Lift the comb off. Re-usable; one comb per trellis size (or adjustable)."].forEach((s,i)=>T(720,742+i*17,s,{fs:10.5}));
+
+/* ===== BOM / TITLE BLOCK ===== */
+const bx=720,by=836;
+E("rect",{x:bx,y:by,width:572,height:118,fill:"none",stroke:"#111","stroke-width":1.2});
+L(bx,by+24,bx+572,by+24,{w:0.8});L(bx,by+86,bx+572,by+86,{w:0.8});
+T(bx+8,by+17,"SLAT-SPACING COMB",{fs:12,fw:"bold"});T(bx+300,by+17,"TRELLIS / SEAT SUPPORT — SOLA",{fs:10});
+T(bx+8,by+40,"MATL: flat bar, HDPE, or aluminum  ·  notches laser/CNC at slat pitch  ·  add handles",{fs:10});
+T(bx+8,by+58,"TYPE: reusable assembly jig (tooling) — NOT a product part. No change to the sofa.",{fs:10});
+T(bx+8,by+76,"FITS: all 3 Sola configs (one comb per size, or a slotted/adjustable comb).",{fs:10});
+T(bx+8,by+104,"DRAWN: Process Eng.    SCALE: NTS    REV: A — concept    DWG: JIG-TRELLIS-COMB",{fs:9.5,fill:"#333"});
+
+/* ===== IMPACT ===== */
+E("rect",{x:40,y:904,width:650,height:50,fill:"#eef8f1",stroke:"#1c7c3c","stroke-width":1});
+T(52,924,"WHY IT SAVES TIME",{fs:11,fw:"bold",fill:"#1c7c3c"});
+T(52,942,"Most of the 32:30 is positioning/holding each slat. The comb locates them all at once → drive only.",{fs:10.5});
+T(52,956,"",{fs:1});
+</script>
+</body>
+</html>
