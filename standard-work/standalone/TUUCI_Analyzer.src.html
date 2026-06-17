@@ -6,14 +6,17 @@
 <title>TUUCI · Standard Work Analyzer</title>
 <style>
   :root{
-    --navy:#00263a; --navy-700:#013a57; --navy-900:#001824;
-    --aqua:#0aa6b8; --aqua-dark:#078492;
-    --bronze:#b8893f; --ink:#10212b; --muted:#5d7280;
-    --line:#e3eaed; --bg:#eef2f4; --card:#ffffff;
-    --good:#1f9d6b; --warn:#c9772a;
-    --shadow:0 1px 2px rgba(0,38,58,.06), 0 6px 24px rgba(0,38,58,.06);
-    --radius:14px;
+    /* TUUCI identity — monochrome luxury (black wordmark + canopy arc) with
+       a single antique-gold accent and a warm rust for the bottleneck/alert */
+    --navy:#15171a; --navy-700:#26292e; --navy-900:#0c0d0f;   /* charcoal/black */
+    --aqua:#a8854c; --aqua-dark:#8a6b39;                       /* antique gold accent */
+    --bronze:#b1542f; --ink:#16181b; --muted:#6b7178;         /* rust = alert */
+    --line:#e6e4df; --bg:#f1efe9; --card:#ffffff;             /* warm paper neutrals */
+    --good:#4f7a5b; --warn:#b1542f;
+    --shadow:0 1px 2px rgba(20,20,20,.06), 0 6px 24px rgba(20,20,20,.07);
+    --radius:13px;
     --font:"Inter","Segoe UI",-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;
+    --serif:"Times New Roman",Times,Georgia,"Hoefler Text",serif;
   }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0}
@@ -21,13 +24,15 @@
   button,input,select{font-family:inherit}
   a{color:var(--aqua-dark)}
 
-  header.app{background:linear-gradient(180deg,var(--navy) 0%,var(--navy-900) 100%);color:#fff;padding:16px 28px;display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid var(--aqua)}
-  .brand{display:flex;align-items:center;gap:18px}
-  .wordmark{font-weight:800;font-size:24px;letter-spacing:.42em;padding-left:.42em}
-  .brand .rule{width:1px;height:30px;background:rgba(255,255,255,.25)}
-  .brand .sub{display:flex;flex-direction:column;line-height:1.25}
-  .brand .sub .t1{font-size:13px;font-weight:600;letter-spacing:.04em}
-  .brand .sub .t2{font-size:10px;letter-spacing:.34em;text-transform:uppercase;color:var(--aqua);opacity:.95}
+  header.app{background:#fff;color:var(--ink);padding:18px 28px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:20px}
+  .logo{display:flex;flex-direction:column;align-items:center;gap:1px}
+  .logo .wordmark{font-family:var(--serif);font-weight:500;font-size:27px;letter-spacing:.34em;padding-left:.34em;color:#111;line-height:1}
+  .logo .arc{width:150px;height:18px;margin-top:1px;color:#111}
+  .brand .rule{width:1px;height:34px;background:var(--line)}
+  .brand .sub{display:flex;flex-direction:column;line-height:1.3}
+  .brand .sub .t1{font-size:13px;font-weight:600;letter-spacing:.04em;color:var(--ink)}
+  .brand .sub .t2{font-size:10px;letter-spacing:.34em;text-transform:uppercase;color:var(--aqua-dark)}
 
   /* tabs */
   nav.tabs{background:var(--navy-900);display:flex;gap:2px;padding:0 22px}
@@ -170,7 +175,12 @@
 
 <header class="app">
   <div class="brand">
-    <div class="wordmark">TUUCI</div>
+    <div class="logo">
+      <div class="wordmark">TUUCI</div>
+      <svg class="arc" viewBox="0 0 160 20" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+        <path d="M5 5 C 45 22, 115 22, 155 5 C 116 15, 44 15, 5 5 Z" fill="currentColor"/>
+      </svg>
+    </div>
     <div class="rule"></div>
     <div class="sub"><span class="t1">Standard Work Analyzer</span><span class="t2">The Art of Shade</span></div>
   </div>
@@ -394,13 +404,13 @@ function paretoSVG(steps, bnIdx){
   for(var g=0;g<=4;g++){ var yy=padT+plotH*(1-g/4); svg+='<line x1="'+padL+'" y1="'+yy+'" x2="'+(W-padR)+'" y2="'+yy+'" stroke="#eef3f4"/><text x="'+(padL-6)+'" y="'+(yy+3)+'" text-anchor="end" font-size="9" fill="#8aa0a9">'+fmt(maxT*g/4,0)+'</text>'; }
   var cum=0,pts=[];
   for(var i=0;i<n;i++){ var d=data[i],x=padL+i*bw,bx=x+gap/2,bwid=bw-gap,bh=(d.time/maxT)*plotH,by=padT+plotH-bh,isBn=(d.i===bnIdx);
-    svg+='<rect x="'+bx.toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+bwid.toFixed(1)+'" height="'+bh.toFixed(1)+'" rx="2" fill="'+(isBn?'#b8893f':'#00263a')+'"><title>'+esc(d.name)+' — '+fmtMin(d.time)+' min</title></rect>';
+    svg+='<rect x="'+bx.toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+bwid.toFixed(1)+'" height="'+bh.toFixed(1)+'" rx="2" fill="'+(isBn?'#b1542f':'#15171a')+'"><title>'+esc(d.name)+' — '+fmtMin(d.time)+' min</title></rect>';
     cum+=d.time; pts.push([x+bw/2, padT+plotH*(1-cum/total)]);
-    if(i<14) svg+='<text x="'+(x+bw/2).toFixed(1)+'" y="'+(H-padB+14)+'" text-anchor="end" font-size="8.5" fill="#7c929b" transform="rotate(-40 '+(x+bw/2).toFixed(1)+' '+(H-padB+14)+')">'+esc(clampStr(d.name,16))+'</text>';
+    if(i<14) svg+='<text x="'+(x+bw/2).toFixed(1)+'" y="'+(H-padB+14)+'" text-anchor="end" font-size="8.5" fill="#8a8377" transform="rotate(-40 '+(x+bw/2).toFixed(1)+' '+(H-padB+14)+')">'+esc(clampStr(d.name,16))+'</text>';
   }
-  var y80=padT+plotH*(1-0.8); svg+='<line x1="'+padL+'" y1="'+y80+'" x2="'+(W-padR)+'" y2="'+y80+'" stroke="#cdb38a" stroke-dasharray="4 4"/><text x="'+(W-padR+3)+'" y="'+(y80+3)+'" font-size="8.5" fill="#b8893f">80%</text>';
-  svg+='<path d="'+pts.map(function(p,i){return (i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1);}).join(' ')+'" fill="none" stroke="#0aa6b8" stroke-width="2"/>';
-  pts.forEach(function(p){ svg+='<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="2.6" fill="#0aa6b8"/>'; });
+  var y80=padT+plotH*(1-0.8); svg+='<line x1="'+padL+'" y1="'+y80+'" x2="'+(W-padR)+'" y2="'+y80+'" stroke="#d8c39a" stroke-dasharray="4 4"/><text x="'+(W-padR+3)+'" y="'+(y80+3)+'" font-size="8.5" fill="#a8854c">80%</text>';
+  svg+='<path d="'+pts.map(function(p,i){return (i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1);}).join(' ')+'" fill="none" stroke="#a8854c" stroke-width="2"/>';
+  pts.forEach(function(p){ svg+='<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="2.6" fill="#a8854c"/>'; });
   for(var g2=0;g2<=4;g2++){ var yy2=padT+plotH*(1-g2/4); svg+='<text x="'+(W-padR+6)+'" y="'+(yy2+3)+'" font-size="9" fill="#8aa0a9">'+(g2*25)+'%</text>'; }
   return svg+'</svg>';
 }
@@ -412,8 +422,8 @@ function stepBarSVG(steps, bnIdx){
   for(var i=0;i<n;i++){ var s=steps[i],y=padT+i*rowH,cy=y+rowH/2,isBn=(i===bnIdx),rt=stepBest(s);
     var wCur=(s.time/maxT)*plotW, wOpt=(rt/maxT)*plotW;
     svg+='<text x="0" y="'+(cy+3.5)+'" font-size="10.5" fill="#3a5160">'+esc(clampStr((i+1)+'. '+s.name,24))+'</text>';
-    svg+='<rect x="'+labW+'" y="'+(cy-7)+'" width="'+wCur.toFixed(1)+'" height="14" rx="3" fill="#cfdde2"><title>'+esc(s.name)+' — '+fmtMin(s.time)+' min</title></rect>';
-    svg+='<rect x="'+labW+'" y="'+(cy-7)+'" width="'+wOpt.toFixed(1)+'" height="14" rx="3" fill="'+(isBn?'#b8893f':'#0aa6b8')+'"><title>after help '+fmtMin(rt)+' min</title></rect>';
+    svg+='<rect x="'+labW+'" y="'+(cy-7)+'" width="'+wCur.toFixed(1)+'" height="14" rx="3" fill="#ddd9d0"><title>'+esc(s.name)+' — '+fmtMin(s.time)+' min</title></rect>';
+    svg+='<rect x="'+labW+'" y="'+(cy-7)+'" width="'+wOpt.toFixed(1)+'" height="14" rx="3" fill="'+(isBn?'#b1542f':'#a8854c')+'"><title>after help '+fmtMin(rt)+' min</title></rect>';
     var lbl=(rt<s.time-0.01)?fmtMin(rt)+' / '+fmtMin(s.time):fmtMin(s.time);
     svg+='<text x="'+(labW+Math.max(wCur,wOpt)+6)+'" y="'+(cy+3.5)+'" font-size="10" fill="#5d7280" font-weight="600">'+lbl+'</text>';
   }
@@ -580,7 +590,7 @@ function renderAnalysis(){
   cg.appendChild(chartCard('Pareto — where the time concentrates','sorted longest → shortest', paretoSVG(sku.steps,m.bnIdx),
     '<span><i style="background:var(--navy)"></i>Step time</span><span><i style="background:var(--bronze)"></i>Bottleneck</span><span><i style="background:var(--aqua)"></i>Cumulative %</span>'));
   cg.appendChild(chartCard('Per-step time — current vs. with help','in build order', stepBarSVG(sku.steps,m.bnIdx),
-    '<span><i style="background:#cfdde2"></i>Current</span><span><i style="background:var(--aqua)"></i>With help</span><span><i style="background:var(--bronze)"></i>Bottleneck</span>'));
+    '<span><i style="background:#ddd9d0"></i>Current</span><span><i style="background:var(--aqua)"></i>With help</span><span><i style="background:var(--bronze)"></i>Bottleneck</span>'));
   host.appendChild(cg);
 }
 function emptyEl(big,sub){ var e=el('div',{class:'empty'}); e.innerHTML='<div class="big">'+esc(big)+'</div><div>'+esc(sub)+'</div>'; return e; }
