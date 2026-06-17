@@ -6,19 +6,11 @@
 <title>TUUCI · Standard Work Analyzer</title>
 <style>
   :root{
-    /* TUUCI nautical-luxury palette */
-    --navy:#00263a;        /* deep marine navy  */
-    --navy-700:#013a57;
-    --navy-900:#001824;
-    --aqua:#0aa6b8;        /* signature marine teal */
-    --aqua-dark:#078492;
-    --bronze:#b8893f;      /* warm luxury accent (bottleneck) */
-    --ink:#10212b;
-    --muted:#5d7280;
-    --line:#e3eaed;
-    --bg:#eef2f4;
-    --card:#ffffff;
-    --good:#1f9d6b;
+    --navy:#00263a; --navy-700:#013a57; --navy-900:#001824;
+    --aqua:#0aa6b8; --aqua-dark:#078492;
+    --bronze:#b8893f; --ink:#10212b; --muted:#5d7280;
+    --line:#e3eaed; --bg:#eef2f4; --card:#ffffff;
+    --good:#1f9d6b; --warn:#c9772a;
     --shadow:0 1px 2px rgba(0,38,58,.06), 0 6px 24px rgba(0,38,58,.06);
     --radius:14px;
     --font:"Inter","Segoe UI",-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;
@@ -26,126 +18,151 @@
   *{box-sizing:border-box}
   html,body{margin:0;padding:0}
   body{font-family:var(--font);color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased;line-height:1.45}
-  button{font-family:inherit}
+  button,input,select{font-family:inherit}
   a{color:var(--aqua-dark)}
 
-  /* ---------- Header ---------- */
-  header.app{
-    background:linear-gradient(180deg,var(--navy) 0%,var(--navy-900) 100%);
-    color:#fff;padding:16px 28px;display:flex;align-items:center;justify-content:space-between;
-    border-bottom:3px solid var(--aqua);
-  }
+  header.app{background:linear-gradient(180deg,var(--navy) 0%,var(--navy-900) 100%);color:#fff;padding:16px 28px;display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid var(--aqua)}
   .brand{display:flex;align-items:center;gap:18px}
   .wordmark{font-weight:800;font-size:24px;letter-spacing:.42em;padding-left:.42em}
   .brand .rule{width:1px;height:30px;background:rgba(255,255,255,.25)}
   .brand .sub{display:flex;flex-direction:column;line-height:1.25}
   .brand .sub .t1{font-size:13px;font-weight:600;letter-spacing:.04em}
   .brand .sub .t2{font-size:10px;letter-spacing:.34em;text-transform:uppercase;color:var(--aqua);opacity:.95}
-  .hdr-actions{display:flex;gap:10px;align-items:center}
-  .hdr-file{font-size:12px;color:rgba(255,255,255,.7);letter-spacing:.02em;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-  /* ---------- Buttons ---------- */
-  .btn{border:0;border-radius:9px;padding:11px 20px;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.01em;transition:.15s}
+  /* tabs */
+  nav.tabs{background:var(--navy-900);display:flex;gap:2px;padding:0 22px}
+  nav.tabs button{background:transparent;border:0;color:rgba(255,255,255,.6);font-size:13.5px;font-weight:600;letter-spacing:.03em;padding:14px 20px;cursor:pointer;border-bottom:3px solid transparent;transition:.15s}
+  nav.tabs button:hover{color:#fff}
+  nav.tabs button.active{color:#fff;border-bottom-color:var(--aqua)}
+
+  main{max-width:1200px;margin:0 auto;padding:30px 28px 90px}
+
+  .btn{border:0;border-radius:9px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.01em;transition:.15s}
   .btn-primary{background:var(--aqua);color:#fff}
   .btn-primary:hover{background:var(--aqua-dark)}
-  .btn-ghost{background:rgba(255,255,255,.10);color:#fff;border:1px solid rgba(255,255,255,.25)}
-  .btn-ghost:hover{background:rgba(255,255,255,.18)}
   .btn-light{background:#fff;color:var(--navy);border:1px solid var(--line)}
   .btn-light:hover{border-color:var(--aqua);color:var(--aqua-dark)}
+  .btn-danger{background:#fff;color:#b3392c;border:1px solid #f0cfca}
+  .btn-danger:hover{background:#fdf2f1}
+  .btn-sm{padding:6px 12px;font-size:13px}
   .btn[disabled]{opacity:.45;cursor:not-allowed}
 
-  main{max-width:1180px;margin:0 auto;padding:34px 28px 80px}
-
-  /* ---------- Upload ---------- */
-  .upload-wrap{max-width:720px;margin:48px auto;text-align:center}
-  .upload-wrap h1{font-size:30px;font-weight:800;letter-spacing:-.01em;margin:0 0 10px;color:var(--navy)}
-  .upload-wrap p.lead{font-size:16px;color:var(--muted);margin:0 auto 34px;max-width:560px}
-  .dropzone{
-    background:var(--card);border:2px dashed #c3d2d8;border-radius:18px;padding:56px 32px;cursor:pointer;
-    transition:.18s;box-shadow:var(--shadow)
-  }
-  .dropzone:hover,.dropzone.drag{border-color:var(--aqua);background:#fafdfe}
-  .dropzone .ic{width:58px;height:58px;margin:0 auto 18px;color:var(--aqua)}
-  .dropzone .dz-t{font-size:18px;font-weight:700;color:var(--navy)}
-  .dropzone .dz-s{font-size:13px;color:var(--muted);margin-top:6px}
-  .steps-explain{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:40px;text-align:left}
-  .se{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 18px}
-  .se .n{width:26px;height:26px;border-radius:50%;background:var(--navy);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
-  .se .h{font-weight:700;font-size:14px;color:var(--navy);margin-bottom:3px}
-  .se .d{font-size:12.5px;color:var(--muted)}
-
-  /* ---------- Section card ---------- */
   .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
-  .card .ch{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
-  .card .ch h2{margin:0;font-size:16px;font-weight:700;color:var(--navy);letter-spacing:.01em}
+  .card .ch{padding:16px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .card .ch h2{margin:0;font-size:16px;font-weight:700;color:var(--navy)}
   .card .ch .hint{font-size:12px;color:var(--muted)}
   .card .cb{padding:22px}
-  .section-eyebrow{font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--aqua-dark);margin:0 0 14px}
+  .eyebrow{font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--aqua-dark);margin:0 0 14px}
+  .page-h{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:20px;flex-wrap:wrap;gap:14px}
+  .page-h h1{font-size:23px;font-weight:800;color:var(--navy);margin:0;letter-spacing:-.01em}
+  .page-h .sub{font-size:13px;color:var(--muted);margin-top:3px}
 
-  /* ---------- Mapping ---------- */
-  .map-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
+  .hide{display:none!important}
+  .empty{text-align:center;padding:60px 20px;color:var(--muted)}
+  .empty .big{font-size:18px;font-weight:700;color:var(--navy);margin-bottom:8px}
+
+  /* sku cards */
+  .sku-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+  .sku-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px 20px;display:flex;flex-direction:column;gap:10px;transition:.15s;border-top:3px solid var(--aqua)}
+  .sku-card:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(0,38,58,.12)}
+  .sku-card .nm{font-size:16px;font-weight:700;color:var(--navy)}
+  .sku-card .meta{font-size:12.5px;color:var(--muted)}
+  .sku-card .stat{display:flex;gap:18px;margin-top:4px}
+  .sku-card .stat .v{font-size:20px;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums}
+  .sku-card .stat .l{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+  .sku-card .row{display:flex;gap:8px;margin-top:6px}
+  .add-card{display:flex;align-items:center;justify-content:center;border:2px dashed #c3d2d8;border-radius:var(--radius);background:#fafdfe;cursor:pointer;min-height:150px;color:var(--aqua-dark);font-weight:700;font-size:15px;transition:.15s}
+  .add-card:hover{border-color:var(--aqua);background:#f3fbfc}
+  .add-card .plus{font-size:30px;display:block;margin-bottom:4px;font-weight:400}
+
+  /* dropzone */
+  .dropzone{background:var(--card);border:2px dashed #c3d2d8;border-radius:18px;padding:46px 32px;cursor:pointer;transition:.18s;box-shadow:var(--shadow);text-align:center}
+  .dropzone:hover,.dropzone.drag{border-color:var(--aqua);background:#fafdfe}
+  .dropzone .ic{width:50px;height:50px;margin:0 auto 16px;color:var(--aqua)}
+  .dropzone .dz-t{font-size:17px;font-weight:700;color:var(--navy)}
+  .dropzone .dz-s{font-size:13px;color:var(--muted);margin-top:6px}
+
+  /* selects / fields */
   .fld label{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
   .fld select,.fld input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:14px;background:#fff;color:var(--ink)}
   .fld select:focus,.fld input:focus{outline:0;border-color:var(--aqua);box-shadow:0 0 0 3px rgba(10,166,184,.15)}
-  .preview-table{width:100%;border-collapse:collapse;font-size:13px}
-  .preview-table th{text-align:left;padding:8px 10px;background:#f6f9fa;color:var(--muted);font-weight:700;font-size:11px;letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid var(--line)}
-  .preview-table td{padding:8px 10px;border-bottom:1px solid #f0f4f5}
-  .preview-table td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+  .map-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:18px}
+  .selrow{display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;margin-bottom:20px}
+  .selrow .fld{min-width:220px}
+
+  table.t{width:100%;border-collapse:collapse;font-size:13.5px}
+  table.t th{text-align:left;padding:10px 12px;background:#f6f9fa;color:var(--muted);font-weight:700;font-size:11px;letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid var(--line)}
+  table.t td{padding:9px 12px;border-bottom:1px solid #f0f4f5;vertical-align:middle}
+  table.t tr:hover td{background:#fafdfe}
+  table.t td.num,table.t th.num{text-align:right;font-variant-numeric:tabular-nums}
+  .stepname{font-weight:600;color:var(--ink);max-width:360px}
+  .preview-wrap{overflow:auto;max-height:320px;border:1px solid var(--line);border-radius:10px}
   .pv-note{font-size:12.5px;color:var(--muted);margin-top:12px}
 
-  /* ---------- KPIs ---------- */
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
-  .kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  /* KPIs */
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow)}
   .kpi .lab{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
-  .kpi .val{font-size:28px;font-weight:800;color:var(--navy);margin-top:6px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
-  .kpi .val .u{font-size:14px;font-weight:600;color:var(--muted);margin-left:4px}
+  .kpi .val{font-size:27px;font-weight:800;color:var(--navy);margin-top:6px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .kpi .val .u{font-size:13px;font-weight:600;color:var(--muted);margin-left:4px}
   .kpi .sub2{font-size:12px;color:var(--muted);margin-top:4px}
   .kpi.accent{border-top:3px solid var(--aqua)}
   .kpi.bottleneck{border-top:3px solid var(--bronze)}
   .kpi.saved{border-top:3px solid var(--good)}
   .kpi .delta{font-size:12.5px;font-weight:700;color:var(--good);margin-top:4px}
 
-  /* ---------- bottleneck banner ---------- */
-  .bn-banner{display:flex;align-items:center;gap:16px;background:linear-gradient(90deg,#fff7ec,#fffdf9);border:1px solid #f0dcbd;border-left:4px solid var(--bronze);border-radius:12px;padding:16px 20px;margin-bottom:24px}
+  .bn-banner{display:flex;align-items:center;gap:16px;background:linear-gradient(90deg,#fff7ec,#fffdf9);border:1px solid #f0dcbd;border-left:4px solid var(--bronze);border-radius:12px;padding:16px 20px;margin-bottom:22px}
   .bn-banner .bdot{width:42px;height:42px;border-radius:10px;background:var(--bronze);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0}
   .bn-banner .bt{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--bronze)}
   .bn-banner .bd{font-size:15px;color:var(--ink);margin-top:2px}
   .bn-banner .bd strong{color:var(--navy)}
 
-  /* ---------- charts ---------- */
-  .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px}
-  @media(max-width:980px){.chart-grid{grid-template-columns:1fr}}
-  .chart-host{width:100%}
+  .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:22px}
+  @media(max-width:980px){.chart-grid{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}.map-grid{grid-template-columns:repeat(2,1fr)}}
   .chart-host svg{width:100%;height:auto;display:block}
-  .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:6px}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
   .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
 
-  /* ---------- split table ---------- */
-  .split-table{width:100%;border-collapse:collapse;font-size:13.5px}
-  .split-table th{text-align:left;padding:11px 12px;background:#f6f9fa;color:var(--muted);font-weight:700;font-size:11px;letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid var(--line);position:sticky;top:0}
-  .split-table td{padding:9px 12px;border-bottom:1px solid #f0f4f5;vertical-align:middle}
-  .split-table tr:hover td{background:#fafdfe}
-  .split-table td.num{text-align:right;font-variant-numeric:tabular-nums}
-  .split-table .stepname{font-weight:600;color:var(--ink);max-width:340px}
-  .split-table tr.is-bn td.stepname{color:var(--bronze)}
+  /* toggles */
+  .chk{display:inline-flex;align-items:center;cursor:pointer}
+  .chk input{position:absolute;opacity:0}
+  .chk .sw{width:38px;height:22px;border-radius:12px;background:#cdd9de;position:relative;transition:.18s}
+  .chk .sw::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.18s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+  .chk input:checked + .sw{background:var(--aqua)}
+  .chk input:checked + .sw::after{transform:translateX(16px)}
+  .num-in{width:64px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;text-align:center}
+  .num-in:focus{outline:0;border-color:var(--aqua)}
   .badge-bn{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:var(--bronze);border-radius:5px;padding:2px 7px;margin-left:8px}
-  .mini-bar{height:8px;border-radius:4px;background:#eef3f4;position:relative;min-width:60px;overflow:hidden}
-  .mini-bar > i{position:absolute;left:0;top:0;bottom:0;border-radius:4px;background:var(--navy)}
-  .mini-bar.bn > i{background:var(--bronze)}
-  .split-table select{padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-size:13px;background:#fff}
-  .split-table select:focus{outline:0;border-color:var(--aqua)}
-  .split-table input.pct{width:62px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-size:13px;margin-left:6px}
-  .res-saved{color:var(--good);font-weight:700}
-  .res-zero{color:var(--muted)}
+  .badge-help{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.04em;color:var(--aqua-dark);background:#e2f6f8;border-radius:5px;padding:2px 7px;margin-left:8px}
 
-  .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:12px}
-  .toolbar h1{font-size:22px;font-weight:800;color:var(--navy);margin:0;letter-spacing:-.01em}
-  .toolbar .sub{font-size:13px;color:var(--muted);margin-top:2px}
-  .toolbar-actions{display:flex;gap:10px}
+  /* compare */
+  .cmp-grid{display:grid;grid-template-columns:1fr 70px 1fr;gap:0;align-items:stretch}
+  .cmp-col h3{font-size:14px;font-weight:700;color:var(--navy);margin:0 0 10px;text-align:center}
+  .cmp-list{display:flex;flex-direction:column;gap:6px;min-height:40px}
+  .cmp-item{background:#fff;border:1px solid var(--line);border-left:3px solid var(--aqua);border-radius:8px;padding:9px 12px;cursor:grab;font-size:13px;display:flex;justify-content:space-between;gap:10px;align-items:center;transition:.1s}
+  .cmp-item:hover{border-color:var(--aqua);box-shadow:var(--shadow)}
+  .cmp-item.dragging{opacity:.4}
+  .cmp-item.over{border-top:2px solid var(--aqua)}
+  .cmp-item .nm{font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cmp-item .tm{font-variant-numeric:tabular-nums;font-weight:700;color:var(--navy);flex-shrink:0}
+  .cmp-mid{display:flex;flex-direction:column;gap:6px;align-items:center}
+  .cmp-delta{height:39px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;border-radius:6px;width:100%}
+  .cmp-delta.up{color:#b3392c;background:#fdeceb}
+  .cmp-delta.down{color:var(--good);background:#eaf7f1}
+  .cmp-delta.zero{color:var(--muted)}
 
-  .hide{display:none!important}
+  /* operator bars */
+  .opbar-row{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+  .opbar-row .lab{width:96px;font-size:12.5px;font-weight:600;color:var(--ink);flex-shrink:0}
+  .opbar{flex:1;height:24px;border-radius:6px;background:#f0f4f5;display:flex;overflow:hidden;border:1px solid #e7eef0}
+  .opbar .seg{height:100%}
+  .opbar .seg.work{background:var(--aqua)}
+  .opbar .seg.move{background:var(--bronze)}
+  .opbar-row .pct{width:96px;font-size:11.5px;color:var(--muted);text-align:right;flex-shrink:0;font-variant-numeric:tabular-nums}
+
   .footer{text-align:center;font-size:11px;color:#94a8b1;letter-spacing:.04em;margin-top:40px}
-  .err{background:#fdeceb;border:1px solid #f5c6c2;color:#a3271d;border-radius:10px;padding:12px 16px;font-size:13.5px;margin-top:16px}
+  .err{background:#fdeceb;border:1px solid #f5c6c2;color:#a3271d;border-radius:10px;padding:12px 16px;font-size:13.5px;margin:14px 0}
+  .info{background:#eef7f9;border:1px solid #bfe3e8;color:#0a6470;border-radius:10px;padding:11px 15px;font-size:13px;margin:0 0 16px}
 </style>
 <script>/*! ExcelJS 19-10-2023 */
 
@@ -199,490 +216,542 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   <div class="brand">
     <div class="wordmark">TUUCI</div>
     <div class="rule"></div>
-    <div class="sub">
-      <span class="t1">Standard Work Analyzer</span>
-      <span class="t2">The Art of Shade</span>
-    </div>
-  </div>
-  <div class="hdr-actions">
-    <span id="hdrFile" class="hdr-file"></span>
-    <button id="btnNew" class="btn btn-ghost hide">New file</button>
+    <div class="sub"><span class="t1">Standard Work Analyzer</span><span class="t2">The Art of Shade</span></div>
   </div>
 </header>
+<nav class="tabs" id="tabs">
+  <button data-tab="skus" class="active">Products</button>
+  <button data-tab="analysis">Analysis</button>
+  <button data-tab="compare">Compare</button>
+  <button data-tab="sim">Line Simulation</button>
+</nav>
 
 <main>
-  <!-- ===== UPLOAD ===== -->
-  <section id="viewUpload">
-    <div class="upload-wrap">
-      <h1>See where the time really goes.</h1>
-      <p class="lead">Upload a Standard Work template, choose which steps can be split across operators, and find the bottleneck in seconds — no spreadsheets, just the chart that matters.</p>
-      <div id="dropzone" class="dropzone">
-        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
-        <div class="dz-t">Drop your Standard Work file here</div>
-        <div class="dz-s">or click to browse · Excel .xlsx / .xlsm</div>
-      </div>
-      <input type="file" id="fileInput" accept=".xlsx,.xlsm" class="hide" />
-      <div id="uploadErr"></div>
-      <div class="steps-explain">
-        <div class="se"><div class="n">1</div><div class="h">Upload</div><div class="d">Drop in your SWI workbook. We auto-detect your step and time columns.</div></div>
-        <div class="se"><div class="n">2</div><div class="h">Split</div><div class="d">Flag the steps that can run in parallel and how many operators share them.</div></div>
-        <div class="se"><div class="n">3</div><div class="h">See the bottleneck</div><div class="d">Pareto and per-step charts pinpoint the constraint and the impact of splitting it.</div></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===== MAPPING ===== -->
-  <section id="viewMap" class="hide">
-    <p class="section-eyebrow">Step 1 · Confirm your data</p>
-    <div class="card">
-      <div class="ch"><h2>Map your template</h2><span class="hint">We guessed these — adjust if needed</span></div>
-      <div class="cb">
-        <div class="map-grid">
-          <div class="fld"><label>Worksheet</label><select id="mSheet"></select></div>
-          <div class="fld"><label>Header row</label><input type="number" id="mHeader" min="1" /></div>
-          <div class="fld"><label>Step / task column</label><select id="mName"></select></div>
-          <div class="fld"><label>Time column</label><select id="mTime"></select></div>
-          <div class="fld"><label>Time unit</label><select id="mUnit"><option value="min">Minutes</option><option value="sec">Seconds</option></select></div>
-        </div>
-        <div id="mapErr"></div>
-        <div style="overflow:auto;max-height:340px;border:1px solid var(--line);border-radius:10px">
-          <table class="preview-table" id="previewTable"></table>
-        </div>
-        <p class="pv-note" id="pvNote"></p>
-        <div style="margin-top:18px;display:flex;gap:10px;justify-content:flex-end">
-          <button class="btn btn-light" id="btnBackUpload">Back</button>
-          <button class="btn btn-primary" id="btnAnalyze">Analyze →</button>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===== DASHBOARD ===== -->
-  <section id="viewDash" class="hide">
-    <div class="toolbar">
-      <div>
-        <h1 id="dashTitle">Bottleneck Analysis</h1>
-        <div class="sub" id="dashSub"></div>
-      </div>
-      <div class="toolbar-actions">
-        <button class="btn btn-light" id="btnRemap">Adjust mapping</button>
-        <button class="btn btn-light" id="btnReset">Reset splits</button>
-      </div>
-    </div>
-
-    <div class="kpis" id="kpis"></div>
-    <div id="bnBanner"></div>
-
-    <div class="chart-grid">
-      <div class="card">
-        <div class="ch"><h2>Pareto — where the time concentrates</h2><span class="hint">sorted longest → shortest</span></div>
-        <div class="cb"><div class="chart-host" id="paretoChart"></div>
-          <div class="legend"><span><i style="background:var(--navy)"></i>Step time</span><span><i style="background:var(--bronze)"></i>Bottleneck</span><span><i style="background:var(--aqua)"></i>Cumulative %</span></div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="ch"><h2>Per-step time — current vs. split</h2><span class="hint">in build order</span></div>
-        <div class="cb"><div class="chart-host" id="barChart"></div>
-          <div class="legend"><span><i style="background:#cfdde2"></i>Current</span><span><i style="background:var(--aqua)"></i>After split</span><span><i style="background:var(--bronze)"></i>Bottleneck</span></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="ch"><h2>Steps &amp; splitting</h2><span class="hint">flag steps that can run in parallel</span></div>
-      <div class="cb" style="padding:0">
-        <div style="overflow:auto">
-          <table class="split-table" id="splitTable"></table>
-        </div>
-      </div>
-    </div>
-
-    <div class="footer">TUUCI · Standard Work Analyzer — runs entirely in your browser. Nothing is uploaded.</div>
-  </section>
+  <section id="tab-skus"></section>
+  <section id="tab-analysis" class="hide"></section>
+  <section id="tab-compare" class="hide"></section>
+  <section id="tab-sim" class="hide"></section>
 </main>
+
+<input type="file" id="fileInput" accept=".xlsx,.xlsm" class="hide" />
 
 <script>
 "use strict";
 /* ============================================================
-   TUUCI Standard Work Analyzer  —  vanilla JS, exceljs for parse
+   TUUCI Standard Work Analyzer — 4-tab build (vanilla JS)
+   Products · Analysis · Compare · Line Simulation
    ============================================================ */
 
+/* ---------- persistence ---------- */
+var LS_KEY='tuuci_skus_v2';
+function loadSkus(){ try{ return JSON.parse(localStorage.getItem(LS_KEY))||[]; }catch(e){ return []; } }
+function saveSkus(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(S.skus)); }catch(e){} }
+
 var S = {
-  fileName: null,
-  sheets: [],        // [{name, grid}]   grid = 2D array of normalized cell values
-  map: { sheet:0, headerRow:1, nameCol:0, timeCol:1, unit:'min' },
-  steps: []          // [{name, time(min), split:{mode:'off'|'2'|'3'|'4'|'pct', pct:Number}}]
+  skus: loadSkus(),
+  tab: 'skus',
+  add: null,                 // {sheets, map, fileName} during import
+  edit: null,                // sku id being edited
+  anaId: null,
+  cmpA: null, cmpB: null, cmpOrderA: null, cmpOrderB: null,
+  simId: null,
+  sim: { units:3, ops:3, mode:'help', buffer:0.5 }
 };
 
 /* ---------- helpers ---------- */
 function $(id){ return document.getElementById(id); }
-function el(tag, attrs, html){ var e=document.createElement(tag); if(attrs) for(var k in attrs) e.setAttribute(k,attrs[k]); if(html!=null) e.innerHTML=html; return e; }
-function colLetter(n){ var s=''; n++; while(n>0){ var m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26);} return s; }
-function fmt(n, d){ d=(d==null?1:d); if(n==null||isNaN(n)) return '–'; var v=Number(n); var r=v.toFixed(d); return r.replace(/\.0+$/,'').replace(/(\.\d*?)0+$/,'$1'); }
+function el(tag,attrs,html){ var e=document.createElement(tag); if(attrs) for(var k in attrs){ if(k==='class')e.className=attrs[k]; else e.setAttribute(k,attrs[k]); } if(html!=null)e.innerHTML=html; return e; }
+function uid(){ return 's'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function colLetter(n){ var s='';n++; while(n>0){var m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=Math.floor((n-1)/26);} return s; }
+function fmt(n,d){ d=(d==null?1:d); if(n==null||isNaN(n))return '–'; var r=Number(n).toFixed(d); return r.replace(/\.0+$/,'').replace(/(\.\d*?)0+$/,'$1'); }
 function fmtMin(n){ return fmt(n,1); }
-function clampStr(s,n){ s=String(s==null?'':s); return s.length>n ? s.slice(0,n-1)+'…' : s; }
+function clampStr(s,n){ s=String(s==null?'':s); return s.length>n?s.slice(0,n-1)+'…':s; }
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function skuById(id){ for(var i=0;i<S.skus.length;i++) if(S.skus[i].id===id) return S.skus[i]; return null; }
+function skuTotal(sku){ return sku.steps.reduce(function(a,s){return a+s.time;},0); }
+/* effective (split) time of a step using its max operators */
+function stepBest(s){ return (s.helpable && s.maxOps>1) ? s.time/s.maxOps : s.time; }
+function skuBestTotal(sku){ return sku.steps.reduce(function(a,s){return a+stepBest(s);},0); }
 
-/* normalize an exceljs cell value to a plain primitive */
-function cellVal(v){
-  if(v==null) return null;
-  if(typeof v==='object'){
-    if(v.result!=null) return v.result;            // formula result
-    if(v.text!=null) return v.text;                // hyperlink
-    if(Array.isArray(v.richText)) return v.richText.map(function(r){return r.text;}).join('');
-    if(v instanceof Date) return v;
-    if(v.formula!=null) return null;
-    return null;
-  }
-  return v;
-}
-function asNum(v){
-  v=cellVal(v);
-  if(v==null) return null;
-  if(typeof v==='number') return isFinite(v)?v:null;
-  var s=String(v).replace(/[^0-9.\-:]/g,'');
-  if(s.indexOf(':')>=0){ var p=s.split(':').map(Number); if(p.some(isNaN))return null; // mm:ss -> minutes
-    return p.length===3 ? p[0]*60+p[1]+p[2]/60 : p[0]+p[1]/60; }
-  var n=parseFloat(s); return isNaN(n)?null:n;
-}
-function asText(v){ v=cellVal(v); if(v==null)return ''; if(v instanceof Date) return ''; return String(v).trim(); }
+/* ---------- Excel value normalization ---------- */
+function cellVal(v){ if(v==null)return null; if(typeof v==='object'){ if(v.result!=null)return v.result; if(v.text!=null)return v.text; if(Array.isArray(v.richText))return v.richText.map(function(r){return r.text;}).join(''); if(v instanceof Date)return v; return null; } return v; }
+function asNum(v){ v=cellVal(v); if(v==null)return null; if(typeof v==='number')return isFinite(v)?v:null; var s=String(v).replace(/[^0-9.\-:]/g,''); if(s.indexOf(':')>=0){var p=s.split(':').map(Number); if(p.some(isNaN))return null; return p.length===3?p[0]*60+p[1]+p[2]/60:p[0]+p[1]/60;} var n=parseFloat(s); return isNaN(n)?null:n; }
+function asText(v){ v=cellVal(v); if(v==null)return''; if(v instanceof Date)return''; return String(v).trim(); }
 
 /* ============================================================
-   FILE LOAD / PARSE
+   IMPORT / PARSE  (used by Products → Add)
    ============================================================ */
-function showErr(hostId,msg){ var h=$(hostId); h.innerHTML=''; if(msg) h.appendChild(el('div',{'class':'err'},esc(msg))); }
-
 function handleFile(file){
-  showErr('uploadErr','');
   if(!file) return;
-  if(!/\.(xlsx|xlsm)$/i.test(file.name)){ showErr('uploadErr','Please choose an Excel .xlsx or .xlsm file.'); return; }
-  S.fileName=file.name;
+  if(!/\.(xlsx|xlsm)$/i.test(file.name)){ alert('Please choose an Excel .xlsx or .xlsm file.'); return; }
   var reader=new FileReader();
   reader.onload=function(){
     var wb=new ExcelJS.Workbook();
     wb.xlsx.load(reader.result).then(function(){
-      S.sheets=[];
+      var sheets=[];
       wb.eachSheet(function(ws){
-        var maxR=Math.min(ws.rowCount||0, 400), maxC=Math.min(ws.columnCount||0, 40);
-        var grid=[];
-        for(var r=1;r<=maxR;r++){
-          var row=[]; var rr=ws.getRow(r);
-          for(var c=1;c<=maxC;c++){ row.push(rr.getCell(c).value); }
-          grid.push(row);
-        }
-        S.sheets.push({ name:ws.name, grid:grid });
+        var maxR=Math.min(ws.rowCount||0,400), maxC=Math.min(ws.columnCount||0,40), grid=[];
+        for(var r=1;r<=maxR;r++){ var row=[],rr=ws.getRow(r); for(var c=1;c<=maxC;c++) row.push(rr.getCell(c).value); grid.push(row); }
+        sheets.push({name:ws.name,grid:grid});
       });
-      if(!S.sheets.length){ showErr('uploadErr','No worksheets found in that file.'); return; }
-      autoDetect();
-      buildMapUI();
-      goView('map');
-    }).catch(function(e){ console.error(e); showErr('uploadErr','Could not read that file. Is it a valid Excel workbook?'); });
+      if(!sheets.length){ alert('No worksheets found.'); return; }
+      var map=autoDetect(sheets);
+      S.add={ sheets:sheets, map:map, fileName:file.name };
+      renderImport();
+    }).catch(function(e){ console.error(e); alert('Could not read that file. Is it a valid Excel workbook?'); });
   };
-  reader.onerror=function(){ showErr('uploadErr','Could not read the file.'); };
   reader.readAsArrayBuffer(file);
 }
-
-/* pick the sheet + columns that look like a standard-work table */
-function autoDetect(){
+function autoDetect(sheets){
   var best=null;
-  var TIME_RE=/\b(time|min|minute|sec|second|duration|cycle|std\.?\s*time)\b/i;
+  var TIME_RE=/\b(time|min|minute|sec|second|duration|cycle)\b/i;
   var NAME_RE=/\b(step|task|operation|element|description|process|activity|work)\b/i;
-  for(var si=0; si<S.sheets.length; si++){
-    var grid=S.sheets[si].grid;
-    for(var hr=0; hr<Math.min(grid.length,20); hr++){
-      var row=grid[hr]||[]; var timeC=-1,nameC=-1;
-      for(var c=0;c<row.length;c++){ var t=asText(row[c]); if(!t)continue;
-        if(timeC<0 && TIME_RE.test(t)) timeC=c;
-        if(nameC<0 && NAME_RE.test(t)) nameC=c;
-      }
-      if(timeC>=0){
-        var score=(nameC>=0?2:0)+1+countNumericBelow(grid,hr,timeC);
-        if(!best||score>best.score) best={score:score,sheet:si,headerRow:hr,timeCol:timeC,nameCol:chooseNameCol(grid,hr,timeC,nameC)};
-      }
+  for(var si=0;si<sheets.length;si++){ var grid=sheets[si].grid;
+    for(var hr=0;hr<Math.min(grid.length,20);hr++){ var row=grid[hr]||[],tc=-1,nc=-1;
+      for(var c=0;c<row.length;c++){ var t=asText(row[c]); if(!t)continue; if(tc<0&&TIME_RE.test(t))tc=c; if(nc<0&&NAME_RE.test(t))nc=c; }
+      if(tc>=0){ var score=(nc>=0?2:0)+1+countNum(grid,hr,tc); if(!best||score>best.score) best={score:score,sheet:si,headerRow:hr,timeCol:tc,nameCol:chooseNameCol(grid,hr,tc,nc)}; }
     }
   }
-  if(!best){ // fallback: most-numeric column = time, most-texty = name
-    var grid0=S.sheets[0].grid;
-    var tc=mostNumericCol(grid0), nc=mostTextCol(grid0,tc);
-    best={sheet:0,headerRow:findHeaderGuess(grid0,tc),timeCol:tc,nameCol:nc};
-  }
-  S.map.sheet=best.sheet; S.map.headerRow=best.headerRow; S.map.timeCol=best.timeCol; S.map.nameCol=best.nameCol;
-  // unit guess
-  var htxt=asText((S.sheets[best.sheet].grid[best.headerRow]||[])[best.timeCol]);
-  S.map.unit = /\bsec/i.test(htxt) ? 'sec' : 'min';
+  if(!best){ var g0=sheets[0].grid, tc=mostNumericCol(g0); best={sheet:0,headerRow:findHeaderGuess(g0,tc),timeCol:tc,nameCol:guessNameCol(g0,0,tc)}; }
+  var htxt=asText((sheets[best.sheet].grid[best.headerRow]||[])[best.timeCol]);
+  best.unit = /\bsec/i.test(htxt)?'sec':'min';
+  return best;
 }
-function countNumericBelow(grid,hr,c){ var n=0; for(var r=hr+1;r<grid.length;r++){ if(asNum((grid[r]||[])[c])>0)n++; } return n; }
-function mostNumericCol(grid){ var w=(grid[0]||[]).length,best=0,bc=1; for(var c=0;c<w;c++){var n=0;for(var r=0;r<grid.length;r++){if(asNum((grid[r]||[])[c])>0)n++;} if(n>best){best=n;bc=c;}} return bc; }
-function mostTextCol(grid,skip){ var w=(grid[0]||[]).length,best=0,bc=0; for(var c=0;c<w;c++){ if(c===skip)continue; var len=0;for(var r=0;r<grid.length;r++){var t=asText((grid[r]||[])[c]); if(t&&!asNum(t))len+=t.length;} if(len>best){best=len;bc=c;}} return bc; }
-function guessNameCol(grid,hr,skip){ var w=(grid[hr]||[]).length,best=0,bc=0; for(var c=0;c<w;c++){if(c===skip)continue;var len=0;for(var r=hr+1;r<grid.length;r++){var t=asText((grid[r]||[])[c]);if(t&&!asNum(t))len+=t.length;}if(len>best){best=len;bc=c;}} return bc; }
-/* pick the description column: the textiest column below the header, but keep a
-   header-matched column if it actually holds substantial text (not step numbers) */
-function colTextLen(grid,hr,c){ var len=0; for(var r=hr+1;r<grid.length;r++){ var t=asText((grid[r]||[])[c]); if(t&&asNum(t)==null) len+=t.length; } return len; }
-function chooseNameCol(grid,hr,timeCol,regexCol){
-  var textiest=guessNameCol(grid,hr,timeCol);
-  if(regexCol>=0 && regexCol!==timeCol){
-    var rl=colTextLen(grid,hr,regexCol), tl=colTextLen(grid,hr,textiest);
-    if(rl >= 0.5*tl) return regexCol;   // header-matched column is genuinely texty
-  }
-  return textiest;
-}
-function findHeaderGuess(grid,tc){ for(var r=0;r<Math.min(grid.length,20);r++){ if(asText((grid[r]||[])[tc])) return r; } return 0; }
-
-/* ============================================================
-   MAPPING UI
-   ============================================================ */
-function buildMapUI(){
-  var grid=S.sheets[S.map.sheet].grid;
-  // sheet select
-  var sel=$('mSheet'); sel.innerHTML='';
-  S.sheets.forEach(function(s,i){ sel.appendChild(el('option',{value:i},esc(s.name))); });
-  sel.value=S.map.sheet;
-  $('mHeader').value=S.map.headerRow+1;
-  $('mUnit').value=S.map.unit;
-  fillColSelects();
-  renderPreview();
-  // wire (idempotent)
-  sel.onchange=function(){ S.map.sheet=+this.value; var g=S.sheets[S.map.sheet].grid; autoColsForSheet(g); $('mHeader').value=S.map.headerRow+1; fillColSelects(); renderPreview(); };
-  $('mHeader').onchange=function(){ S.map.headerRow=Math.max(0,(+this.value||1)-1); fillColSelects(); renderPreview(); };
-  $('mName').onchange=function(){ S.map.nameCol=+this.value; renderPreview(); };
-  $('mTime').onchange=function(){ S.map.timeCol=+this.value; renderPreview(); };
-  $('mUnit').onchange=function(){ S.map.unit=this.value; renderPreview(); };
-}
-function autoColsForSheet(g){ S.map.timeCol=mostNumericCol(g); S.map.nameCol=mostTextCol(g,S.map.timeCol); S.map.headerRow=findHeaderGuess(g,S.map.timeCol); }
-function fillColSelects(){
-  var grid=S.sheets[S.map.sheet].grid; var hdr=grid[S.map.headerRow]||[];
-  var w=0; grid.forEach(function(r){ if(r&&r.length>w)w=r.length; });
-  function fill(selId,cur){ var s=$(selId); s.innerHTML=''; for(var c=0;c<w;c++){ var label=asText(hdr[c])||('Column '+colLetter(c)); s.appendChild(el('option',{value:c}, colLetter(c)+' · '+esc(clampStr(label,26)))); } s.value=cur; }
-  fill('mName',S.map.nameCol); fill('mTime',S.map.timeCol);
-}
-function extractSteps(){
-  var grid=S.sheets[S.map.sheet].grid, out=[];
-  for(var r=S.map.headerRow+1; r<grid.length; r++){
-    var row=grid[r]||[];
-    var t=asNum(row[S.map.timeCol]);
-    if(t==null||t<=0) continue;
-    var name=asText(row[S.map.nameCol]);
-    if(/^(total|grand total|sum|process total)\b/i.test(name)) continue;
-    if(!name) name='Step '+(out.length+1);
-    var minutes = S.map.unit==='sec' ? t/60 : t;
-    out.push({ name:name, time:minutes });
+function countNum(grid,hr,c){ var n=0; for(var r=hr+1;r<grid.length;r++){ if(asNum((grid[r]||[])[c])>0)n++; } return n; }
+function mostNumericCol(grid){ var w=(grid[0]||[]).length,best=0,bc=1; for(var c=0;c<w;c++){var n=0;for(var r=0;r<grid.length;r++){if(asNum((grid[r]||[])[c])>0)n++;}if(n>best){best=n;bc=c;}} return bc; }
+function colTextLen(grid,hr,c){ var len=0; for(var r=hr+1;r<grid.length;r++){var t=asText((grid[r]||[])[c]); if(t&&asNum(t)==null)len+=t.length;} return len; }
+function guessNameCol(grid,hr,skip){ var w=(grid[hr]||[]).length,best=0,bc=0; for(var c=0;c<w;c++){if(c===skip)continue;var l=colTextLen(grid,hr,c);if(l>best){best=l;bc=c;}} return bc; }
+function chooseNameCol(grid,hr,timeCol,regexCol){ var ti=guessNameCol(grid,hr,timeCol); if(regexCol>=0&&regexCol!==timeCol){ if(colTextLen(grid,hr,regexCol)>=0.5*colTextLen(grid,hr,ti))return regexCol; } return ti; }
+function findHeaderGuess(grid,tc){ for(var r=0;r<Math.min(grid.length,20);r++){ if(asText((grid[r]||[])[tc]))return r; } return 0; }
+function extractSteps(sheets,map){
+  var grid=sheets[map.sheet].grid, out=[];
+  for(var r=map.headerRow+1;r<grid.length;r++){ var row=grid[r]||[]; var t=asNum(row[map.timeCol]); if(t==null||t<=0)continue;
+    var name=asText(row[map.nameCol]); if(/^(total|grand total|sum|process total)\b/i.test(name))continue; if(!name)name='Step '+(out.length+1);
+    out.push({ name:name, time: map.unit==='sec'?t/60:t });
   }
   return out;
-}
-function renderPreview(){
-  showErr('mapErr','');
-  var rows=extractSteps();
-  var tbl=$('previewTable'); tbl.innerHTML='';
-  var thead=el('tr'); thead.appendChild(el('th',null,'#')); thead.appendChild(el('th',null,'Step / Task')); thead.appendChild(el('th',null,'Time ('+(S.map.unit)+')')); tbl.appendChild(thead);
-  rows.slice(0,200).forEach(function(s,i){
-    var tr=el('tr');
-    tr.appendChild(el('td',null,String(i+1)));
-    tr.appendChild(el('td',null,esc(clampStr(s.name,70))));
-    var disp = S.map.unit==='sec' ? s.time*60 : s.time;
-    tr.appendChild(el('td',{'class':'num'},fmt(disp,2)));
-    tbl.appendChild(tr);
-  });
-  var total=rows.reduce(function(a,s){return a+s.time;},0);
-  $('pvNote').innerHTML = rows.length
-    ? '<strong>'+rows.length+' steps</strong> detected · total <strong>'+fmtMin(total)+' min</strong> ('+fmt(total/60,2)+' h). Looks wrong? Adjust the columns or header row above.'
-    : '';
-  if(!rows.length){ showErr('mapErr','No timed steps found with these settings. Try a different time column, header row, or worksheet.'); }
-  $('btnAnalyze').disabled = !rows.length;
 }
 
 /* ============================================================
    ANALYSIS MODEL
    ============================================================ */
-function resultTime(step){
-  var sp=step.split||{mode:'off'};
-  if(sp.mode==='off') return step.time;
-  if(sp.mode==='pct'){ var p=Math.max(0,Math.min(95,sp.pct||0)); return step.time*(1-p/100); }
-  var n=parseInt(sp.mode,10)||1; return step.time/n;
-}
-function compute(){
-  var steps=S.steps;
-  var total=0, opt=0, bnIdx=-1, bnVal=-1, optBnIdx=-1, optBnVal=-1;
-  steps.forEach(function(s,i){
-    var rt=resultTime(s);
-    total+=s.time; opt+=rt;
-    if(s.time>bnVal){bnVal=s.time;bnIdx=i;}
-    if(rt>optBnVal){optBnVal=rt;optBnIdx=i;}
-  });
-  return {total:total,opt:opt,saved:total-opt,bnIdx:bnIdx,bnVal:bnVal,optBnIdx:optBnIdx,optBnVal:optBnVal,count:steps.length};
+function analyze(sku){
+  var steps=sku.steps, total=0, best=0, bnIdx=-1, bnVal=-1;
+  steps.forEach(function(s,i){ total+=s.time; var b=stepBest(s); best+=b; if(s.time>bnVal){bnVal=s.time;bnIdx=i;} });
+  return {total:total, best:best, saved:total-best, bnIdx:bnIdx, bnVal:bnVal, count:steps.length};
 }
 
 /* ============================================================
-   DASHBOARD RENDER
+   LINE SIMULATION
    ============================================================ */
-function startAnalysis(){
-  S.steps=extractSteps().map(function(s){ return {name:s.name,time:s.time,split:{mode:'off',pct:50}}; });
-  $('dashTitle').textContent='Bottleneck Analysis';
-  $('dashSub').textContent=S.fileName+'  ·  '+S.sheets[S.map.sheet].name;
-  goView('dash');
-  renderDash();
+/* contiguous partition of step weights into <=K parts, minimizing max part sum */
+function partition(weights, K){
+  K=Math.min(K, weights.length); if(K<1)K=1;
+  var lo=Math.max.apply(null,weights), hi=weights.reduce(function(a,b){return a+b;},0);
+  function feasible(cap){ var parts=1,cur=0; for(var i=0;i<weights.length;i++){ if(cur+weights[i]>cap){parts++;cur=weights[i]; if(parts>K)return false;} else cur+=weights[i]; } return true; }
+  while(lo<hi){ var mid=Math.floor((lo+hi)/2); if(feasible(mid))hi=mid; else lo=mid+1; }
+  var cap=lo, groups=[], cur=[], sum=0;
+  for(var i=0;i<weights.length;i++){ if(sum+weights[i]>cap&&cur.length){groups.push(cur);cur=[];sum=0;} cur.push(i); sum+=weights[i]; }
+  if(cur.length)groups.push(cur);
+  return groups;
 }
-function renderDash(){
-  var m=compute();
-  renderKPIs(m); renderBanner(m); renderPareto(m); renderBar(m); renderSplitTable(m);
+/* MODE A — operators pinned to stations; units pipeline through */
+function simStations(steps, K, Q, buffer){
+  var w=steps.map(function(s){return s.time;});
+  var groups=partition(w,K);
+  var stations=groups.map(function(g){
+    var work=g.reduce(function(a,i){return a+steps[i].time;},0);
+    return { steps:g, work:work, eff:work+buffer }; // buffer = per-unit material handling
+  });
+  var sumEff=stations.reduce(function(a,s){return a+s.eff;},0);
+  var cycle=Math.max.apply(null, stations.map(function(s){return s.eff;}));
+  var makespan=sumEff + (Q-1)*cycle;
+  var ops=[];
+  stations.forEach(function(st,k){
+    var busy=st.eff*Q, move=buffer*Q, work=st.work*Q;
+    ops.push({ name:'Op '+(k+1), work:work, move:move, busy:busy, idle:Math.max(0,makespan-busy), role:'Station '+(k+1)+' ('+st.steps.length+' step'+(st.steps.length>1?'s':'')+')' });
+  });
+  for(var x=stations.length;x<K;x++) ops.push({ name:'Op '+(x+1), work:0, move:0, busy:0, idle:makespan, role:'Unassigned (spare)' });
+  return finishSim(makespan, ops, K, Q, cycle, stations.length);
+}
+/* MODE B — operators float and help on helpable steps (crew up to maxOps) */
+function simHelping(steps, K, Q, buffer){
+  var n=steps.length;
+  var units=[]; for(var u=0;u<Q;u++) units.push({step:0, done:false, active:false});
+  var ops=[]; for(var i=0;i<K;i++) ops.push({name:'Op '+(i+1), busy:0, move:0, work:0, freeAt:0});
+  var active=[]; var t=0; var guard=0, maxGuard=Q*n*6+2000;
+  var capOf=function(i){ return (steps[i].helpable? Math.max(1,steps[i].maxOps||1):1); };
+  while(guard++<maxGuard){
+    var idle=ops.filter(function(o){return o.freeAt<=t+1e-9;});
+    var avail=units.filter(function(u){return !u.done && !u.active;});
+    if(idle.length && avail.length){
+      avail.sort(function(a,b){return steps[b.step].time-steps[a.step].time;});
+      var started=[];
+      for(var a1=0;a1<avail.length && idle.length;a1++){ var u=avail[a1]; var op=idle.shift(); var task={u:u, idx:u.step, crew:[op]}; u.active=true; started.push(task); }
+      started.sort(function(a,b){return steps[b.idx].time-steps[a.idx].time;});
+      var added=true;
+      while(idle.length && added){ added=false;
+        for(var s2=0;s2<started.length;s2++){ var tk=started[s2]; if(tk.crew.length<capOf(tk.idx) && idle.length){ tk.crew.push(idle.shift()); added=true; } }
+      }
+      started.forEach(function(tk){
+        var base=steps[tk.idx].time, crew=tk.crew.length;
+        var workT=(steps[tk.idx].helpable? base/crew : base);
+        var dur=workT+buffer; var end=t+dur;
+        active.push({u:tk.u, end:end});
+        tk.crew.forEach(function(o){ o.freeAt=end; o.busy+=dur; o.work+=workT; o.move+=buffer; });
+      });
+    }
+    if(!active.length){
+      if(units.every(function(u){return u.done;})) break;
+      var nf=Math.min.apply(null, ops.map(function(o){return o.freeAt;}).filter(function(x){return x>t;}));
+      if(!isFinite(nf)) break; t=nf; continue;
+    }
+    var nextEnd=Math.min.apply(null, active.map(function(a){return a.end;}));
+    t=nextEnd;
+    var done=active.filter(function(a){return a.end<=t+1e-9;});
+    active=active.filter(function(a){return a.end>t+1e-9;});
+    done.forEach(function(a){ a.u.active=false; a.u.step++; if(a.u.step>=n)a.u.done=true; });
+    if(units.every(function(u){return u.done;}) && !active.length) break;
+  }
+  var makespan=t;
+  ops.forEach(function(o){ o.idle=Math.max(0,makespan-o.busy); o.role='Floating'; });
+  return finishSim(makespan, ops, K, Q, null, K);
+}
+function finishSim(makespan, ops, K, Q, cycle, used){
+  var busyTotal=ops.reduce(function(a,o){return a+o.busy;},0);
+  var moveTotal=ops.reduce(function(a,o){return a+o.move;},0);
+  var idleTotal=ops.reduce(function(a,o){return a+o.idle;},0);
+  return { makespan:makespan, ops:ops, util:(K*makespan>0?busyTotal/(K*makespan):0),
+           idleTotal:idleTotal, moveTotal:moveTotal, cycle:cycle, used:used,
+           throughput: makespan>0? Q*60/makespan : 0 };
 }
 
-function renderKPIs(m){
-  var host=$('kpis'); host.innerHTML='';
-  function kpi(cls,lab,val,unit,sub){
-    var k=el('div',{'class':'kpi '+cls});
-    k.appendChild(el('div',{'class':'lab'},lab));
-    k.appendChild(el('div',{'class':'val'},val+(unit?'<span class="u">'+unit+'</span>':'')));
-    if(sub) k.appendChild(el('div',{'class':sub.cls||'sub2'},sub.html));
-    return k;
-  }
-  host.appendChild(kpi('accent','Current cycle time',fmtMin(m.total),'min',{html:fmt(m.total/60,2)+' h · '+m.count+' steps'}));
-  var bn=S.steps[m.bnIdx];
-  host.appendChild(kpi('bottleneck','Bottleneck step',fmtMin(m.bnVal),'min',{html:bn?esc(clampStr(bn.name,30)):'–'}));
-  var pct = m.total>0 ? (m.saved/m.total*100):0;
-  host.appendChild(kpi('saved','Optimized cycle time',fmtMin(m.opt),'min',{html:fmt(m.opt/60,2)+' h'}));
-  host.appendChild(kpi('saved','Time saved by splitting',fmtMin(m.saved),'min',{cls:'delta',html:(m.saved>0?'▼ '+fmt(pct,1)+'% faster':'no splits applied')}));
-}
-function renderBanner(m){
-  var host=$('bnBanner'); var bn=S.steps[m.bnIdx];
-  if(!bn){host.innerHTML='';return;}
-  var share=m.total>0?(bn.time/m.total*100):0;
-  var msg='<span class="bt">Primary bottleneck</span><div class="bd"><strong>'+esc(bn.name)+'</strong> takes <strong>'+fmtMin(bn.time)+' min</strong> — '+fmt(share,0)+'% of the whole build. ';
-  if((bn.split&&bn.split.mode!=='off')){ msg+='With your split it drops to <strong>'+fmtMin(resultTime(bn))+' min</strong>. The next constraint is <strong>'+esc((S.steps[m.optBnIdx]||{}).name||'')+'</strong> at '+fmtMin(m.optBnVal)+' min.'; }
-  else { msg+='Splitting this step across operators will move the line the most.'; }
-  msg+='</div>';
-  host.innerHTML='<div class="bn-banner"><div class="bdot"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0z"/></svg></div><div>'+msg+'</div></div>';
-}
-
-/* ---------- Pareto chart (SVG) ---------- */
-function renderPareto(m){
-  var data=S.steps.map(function(s,i){return {name:s.name,time:s.time,i:i};}).sort(function(a,b){return b.time-a.time;});
-  var W=560,H=300, padL=42,padR=46,padT=18,padB=64;
-  var n=data.length; if(!n){$('paretoChart').innerHTML='';return;}
-  var plotW=W-padL-padR, plotH=H-padT-padB;
-  var maxT=data[0].time||1; var total=data.reduce(function(a,d){return a+d.time;},0)||1;
-  var bw=plotW/n, gap=Math.min(8,bw*0.25);
-  var svg='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" font-family="'+'inherit'+'">';
-  // y grid (left)
-  for(var g=0;g<=4;g++){ var yy=padT+plotH*(1-g/4); var val=maxT*g/4;
-    svg+='<line x1="'+padL+'" y1="'+yy+'" x2="'+(W-padR)+'" y2="'+yy+'" stroke="#eef3f4"/>';
-    svg+='<text x="'+(padL-6)+'" y="'+(yy+3)+'" text-anchor="end" font-size="9" fill="#8aa0a9">'+fmt(val,0)+'</text>';
-  }
-  // bars + cumulative
-  var cum=0, pts=[];
-  for(var i=0;i<n;i++){ var d=data[i];
-    var x=padL+i*bw, bx=x+gap/2, w=bw-gap;
-    var bh=(d.time/maxT)*plotH, by=padT+plotH-bh;
-    var isBn=(d.i===m.bnIdx);
-    svg+='<rect x="'+bx.toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+bh.toFixed(1)+'" rx="2" fill="'+(isBn?'#b8893f':'#00263a')+'"><title>'+esc(d.name)+' — '+fmtMin(d.time)+' min</title></rect>';
-    cum+=d.time; var cy=padT+plotH*(1-cum/total); pts.push([x+bw/2,cy]);
+/* ============================================================
+   SVG CHARTS
+   ============================================================ */
+function paretoSVG(steps, bnIdx){
+  var data=steps.map(function(s,i){return {name:s.name,time:s.time,i:i};}).sort(function(a,b){return b.time-a.time;});
+  var n=data.length; if(!n) return '';
+  var W=560,H=300,padL=42,padR=46,padT=18,padB=64, plotW=W-padL-padR, plotH=H-padT-padB;
+  var maxT=data[0].time||1, total=data.reduce(function(a,d){return a+d.time;},0)||1, bw=plotW/n, gap=Math.min(8,bw*0.25);
+  var svg='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet">';
+  for(var g=0;g<=4;g++){ var yy=padT+plotH*(1-g/4); svg+='<line x1="'+padL+'" y1="'+yy+'" x2="'+(W-padR)+'" y2="'+yy+'" stroke="#eef3f4"/><text x="'+(padL-6)+'" y="'+(yy+3)+'" text-anchor="end" font-size="9" fill="#8aa0a9">'+fmt(maxT*g/4,0)+'</text>'; }
+  var cum=0,pts=[];
+  for(var i=0;i<n;i++){ var d=data[i],x=padL+i*bw,bx=x+gap/2,bwid=bw-gap,bh=(d.time/maxT)*plotH,by=padT+plotH-bh,isBn=(d.i===bnIdx);
+    svg+='<rect x="'+bx.toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+bwid.toFixed(1)+'" height="'+bh.toFixed(1)+'" rx="2" fill="'+(isBn?'#b8893f':'#00263a')+'"><title>'+esc(d.name)+' — '+fmtMin(d.time)+' min</title></rect>';
+    cum+=d.time; pts.push([x+bw/2, padT+plotH*(1-cum/total)]);
     if(i<14) svg+='<text x="'+(x+bw/2).toFixed(1)+'" y="'+(H-padB+14)+'" text-anchor="end" font-size="8.5" fill="#7c929b" transform="rotate(-40 '+(x+bw/2).toFixed(1)+' '+(H-padB+14)+')">'+esc(clampStr(d.name,16))+'</text>';
   }
-  // 80% line
   var y80=padT+plotH*(1-0.8); svg+='<line x1="'+padL+'" y1="'+y80+'" x2="'+(W-padR)+'" y2="'+y80+'" stroke="#cdb38a" stroke-dasharray="4 4"/><text x="'+(W-padR+3)+'" y="'+(y80+3)+'" font-size="8.5" fill="#b8893f">80%</text>';
-  // cumulative path
-  var path=pts.map(function(p,i){return (i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1);}).join(' ');
-  svg+='<path d="'+path+'" fill="none" stroke="#0aa6b8" stroke-width="2"/>';
+  svg+='<path d="'+pts.map(function(p,i){return (i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1);}).join(' ')+'" fill="none" stroke="#0aa6b8" stroke-width="2"/>';
   pts.forEach(function(p){ svg+='<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="2.6" fill="#0aa6b8"/>'; });
-  // right axis %
   for(var g2=0;g2<=4;g2++){ var yy2=padT+plotH*(1-g2/4); svg+='<text x="'+(W-padR+6)+'" y="'+(yy2+3)+'" font-size="9" fill="#8aa0a9">'+(g2*25)+'%</text>'; }
-  svg+='</svg>';
-  $('paretoChart').innerHTML=svg;
+  return svg+'</svg>';
 }
-
-/* ---------- Per-step horizontal bar (current vs split) ---------- */
-function renderBar(m){
-  var steps=S.steps; var n=steps.length; if(!n){$('barChart').innerHTML='';return;}
-  var rowH=26, padT=10, padB=6, labW=150, valW=54, W=560;
-  var plotW=W-labW-valW-12;
-  var H=padT+padB+n*rowH;
-  var maxT=Math.max.apply(null,steps.map(function(s){return s.time;}))||1;
+function stepBarSVG(steps, bnIdx){
+  var n=steps.length; if(!n)return '';
+  var rowH=26,padT=10,padB=6,labW=150,W=560, plotW=W-labW-60;
+  var H=padT+padB+n*rowH, maxT=Math.max.apply(null,steps.map(function(s){return s.time;}))||1;
   var svg='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMin meet">';
-  for(var i=0;i<n;i++){ var s=steps[i]; var y=padT+i*rowH; var cy=y+rowH/2;
-    var isBn=(i===m.bnIdx);
-    var rt=resultTime(s);
+  for(var i=0;i<n;i++){ var s=steps[i],y=padT+i*rowH,cy=y+rowH/2,isBn=(i===bnIdx),rt=stepBest(s);
     var wCur=(s.time/maxT)*plotW, wOpt=(rt/maxT)*plotW;
     svg+='<text x="0" y="'+(cy+3.5)+'" font-size="10.5" fill="#3a5160">'+esc(clampStr((i+1)+'. '+s.name,24))+'</text>';
-    // current (track)
-    svg+='<rect x="'+labW+'" y="'+(cy-7)+'" width="'+wCur.toFixed(1)+'" height="14" rx="3" fill="#cfdde2"><title>'+esc(s.name)+' — current '+fmtMin(s.time)+' min</title></rect>';
-    // optimized overlay
-    var oc=isBn?'#b8893f':'#0aa6b8';
-    svg+='<rect x="'+labW+'" y="'+(cy-7)+'" width="'+wOpt.toFixed(1)+'" height="14" rx="3" fill="'+oc+'"><title>'+esc(s.name)+' — after split '+fmtMin(rt)+' min</title></rect>';
-    var lbl = (rt<s.time-0.01) ? fmtMin(rt)+' / '+fmtMin(s.time) : fmtMin(s.time);
+    svg+='<rect x="'+labW+'" y="'+(cy-7)+'" width="'+wCur.toFixed(1)+'" height="14" rx="3" fill="#cfdde2"><title>'+esc(s.name)+' — '+fmtMin(s.time)+' min</title></rect>';
+    svg+='<rect x="'+labW+'" y="'+(cy-7)+'" width="'+wOpt.toFixed(1)+'" height="14" rx="3" fill="'+(isBn?'#b8893f':'#0aa6b8')+'"><title>after help '+fmtMin(rt)+' min</title></rect>';
+    var lbl=(rt<s.time-0.01)?fmtMin(rt)+' / '+fmtMin(s.time):fmtMin(s.time);
     svg+='<text x="'+(labW+Math.max(wCur,wOpt)+6)+'" y="'+(cy+3.5)+'" font-size="10" fill="#5d7280" font-weight="600">'+lbl+'</text>';
   }
-  svg+='</svg>';
-  $('barChart').innerHTML=svg;
-}
-
-/* ---------- Split table ---------- */
-function renderSplitTable(m){
-  var tbl=$('splitTable'); tbl.innerHTML='';
-  var hr=el('tr');
-  ['#','Step / Task','Current (min)','Share','Can split?','Result (min)','Saved'].forEach(function(h,i){ hr.appendChild(el('th',{ style:(i>=2?'text-align:right':'') },h)); });
-  tbl.appendChild(hr);
-  S.steps.forEach(function(s,i){
-    var isBn=(i===m.bnIdx);
-    var rt=resultTime(s); var saved=s.time-rt;
-    var share=m.total>0?(s.time/m.total*100):0;
-    var tr=el('tr',{'class':isBn?'is-bn':''});
-    tr.appendChild(el('td',null,String(i+1)));
-    var nameCell=el('td',{'class':'stepname'}, esc(clampStr(s.name,60))+(isBn?'<span class="badge-bn">Bottleneck</span>':''));
-    tr.appendChild(nameCell);
-    tr.appendChild(el('td',{'class':'num'},fmtMin(s.time)));
-    // share with mini bar
-    var sc=el('td',{'class':'num'});
-    sc.innerHTML='<div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><span>'+fmt(share,0)+'%</span><div class="mini-bar '+(isBn?'bn':'')+'" style="width:60px"><i style="width:'+Math.max(4,share/ (m.total>0?(m.bnVal/m.total*100):1) *100).toFixed(0)+'%"></i></div></div>';
-    tr.appendChild(sc);
-    // split control
-    var ctl=el('td');
-    var sel=el('select',{'data-idx':i,'class':'splitSel'});
-    [['off','— no'],['2','2 operators'],['3','3 operators'],['4','4 operators'],['pct','Custom %']].forEach(function(o){
-      var op=el('option',{value:o[0]},o[1]); if(s.split.mode===o[0])op.setAttribute('selected','selected'); sel.appendChild(op);
-    });
-    ctl.appendChild(sel);
-    if(s.split.mode==='pct'){
-      var inp=el('input',{type:'number','class':'pct','data-idx':i,min:'0',max:'95',value:String(s.split.pct||50)});
-      ctl.appendChild(inp); ctl.appendChild(document.createTextNode(' %'));
-    }
-    tr.appendChild(ctl);
-    tr.appendChild(el('td',{'class':'num'},fmtMin(rt)));
-    tr.appendChild(el('td',{'class':'num '+(saved>0.01?'res-saved':'res-zero')}, saved>0.01?('−'+fmtMin(saved)):'–'));
-    tbl.appendChild(tr);
-  });
-  // wire controls
-  Array.prototype.forEach.call(tbl.querySelectorAll('.splitSel'),function(sel){
-    sel.onchange=function(){ var i=+this.getAttribute('data-idx'); S.steps[i].split.mode=this.value; renderDash(); };
-  });
-  Array.prototype.forEach.call(tbl.querySelectorAll('input.pct'),function(inp){
-    inp.onchange=inp.oninput=function(){ var i=+this.getAttribute('data-idx'); S.steps[i].split.pct=Math.max(0,Math.min(95,+this.value||0)); renderDash(); };
-  });
+  return svg+'</svg>';
 }
 
 /* ============================================================
-   VIEW ROUTING + WIRING
+   RENDER — TABS
    ============================================================ */
-function goView(v){
-  $('viewUpload').classList.toggle('hide',v!=='upload');
-  $('viewMap').classList.toggle('hide',v!=='map');
-  $('viewDash').classList.toggle('hide',v!=='dash');
-  $('btnNew').classList.toggle('hide',v==='upload');
-  $('hdrFile').textContent = (v!=='upload' && S.fileName)?S.fileName:'';
+function setTab(name){
+  S.tab=name;
+  ['skus','analysis','compare','sim'].forEach(function(t){ $('tab-'+t).classList.toggle('hide',t!==name); });
+  Array.prototype.forEach.call($('tabs').children,function(b){ b.classList.toggle('active', b.getAttribute('data-tab')===name); });
+  if(name==='skus') renderSkus();
+  if(name==='analysis') renderAnalysis();
+  if(name==='compare') renderCompare();
+  if(name==='sim') renderSim();
   window.scrollTo(0,0);
 }
-function wire(){
-  var dz=$('dropzone'), fi=$('fileInput');
-  dz.onclick=function(){ fi.click(); };
-  fi.onchange=function(){ if(fi.files&&fi.files[0]) handleFile(fi.files[0]); fi.value=''; };
-  ['dragenter','dragover'].forEach(function(ev){ dz.addEventListener(ev,function(e){e.preventDefault();dz.classList.add('drag');}); });
-  ['dragleave','drop'].forEach(function(ev){ dz.addEventListener(ev,function(e){e.preventDefault();dz.classList.remove('drag');}); });
-  dz.addEventListener('drop',function(e){ var f=e.dataTransfer.files&&e.dataTransfer.files[0]; if(f) handleFile(f); });
-  $('btnAnalyze').onclick=startAnalysis;
-  $('btnBackUpload').onclick=function(){ goView('upload'); };
-  $('btnNew').onclick=function(){ goView('upload'); };
-  $('btnRemap').onclick=function(){ buildMapUI(); goView('map'); };
-  $('btnReset').onclick=function(){ S.steps.forEach(function(s){s.split={mode:'off',pct:50};}); renderDash(); };
+
+/* ---------- PRODUCTS TAB ---------- */
+function renderSkus(){
+  var host=$('tab-skus'); host.innerHTML='';
+  if(S.add){ renderImport(); return; }
+  if(S.edit){ renderSkuEditor(); return; }
+  host.appendChild(headerEl('Products','Your saved standard-work products. Mark which steps can be helped and how many operators can work them at once.'));
+  var grid=el('div',{class:'sku-grid'});
+  S.skus.forEach(function(sku){
+    var c=el('div',{class:'sku-card'});
+    var helpCount=sku.steps.filter(function(s){return s.helpable;}).length;
+    c.innerHTML='<div class="nm">'+esc(sku.name)+'</div>'+
+      '<div class="meta">'+esc(sku.source||'')+'</div>'+
+      '<div class="stat"><div><div class="v">'+fmtMin(skuTotal(sku))+'</div><div class="l">min total</div></div>'+
+      '<div><div class="v">'+sku.steps.length+'</div><div class="l">steps</div></div>'+
+      '<div><div class="v">'+helpCount+'</div><div class="l">helpable</div></div></div>';
+    var row=el('div',{class:'row'});
+    var bEdit=el('button',{class:'btn btn-light btn-sm'},'Edit steps');
+    bEdit.onclick=function(){ S.edit=sku.id; renderSkus(); };
+    var bAna=el('button',{class:'btn btn-light btn-sm'},'Analyze');
+    bAna.onclick=function(){ S.anaId=sku.id; setTab('analysis'); };
+    var bDel=el('button',{class:'btn btn-danger btn-sm'},'Delete');
+    bDel.onclick=function(){ if(confirm('Delete "'+sku.name+'"?')){ S.skus=S.skus.filter(function(x){return x.id!==sku.id;}); saveSkus(); renderSkus(); } };
+    row.appendChild(bEdit); row.appendChild(bAna); row.appendChild(bDel);
+    c.appendChild(row); grid.appendChild(c);
+  });
+  var add=el('div',{class:'add-card'},'<span><span class="plus">+</span>Add product<br><span style="font-weight:400;font-size:12px;color:var(--muted)">upload a Standard Work .xlsx</span></span>');
+  add.onclick=function(){ $('fileInput').click(); };
+  grid.appendChild(add);
+  host.appendChild(grid);
+  if(!S.skus.length){
+    var emp=el('div',{class:'info'},'No products yet. Click <strong>Add product</strong> and drop in a Standard Work Excel file — the app finds your step and time columns automatically, then you choose which steps can be split across operators.');
+    host.insertBefore(emp, grid);
+  }
 }
-wire();
+function headerEl(title,sub){ var h=el('div',{class:'page-h'}); h.innerHTML='<div><h1>'+esc(title)+'</h1><div class="sub">'+esc(sub)+'</div></div>'; return h; }
+
+/* ---------- IMPORT (map + save) ---------- */
+function renderImport(){
+  var host=$('tab-skus'); host.innerHTML='';
+  var a=S.add, sheets=a.sheets, map=a.map;
+  host.appendChild(headerEl('Add product','Confirm the columns we detected, then save it to your library.'));
+  var card=el('div',{class:'card'});
+  card.innerHTML='<div class="ch"><h2>'+esc(a.fileName)+'</h2><span class="hint">we guessed these — adjust if needed</span></div>';
+  var cb=el('div',{class:'cb'});
+  var mg=el('div',{class:'map-grid'});
+  mg.appendChild(fld('Worksheet', sel(sheets.map(function(s,i){return [i,s.name];}), map.sheet, function(v){ map.sheet=+v; var g=sheets[map.sheet].grid; map.timeCol=mostNumericCol(g); map.nameCol=guessNameCol(g,0,map.timeCol); map.headerRow=findHeaderGuess(g,map.timeCol); renderImport(); })));
+  mg.appendChild(fld('Header row', numInput(map.headerRow+1, 1, 999, function(v){ map.headerRow=Math.max(0,(+v||1)-1); renderImport(); })));
+  var grid=sheets[map.sheet].grid, hdr=grid[map.headerRow]||[], wcols=0; grid.forEach(function(r){ if(r&&r.length>wcols)wcols=r.length; });
+  var colOpts=[]; for(var c=0;c<wcols;c++){ colOpts.push([c, colLetter(c)+' · '+clampStr(asText(hdr[c])||('Column '+colLetter(c)),22)]); }
+  mg.appendChild(fld('Step / task column', sel(colOpts, map.nameCol, function(v){ map.nameCol=+v; renderImport(); })));
+  mg.appendChild(fld('Time column', sel(colOpts, map.timeCol, function(v){ map.timeCol=+v; renderImport(); })));
+  mg.appendChild(fld('Time unit', sel([['min','Minutes'],['sec','Seconds']], map.unit, function(v){ map.unit=v; renderImport(); })));
+  cb.appendChild(mg);
+  var rows=extractSteps(sheets,map);
+  var pv=el('div',{class:'preview-wrap'});
+  var tbl=el('table',{class:'t'}); var html='<tr><th>#</th><th>Step / Task</th><th class="num">Time ('+map.unit+')</th></tr>';
+  rows.slice(0,200).forEach(function(s,i){ var disp=map.unit==='sec'?s.time*60:s.time; html+='<tr><td>'+(i+1)+'</td><td>'+esc(clampStr(s.name,80))+'</td><td class="num">'+fmt(disp,2)+'</td></tr>'; });
+  tbl.innerHTML=html; pv.appendChild(tbl); cb.appendChild(pv);
+  var total=rows.reduce(function(x,s){return x+s.time;},0);
+  cb.appendChild(el('p',{class:'pv-note'}, rows.length? '<strong>'+rows.length+' steps</strong> · total <strong>'+fmtMin(total)+' min</strong> ('+fmt(total/60,2)+' h)' : 'No timed steps found — try another column or header row.'));
+  if(!rows.length) cb.appendChild(el('div',{class:'err'},'No timed steps detected with these settings.'));
+  var nameRow=el('div',{class:'fld',style:'max-width:360px;margin-top:8px'});
+  nameRow.innerHTML='<label>Product name</label>';
+  var ni=el('input',{type:'text',value:a.name!=null?a.name:a.fileName.replace(/\.(xlsx|xlsm)$/i,'').replace(/[_-]+/g,' ')});
+  ni.oninput=function(){ a.name=this.value; };
+  if(a.name==null) a.name=ni.value;
+  nameRow.appendChild(ni); cb.appendChild(nameRow);
+  var actions=el('div',{style:'margin-top:18px;display:flex;gap:10px;justify-content:flex-end'});
+  var cancel=el('button',{class:'btn btn-light'},'Cancel'); cancel.onclick=function(){ S.add=null; renderSkus(); };
+  var save=el('button',{class:'btn btn-primary'},'Save product →'); save.disabled=!rows.length;
+  save.onclick=function(){
+    var steps=extractSteps(sheets,map).map(function(s){ return {name:s.name, time:s.time, helpable:false, maxOps:1}; });
+    S.skus.push({ id:uid(), name:(a.name||a.fileName).trim()||'Untitled', source:a.fileName+' · '+sheets[map.sheet].name, steps:steps, createdAt:Date.now() });
+    saveSkus(); S.add=null; renderSkus();
+  };
+  actions.appendChild(cancel); actions.appendChild(save); cb.appendChild(actions);
+  card.appendChild(cb); host.appendChild(card);
+}
+function fld(label,control){ var f=el('div',{class:'fld'}); f.appendChild(el('label',null,esc(label))); f.appendChild(control); return f; }
+function sel(opts,cur,onch){ var s=el('select'); opts.forEach(function(o){ var op=el('option',{value:o[0]},esc(o[1])); if(String(o[0])===String(cur))op.setAttribute('selected','selected'); s.appendChild(op); }); s.value=cur; s.onchange=function(){ onch(this.value); }; return s; }
+function numInput(val,min,max,onch){ var i=el('input',{type:'number',value:val}); if(min!=null)i.setAttribute('min',min); if(max!=null)i.setAttribute('max',max); i.onchange=function(){ onch(this.value); }; return i; }
+
+/* ---------- SKU EDITOR (helpable + max operators) ---------- */
+function renderSkuEditor(){
+  var host=$('tab-skus'); host.innerHTML='';
+  var sku=skuById(S.edit); if(!sku){ S.edit=null; renderSkus(); return; }
+  var h=el('div',{class:'page-h'});
+  h.innerHTML='<div><h1>'+esc(sku.name)+'</h1><div class="sub">Flag steps that can run in parallel and set how many operators can work each one at once.</div></div>';
+  var back=el('button',{class:'btn btn-light'},'← Back to products'); back.onclick=function(){ S.edit=null; renderSkus(); };
+  h.appendChild(back); host.appendChild(h);
+  host.appendChild(el('div',{class:'info'},'<strong>Helpable</strong> means extra operators can pitch in. <strong>Max operators</strong> is how many can physically work the step at the same time — e.g. 3 arm sub-assemblies → 3 people → the step runs in a third of the time. The "with help" time updates automatically.'));
+  var card=el('div',{class:'card'}); var cb=el('div',{class:'cb',style:'padding:0'});
+  var wrap=el('div',{style:'overflow:auto'}); var tbl=el('table',{class:'t'});
+  var thead='<tr><th>#</th><th>Step / Task</th><th class="num">Time (min)</th><th>Helpable?</th><th>Max operators</th><th class="num">With help (min)</th></tr>';
+  tbl.innerHTML=thead;
+  sku.steps.forEach(function(s,i){
+    var tr=el('tr');
+    var help=el('td');
+    var lab=el('label',{class:'chk'}); var cbx=el('input',{type:'checkbox'}); if(s.helpable)cbx.checked=true;
+    cbx.onchange=function(){ s.helpable=this.checked; if(!s.helpable)s.maxOps=1; else if(s.maxOps<2)s.maxOps=2; saveSkus(); renderSkuEditor(); };
+    lab.appendChild(cbx); lab.appendChild(el('span',{class:'sw'})); help.appendChild(lab);
+    var maxc=el('td');
+    var mi=el('input',{type:'number',class:'num-in',min:'1',max:'8',value:s.maxOps||1}); mi.disabled=!s.helpable;
+    mi.onchange=function(){ var v=Math.max(1,Math.min(8,parseInt(this.value,10)||1)); s.maxOps=v; if(v<2)s.helpable=false; saveSkus(); renderSkuEditor(); };
+    maxc.appendChild(mi); if(s.helpable && s.maxOps>1) maxc.appendChild(el('span',{style:'margin-left:8px;font-size:12px;color:var(--muted)'},'÷'+s.maxOps));
+    tr.appendChild(el('td',null,String(i+1)));
+    tr.appendChild(el('td',{class:'stepname'},esc(clampStr(s.name,70))+(s.helpable?'<span class="badge-help">help ×'+(s.maxOps||1)+'</span>':'')));
+    tr.appendChild(el('td',{class:'num'},fmtMin(s.time)));
+    tr.appendChild(help); tr.appendChild(maxc);
+    tr.appendChild(el('td',{class:'num',style:(stepBest(s)<s.time-0.01?'color:var(--good);font-weight:700':'color:var(--muted)')}, fmtMin(stepBest(s))));
+    tbl.appendChild(tr);
+  });
+  wrap.appendChild(tbl); cb.appendChild(wrap); card.appendChild(cb); host.appendChild(card);
+}
+
+/* ---------- ANALYSIS TAB ---------- */
+function renderAnalysis(){
+  var host=$('tab-analysis'); host.innerHTML='';
+  host.appendChild(headerEl('Analysis','A single product, broken down — bottleneck, Pareto, and the impact of splitting steps.'));
+  if(!S.skus.length){ host.appendChild(emptyEl('Add a product first','Upload a Standard Work file on the Products tab to analyze it here.')); return; }
+  if(!skuById(S.anaId)) S.anaId=S.skus[0].id;
+  var bar=el('div',{class:'selrow'});
+  bar.appendChild(fld('Product', sel(S.skus.map(function(s){return [s.id,s.name];}), S.anaId, function(v){ S.anaId=v; renderAnalysis(); })));
+  host.appendChild(bar);
+  var sku=skuById(S.anaId), m=analyze(sku);
+  var kp=el('div',{class:'kpis'});
+  kp.appendChild(kpi('accent','Cycle time',fmtMin(m.total),'min',fmt(m.total/60,2)+' h · '+m.count+' steps'));
+  var bn=sku.steps[m.bnIdx];
+  kp.appendChild(kpi('bottleneck','Bottleneck step',fmtMin(m.bnVal),'min',bn?clampStr(bn.name,28):'–'));
+  kp.appendChild(kpi('saved','With max help',fmtMin(m.best),'min',fmt(m.best/60,2)+' h'));
+  var pct=m.total>0?(m.saved/m.total*100):0;
+  kp.appendChild(kpi('saved','Time saved by splitting',fmtMin(m.saved),'min', m.saved>0.01?'▼ '+fmt(pct,1)+'% faster':'mark steps helpable to see savings'));
+  host.appendChild(kp);
+  if(bn){
+    var share=m.total>0?(bn.time/m.total*100):0;
+    var bb=el('div',{class:'bn-banner'});
+    var msg='<span class="bt">Primary bottleneck</span><div class="bd"><strong>'+esc(bn.name)+'</strong> takes <strong>'+fmtMin(bn.time)+' min</strong> — '+fmt(share,0)+'% of the build. ';
+    msg+= (bn.helpable&&bn.maxOps>1) ? 'With '+bn.maxOps+' operators it drops to <strong>'+fmtMin(stepBest(bn))+' min</strong>.' : 'Mark it helpable on the Products tab to split it across operators.';
+    msg+='</div>';
+    bb.innerHTML='<div class="bdot"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0z"/></svg></div><div>'+msg+'</div>';
+    host.appendChild(bb);
+  }
+  var cg=el('div',{class:'chart-grid'});
+  cg.appendChild(chartCard('Pareto — where the time concentrates','sorted longest → shortest', paretoSVG(sku.steps,m.bnIdx),
+    '<span><i style="background:var(--navy)"></i>Step time</span><span><i style="background:var(--bronze)"></i>Bottleneck</span><span><i style="background:var(--aqua)"></i>Cumulative %</span>'));
+  cg.appendChild(chartCard('Per-step time — current vs. with help','in build order', stepBarSVG(sku.steps,m.bnIdx),
+    '<span><i style="background:#cfdde2"></i>Current</span><span><i style="background:var(--aqua)"></i>With help</span><span><i style="background:var(--bronze)"></i>Bottleneck</span>'));
+  host.appendChild(cg);
+}
+function emptyEl(big,sub){ var e=el('div',{class:'empty'}); e.innerHTML='<div class="big">'+esc(big)+'</div><div>'+esc(sub)+'</div>'; return e; }
+function kpi(cls,lab,val,unit,sub){ var k=el('div',{class:'kpi '+cls}); k.innerHTML='<div class="lab">'+esc(lab)+'</div><div class="val">'+val+(unit?'<span class="u">'+unit+'</span>':'')+'</div><div class="sub2">'+esc(sub)+'</div>'; return k; }
+function chartCard(title,hint,svg,legend){ var c=el('div',{class:'card'}); c.innerHTML='<div class="ch"><h2>'+esc(title)+'</h2><span class="hint">'+esc(hint)+'</span></div><div class="cb"><div class="chart-host">'+svg+'</div><div class="legend">'+legend+'</div></div>'; return c; }
+
+/* ---------- COMPARE TAB ---------- */
+function renderCompare(){
+  var host=$('tab-compare'); host.innerHTML='';
+  host.appendChild(headerEl('Compare','Line up two products side by side. Drag steps within a column to align matching operations — the time differences update live.'));
+  if(S.skus.length<2){ host.appendChild(emptyEl('Add at least two products','Compare needs two saved products. Add another on the Products tab.')); return; }
+  if(!skuById(S.cmpA)) S.cmpA=S.skus[0].id;
+  if(!skuById(S.cmpB)) S.cmpB=S.skus[1].id;
+  var bar=el('div',{class:'selrow'});
+  bar.appendChild(fld('Product A', sel(S.skus.map(function(s){return [s.id,s.name];}), S.cmpA, function(v){ S.cmpA=v; S.cmpOrderA=null; renderCompare(); })));
+  bar.appendChild(fld('Product B', sel(S.skus.map(function(s){return [s.id,s.name];}), S.cmpB, function(v){ S.cmpB=v; S.cmpOrderB=null; renderCompare(); })));
+  var reset=el('button',{class:'btn btn-light'},'Reset alignment'); reset.onclick=function(){ S.cmpOrderA=null; S.cmpOrderB=null; renderCompare(); };
+  bar.appendChild(reset);
+  host.appendChild(bar);
+  var A=skuById(S.cmpA), B=skuById(S.cmpB);
+  if(!S.cmpOrderA) S.cmpOrderA=A.steps.map(function(_,i){return i;});
+  if(!S.cmpOrderB) S.cmpOrderB=B.steps.map(function(_,i){return i;});
+  // totals KPI
+  var tA=skuTotal(A), tB=skuTotal(B);
+  var kp=el('div',{class:'kpis'});
+  kp.appendChild(kpi('accent',clampStr(A.name,18),fmtMin(tA),'min',A.steps.length+' steps'));
+  kp.appendChild(kpi('accent',clampStr(B.name,18),fmtMin(tB),'min',B.steps.length+' steps'));
+  var diff=tA-tB;
+  kp.appendChild(kpi(diff>0?'bottleneck':'saved','Difference',(diff>0?'+':'')+fmtMin(diff),'min', diff>0?clampStr(A.name,16)+' is longer':(diff<0?clampStr(B.name,16)+' is longer':'identical total')));
+  var shared=Math.min(A.steps.length,B.steps.length);
+  kp.appendChild(kpi('accent','Aligned rows',String(shared),'', 'drag to match operations'));
+  host.appendChild(kp);
+  // columns
+  var card=el('div',{class:'card'}); var cb=el('div',{class:'cb'});
+  var grid=el('div',{class:'cmp-grid'});
+  var colA=el('div',{class:'cmp-col'}); colA.appendChild(el('h3',null,esc(A.name)));
+  var colMid=el('div',{class:'cmp-col'}); colMid.appendChild(el('h3',null,'Δ min'));
+  var colB=el('div',{class:'cmp-col'}); colB.appendChild(el('h3',null,esc(B.name)));
+  var listA=el('div',{class:'cmp-list'}), listB=el('div',{class:'cmp-list'}), listMid=el('div',{style:'display:flex;flex-direction:column;gap:6px;padding:0 8px'});
+  buildDragList(listA, S.cmpOrderA, A, 'A');
+  buildDragList(listB, S.cmpOrderB, B, 'B');
+  var rows=Math.max(S.cmpOrderA.length, S.cmpOrderB.length);
+  for(var i=0;i<rows;i++){
+    var ai=S.cmpOrderA[i], bi=S.cmpOrderB[i];
+    var d=el('div',{});
+    if(ai!=null && bi!=null){ var dv=A.steps[ai].time-B.steps[bi].time; var cls=Math.abs(dv)<0.01?'zero':(dv>0?'up':'down'); d.className='cmp-delta '+cls; d.textContent=(dv>0?'+':'')+fmt(dv,1); }
+    else { d.className='cmp-delta zero'; d.textContent='—'; }
+    listMid.appendChild(d);
+  }
+  colA.appendChild(listA); colMid.appendChild(listMid); colB.appendChild(listB);
+  grid.appendChild(colA); grid.appendChild(colMid); grid.appendChild(colB);
+  cb.appendChild(grid); card.appendChild(cb); host.appendChild(card);
+}
+function buildDragList(listEl, order, sku, side){
+  order.forEach(function(idx, pos){
+    var s=sku.steps[idx];
+    var it=el('div',{class:'cmp-item',draggable:'true','data-pos':pos});
+    it.innerHTML='<span class="nm">'+(pos+1)+'. '+esc(clampStr(s.name,40))+'</span><span class="tm">'+fmtMin(s.time)+'</span>';
+    it.addEventListener('dragstart',function(e){ it.classList.add('dragging'); e.dataTransfer.setData('text/plain', side+':'+pos); e.dataTransfer.effectAllowed='move'; });
+    it.addEventListener('dragend',function(){ it.classList.remove('dragging'); Array.prototype.forEach.call(listEl.children,function(c){c.classList.remove('over');}); });
+    it.addEventListener('dragover',function(e){ e.preventDefault(); it.classList.add('over'); });
+    it.addEventListener('dragleave',function(){ it.classList.remove('over'); });
+    it.addEventListener('drop',function(e){ e.preventDefault();
+      var data=e.dataTransfer.getData('text/plain').split(':'); if(data[0]!==side) return;
+      var from=+data[1], to=+it.getAttribute('data-pos'); if(from===to) return;
+      var arr=(side==='A')?S.cmpOrderA:S.cmpOrderB; var moved=arr.splice(from,1)[0]; arr.splice(to,0,moved); renderCompare();
+    });
+    listEl.appendChild(it);
+  });
+}
+
+/* ---------- SIMULATION TAB ---------- */
+function renderSim(){
+  var host=$('tab-sim'); host.innerHTML='';
+  host.appendChild(headerEl('Line Simulation','Pick a batch size and crew, choose whether operators stay put or help where they can, and see total time and idle time per operator.'));
+  if(!S.skus.length){ host.appendChild(emptyEl('Add a product first','Upload a Standard Work file on the Products tab to simulate the line.')); return; }
+  if(!skuById(S.simId)) S.simId=S.skus[0].id;
+  var cfg=S.sim;
+  var bar=el('div',{class:'selrow'});
+  bar.appendChild(fld('Product', sel(S.skus.map(function(s){return [s.id,s.name];}), S.simId, function(v){ S.simId=v; renderSim(); })));
+  bar.appendChild(fld('Units to build', numInput(cfg.units,1,500,function(v){ cfg.units=Math.max(1,Math.min(500,parseInt(v,10)||1)); renderSim(); })));
+  bar.appendChild(fld('Operators', numInput(cfg.ops,1,40,function(v){ cfg.ops=Math.max(1,Math.min(40,parseInt(v,10)||1)); renderSim(); })));
+  bar.appendChild(fld('Mode', sel([['help','Help wherever they can'],['station','Stay at their station']], cfg.mode, function(v){ cfg.mode=v; renderSim(); })));
+  bar.appendChild(fld('Move buffer (min/task)', numInput(cfg.buffer,0,30,function(v){ cfg.buffer=Math.max(0,Math.min(30,parseFloat(v)||0)); renderSim(); })));
+  host.appendChild(bar);
+  var sku=skuById(S.simId);
+  var helpCount=sku.steps.filter(function(s){return s.helpable;}).length;
+  if(cfg.mode==='help' && helpCount===0) host.appendChild(el('div',{class:'info'},'None of this product’s steps are marked <strong>helpable</strong> yet, so "help wherever" behaves like independent stations. Mark steps helpable (and set max operators) on the Products tab to let operators speed each other up.'));
+  var res = cfg.mode==='station' ? simStations(sku.steps, cfg.ops, cfg.units, cfg.buffer) : simHelping(sku.steps, cfg.ops, cfg.units, cfg.buffer);
+  // KPIs
+  var kp=el('div',{class:'kpis'});
+  kp.appendChild(kpi('accent','Total time',fmt(res.makespan/60,1),'h', fmtMin(res.makespan)+' min for '+cfg.units+' unit'+(cfg.units>1?'s':'')));
+  kp.appendChild(kpi('accent','Throughput',fmt(res.throughput,2),'/h', 'units per hour (steady)'));
+  kp.appendChild(kpi(res.util>0.75?'saved':'bottleneck','Avg utilization',fmt(res.util*100,0),'%', 'of paid operator time'));
+  kp.appendChild(kpi('bottleneck','Total idle',fmt(res.idleTotal/60,1),'h', (res.moveTotal>0?fmtMin(res.moveTotal)+' min moving · ':'')+'across '+cfg.ops+' operators'));
+  host.appendChild(kp);
+  // per-operator bars
+  var card=el('div',{class:'card'});
+  card.innerHTML='<div class="ch"><h2>Idle time per operator</h2><span class="hint">bar width = total build time ('+fmtMin(res.makespan)+' min)</span></div>';
+  var cb=el('div',{class:'cb'});
+  res.ops.forEach(function(o){
+    var row=el('div',{class:'opbar-row'});
+    var wPct=res.makespan>0?o.work/res.makespan*100:0, mPct=res.makespan>0?o.move/res.makespan*100:0;
+    row.innerHTML='<div class="lab" title="'+esc(o.role||'')+'">'+esc(o.name)+'</div>'+
+      '<div class="opbar"><div class="seg work" style="width:'+wPct.toFixed(1)+'%" title="working '+fmtMin(o.work)+' min"></div><div class="seg move" style="width:'+mPct.toFixed(1)+'%" title="moving '+fmtMin(o.move)+' min"></div></div>'+
+      '<div class="pct">'+fmt(o.idle/60,1)+'h idle</div>';
+    cb.appendChild(row);
+  });
+  cb.appendChild(el('div',{class:'legend'},'<span><i style="background:var(--aqua)"></i>Working</span><span><i style="background:var(--bronze)"></i>Moving (buffer)</span><span><i style="background:#f0f4f5;border:1px solid #e7eef0"></i>Idle</span>'));
+  card.appendChild(cb); host.appendChild(card);
+  // explanation
+  var note = cfg.mode==='station'
+    ? 'Operators are pinned to balanced stations; units flow down the line and one finishes every <strong>'+fmtMin(res.cycle)+' min</strong> (the cycle time). '+(res.used<cfg.ops?('Only '+res.used+' of '+cfg.ops+' operators are needed for '+res.used+' stations — the rest sit idle. '):'')+'The move buffer is added once per unit at each station for material handling.'
+    : 'Operators float to whatever is ready; idle operators pile onto <strong>helpable</strong> steps (up to each step’s max operators) to finish them faster. Each task carries a <strong>'+fmtMin(cfg.buffer)+' min</strong> move buffer for fetching parts and walking over.';
+  host.appendChild(el('div',{class:'info',style:'margin-top:18px'},note));
+  host.appendChild(el('div',{class:'footer'},'TUUCI · Standard Work Analyzer — runs entirely in your browser. Nothing is uploaded.'));
+}
+
+/* ============================================================
+   WIRE UP
+   ============================================================ */
+Array.prototype.forEach.call($('tabs').children,function(b){ b.onclick=function(){ setTab(b.getAttribute('data-tab')); }; });
+$('fileInput').onchange=function(){ if(this.files&&this.files[0]) handleFile(this.files[0]); this.value=''; };
+// global drag-drop onto Products
+window.addEventListener('dragover',function(e){ if(S.tab==='skus'){ e.preventDefault(); } });
+window.addEventListener('drop',function(e){ if(S.tab==='skus' && !S.edit){ e.preventDefault(); var f=e.dataTransfer.files&&e.dataTransfer.files[0]; if(f) handleFile(f); } });
+setTab('skus');
 </script>
 </body>
 </html>
