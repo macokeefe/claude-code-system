@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quick-Lock Trellis — Concept Design</title>
+<style>
+  :root{--ink:#13212e;--muted:#5e6e7d;--line:#dde5ee;--soft:#f5f8fc;--blue:#1a56b0;--green:#1c7c3c;--amber:#c9791f;--red:#b3261e;--steel:#9aa7b5;--steeld:#6d7c8c}
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);margin:0;background:#eef2f7}
+  .page{max-width:980px;margin:22px auto;background:#fff;padding:38px 44px;box-shadow:0 1px 6px rgba(0,0,0,.1)}
+  h1{font-size:25px;margin:0 0 2px}
+  .tag{color:var(--muted);font-size:13.5px;margin:0 0 18px}
+  h2{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--blue);margin:24px 0 8px;border-bottom:1px solid var(--line);padding-bottom:5px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  .panel{border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--soft)}
+  .panel .t{font-weight:800;font-size:14px;margin-bottom:6px}
+  .panel.now .t{color:var(--red)} .panel.new .t{color:var(--green)}
+  .cap{font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.4}
+  svg{display:block;width:100%;height:auto}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-top:6px}
+  .mini{border:1px solid var(--line);border-radius:10px;padding:12px;background:#fff}
+  .mini .h{font-weight:700;font-size:13px;margin-bottom:6px}
+  .mini .d{font-size:12px;color:var(--muted);line-height:1.4}
+  .impact{margin-top:22px;border:1px solid #cdebd6;background:#eef8f1;border-radius:12px;padding:16px 18px;display:flex;gap:22px;align-items:center}
+  .impact .big{font-size:34px;font-weight:800;color:var(--green);letter-spacing:-1px;line-height:1;white-space:nowrap}
+  .impact p{margin:0;font-size:14px;line-height:1.5}
+  .src{color:var(--muted);font-size:11.5px;margin-top:14px}
+  @media print{body{background:#fff}.page{box-shadow:none;margin:0;max-width:none;padding:22px}}
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Quick-Lock Trellis — Seat Support Concept</h1>
+  <p class="tag">Same bolted-on, fully removable trellis — re-engineered so each slat drops in and locks with one turn instead of four screws · concept sketch, not to scale</p>
+
+  <h2>Before &nbsp;→&nbsp; After</h2>
+  <div class="grid2">
+    <!-- TODAY -->
+    <div class="panel now">
+      <div class="t">TODAY · screwed slat-by-slat</div>
+      <svg viewBox="0 0 420 230" role="img" aria-label="Current trellis: slats screwed to two flat bars">
+        <!-- two flat bars (horizontal) -->
+        <rect x="30" y="48" width="360" height="16" rx="3" fill="#b9c4d1"/>
+        <rect x="30" y="166" width="360" height="16" rx="3" fill="#b9c4d1"/>
+        <text x="398" y="60" font-size="10" fill="#6d7c8c" text-anchor="end">flat bar</text>
+        <!-- slats (vertical) with 4 screws each -->
+        <g>
+          <!-- slat template repeated -->
+          <g transform="translate(70,0)">
+            <rect x="-7" y="40" width="14" height="150" rx="2" fill="#8c9aa8"/>
+            <circle cx="-5" cy="56" r="3.2" fill="#b3261e"/><circle cx="5" cy="56" r="3.2" fill="#b3261e"/>
+            <circle cx="-5" cy="174" r="3.2" fill="#b3261e"/><circle cx="5" cy="174" r="3.2" fill="#b3261e"/>
+          </g>
+          <g transform="translate(140,0)"><rect x="-7" y="40" width="14" height="150" rx="2" fill="#8c9aa8"/><circle cx="-5" cy="56" r="3.2" fill="#b3261e"/><circle cx="5" cy="56" r="3.2" fill="#b3261e"/><circle cx="-5" cy="174" r="3.2" fill="#b3261e"/><circle cx="5" cy="174" r="3.2" fill="#b3261e"/></g>
+          <g transform="translate(210,0)"><rect x="-7" y="40" width="14" height="150" rx="2" fill="#8c9aa8"/><circle cx="-5" cy="56" r="3.2" fill="#b3261e"/><circle cx="5" cy="56" r="3.2" fill="#b3261e"/><circle cx="-5" cy="174" r="3.2" fill="#b3261e"/><circle cx="5" cy="174" r="3.2" fill="#b3261e"/></g>
+          <g transform="translate(280,0)"><rect x="-7" y="40" width="14" height="150" rx="2" fill="#8c9aa8"/><circle cx="-5" cy="56" r="3.2" fill="#b3261e"/><circle cx="5" cy="56" r="3.2" fill="#b3261e"/><circle cx="-5" cy="174" r="3.2" fill="#b3261e"/><circle cx="5" cy="174" r="3.2" fill="#b3261e"/></g>
+          <g transform="translate(350,0)"><rect x="-7" y="40" width="14" height="150" rx="2" fill="#8c9aa8"/><circle cx="-5" cy="56" r="3.2" fill="#b3261e"/><circle cx="5" cy="56" r="3.2" fill="#b3261e"/><circle cx="-5" cy="174" r="3.2" fill="#b3261e"/><circle cx="5" cy="174" r="3.2" fill="#b3261e"/></g>
+        </g>
+        <circle cx="60" cy="210" r="4" fill="#b3261e"/><text x="70" y="214" font-size="11" fill="#13212e">= screw  (×4 per slat)</text>
+      </svg>
+      <div class="cap"><b style="color:var(--red)">~4 screws driven on every slat</b> × every slat = the bulk of the <b>32:30</b> step. Detachable, but slow to build and slow to service.</div>
+    </div>
+
+    <!-- PROPOSED -->
+    <div class="panel new">
+      <div class="t">PROPOSED · keyhole rails + 1 quarter-turn lock</div>
+      <svg viewBox="0 0 420 230" role="img" aria-label="Proposed trellis: slats drop into keyhole rails and lock with a cam">
+        <!-- two rails with keyhole slots -->
+        <rect x="30" y="44" width="360" height="22" rx="3" fill="#9fb0c2"/>
+        <rect x="30" y="164" width="360" height="22" rx="3" fill="#9fb0c2"/>
+        <!-- keyhole slots on top rail -->
+        <g fill="#5b6b7a">
+          <g transform="translate(70,55)"><circle cx="0" cy="0" r="5.5"/><rect x="-2.5" y="0" width="5" height="9"/></g>
+          <g transform="translate(140,55)"><circle cx="0" cy="0" r="5.5"/><rect x="-2.5" y="0" width="5" height="9"/></g>
+          <g transform="translate(210,55)"><circle cx="0" cy="0" r="5.5"/><rect x="-2.5" y="0" width="5" height="9"/></g>
+          <g transform="translate(280,55)"><circle cx="0" cy="0" r="5.5"/><rect x="-2.5" y="0" width="5" height="9"/></g>
+          <g transform="translate(350,55)"><circle cx="0" cy="0" r="5.5"/><rect x="-2.5" y="0" width="5" height="9"/></g>
+        </g>
+        <text x="398" y="40" font-size="10" fill="#6d7c8c" text-anchor="end">keyhole rail</text>
+        <!-- slats seated, each with ONE green cam lock at bottom -->
+        <g>
+          <g transform="translate(70,0)"><rect x="-7" y="44" width="14" height="142" rx="2" fill="#7f8d9b"/><circle cx="0" cy="175" r="6" fill="#1c7c3c"/><rect x="-1.4" y="171" width="2.8" height="8" rx="1" fill="#fff"/></g>
+          <g transform="translate(140,0)"><rect x="-7" y="44" width="14" height="142" rx="2" fill="#7f8d9b"/><circle cx="0" cy="175" r="6" fill="#1c7c3c"/><rect x="-1.4" y="171" width="2.8" height="8" rx="1" fill="#fff"/></g>
+          <g transform="translate(210,0)"><rect x="-7" y="44" width="14" height="142" rx="2" fill="#7f8d9b"/><circle cx="0" cy="175" r="6" fill="#1c7c3c"/><rect x="-1.4" y="171" width="2.8" height="8" rx="1" fill="#fff"/></g>
+          <g transform="translate(280,0)"><rect x="-7" y="44" width="14" height="142" rx="2" fill="#7f8d9b"/><circle cx="0" cy="175" r="6" fill="#1c7c3c"/><rect x="-1.4" y="171" width="2.8" height="8" rx="1" fill="#fff"/></g>
+          <g transform="translate(350,0)"><rect x="-7" y="44" width="14" height="142" rx="2" fill="#7f8d9b"/><circle cx="0" cy="175" r="6" fill="#1c7c3c"/><rect x="-1.4" y="171" width="2.8" height="8" rx="1" fill="#fff"/></g>
+        </g>
+        <circle cx="60" cy="212" r="5" fill="#1c7c3c"/><rect x="58.6" y="208" width="2.8" height="8" rx="1" fill="#fff"/>
+        <text x="72" y="216" font-size="11" fill="#13212e">= quarter-turn lock  (×1 per slat)</text>
+      </svg>
+      <div class="cap"><b style="color:var(--green)">Stud drops through the keyhole, slides to seat, one quarter-turn locks it.</b> No welding — every slat still comes out individually for service.</div>
+    </div>
+  </div>
+
+  <h2>How the joint works</h2>
+  <div class="row3">
+    <!-- keyhole detail -->
+    <div class="mini">
+      <div class="h">1 · Keyhole slot + stud</div>
+      <svg viewBox="0 0 220 150">
+        <rect x="20" y="70" width="180" height="26" rx="3" fill="#9fb0c2"/>
+        <g fill="#566472"><circle cx="80" cy="83" r="9"/><rect x="76" y="83" width="8" height="16"/></g>
+        <!-- stud above, arrow down -->
+        <rect x="150" y="22" width="16" height="34" rx="2" fill="#7f8d9b"/>
+        <circle cx="158" cy="60" r="7" fill="#3d4b59"/>
+        <path d="M158 70 L158 92" stroke="#1c7c3c" stroke-width="2.4" marker-end="url(#ar)"/>
+        <text x="110" y="120" font-size="10.5" fill="#5e6e7d" text-anchor="middle">round hole takes the stud head;</text>
+        <text x="110" y="134" font-size="10.5" fill="#5e6e7d" text-anchor="middle">slide so the slot captures it</text>
+        <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="4" refY="6" orient="auto"><path d="M0 0 L4 6 L8 0 Z" fill="#1c7c3c"/></marker></defs>
+      </svg>
+    </div>
+    <!-- cam lock detail -->
+    <div class="mini">
+      <div class="h">2 · Quarter-turn cam lock</div>
+      <svg viewBox="0 0 220 150">
+        <!-- unlocked -->
+        <circle cx="65" cy="70" r="22" fill="#eef2f7" stroke="#9fb0c2" stroke-width="3"/>
+        <rect x="62" y="50" width="6" height="40" rx="2" fill="#9aa7b5"/>
+        <text x="65" y="118" font-size="11" fill="#5e6e7d" text-anchor="middle">unlocked</text>
+        <!-- arrow turn -->
+        <path d="M100 70 a14 14 0 0 1 28 0" fill="none" stroke="#1a56b0" stroke-width="2.4" marker-end="url(#ar2)"/>
+        <text x="114" y="52" font-size="10" fill="#1a56b0" text-anchor="middle">90°</text>
+        <!-- locked -->
+        <circle cx="160" cy="70" r="22" fill="#eaf7ee" stroke="#1c7c3c" stroke-width="3"/>
+        <rect x="140" y="67" width="40" height="6" rx="2" fill="#1c7c3c"/>
+        <text x="160" y="118" font-size="11" fill="#1c7c3c" text-anchor="middle">locked</text>
+        <defs><marker id="ar2" markerWidth="8" markerHeight="8" refX="4" refY="6" orient="auto"><path d="M0 0 L4 6 L8 0 Z" fill="#1a56b0"/></marker></defs>
+      </svg>
+    </div>
+    <!-- service detail -->
+    <div class="mini">
+      <div class="h">3 · Swap a broken slat</div>
+      <svg viewBox="0 0 220 150">
+        <rect x="20" y="95" width="180" height="20" rx="3" fill="#9fb0c2"/>
+        <!-- slat lifting out -->
+        <rect x="60" y="34" width="16" height="60" rx="2" fill="#7f8d9b"/>
+        <path d="M68 30 L68 10" stroke="#1c7c3c" stroke-width="2.6" marker-end="url(#ar3)"/>
+        <circle cx="150" cy="105" r="7" fill="#1c7c3c"/><rect x="148.6" y="101" width="2.8" height="8" rx="1" fill="#fff"/>
+        <text x="110" y="138" font-size="10.5" fill="#5e6e7d" text-anchor="middle">quarter-turn → lift out. seconds, no drilling.</text>
+        <defs><marker id="ar3" markerWidth="8" markerHeight="8" refX="4" refY="2" orient="auto"><path d="M0 8 L4 0 L8 8 Z" fill="#1c7c3c"/></marker></defs>
+      </svg>
+    </div>
+  </div>
+
+  <div class="impact">
+    <div class="big">32:30 → ~10–12 min</div>
+    <p><b>~20 minutes saved per sofa (≈16% of total Sola labor)</b>, on all three configs — by replacing ~4 driven screws per slat with one quarter-turn lock. Nothing is welded; every slat stays individually removable, and a broken one swaps out in seconds instead of being unscrewed.</p>
+  </div>
+  <p class="src">Concept sketch for discussion — not to scale, fastener style (cam / quarter-turn / spring detent) to be chosen with engineering. Time figures from recorded Seat Support step time (Sola, medium); ~16% assumes the step is fastening-dominated.</p>
+</div>
+</body>
+</html>
