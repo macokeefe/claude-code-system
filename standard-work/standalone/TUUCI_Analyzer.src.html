@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TUUCI · Standard Work Analyzer</title>
+<style>
+  :root{
+    /* TUUCI nautical-luxury palette */
+    --navy:#00263a;        /* deep marine navy  */
+    --navy-700:#013a57;
+    --navy-900:#001824;
+    --aqua:#0aa6b8;        /* signature marine teal */
+    --aqua-dark:#078492;
+    --bronze:#b8893f;      /* warm luxury accent (bottleneck) */
+    --ink:#10212b;
+    --muted:#5d7280;
+    --line:#e3eaed;
+    --bg:#eef2f4;
+    --card:#ffffff;
+    --good:#1f9d6b;
+    --shadow:0 1px 2px rgba(0,38,58,.06), 0 6px 24px rgba(0,38,58,.06);
+    --radius:14px;
+    --font:"Inter","Segoe UI",-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:var(--font);color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased;line-height:1.45}
+  button{font-family:inherit}
+  a{color:var(--aqua-dark)}
+
+  /* ---------- Header ---------- */
+  header.app{
+    background:linear-gradient(180deg,var(--navy) 0%,var(--navy-900) 100%);
+    color:#fff;padding:16px 28px;display:flex;align-items:center;justify-content:space-between;
+    border-bottom:3px solid var(--aqua);
+  }
+  .brand{display:flex;align-items:center;gap:18px}
+  .wordmark{font-weight:800;font-size:24px;letter-spacing:.42em;padding-left:.42em}
+  .brand .rule{width:1px;height:30px;background:rgba(255,255,255,.25)}
+  .brand .sub{display:flex;flex-direction:column;line-height:1.25}
+  .brand .sub .t1{font-size:13px;font-weight:600;letter-spacing:.04em}
+  .brand .sub .t2{font-size:10px;letter-spacing:.34em;text-transform:uppercase;color:var(--aqua);opacity:.95}
+  .hdr-actions{display:flex;gap:10px;align-items:center}
+  .hdr-file{font-size:12px;color:rgba(255,255,255,.7);letter-spacing:.02em;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* ---------- Buttons ---------- */
+  .btn{border:0;border-radius:9px;padding:11px 20px;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.01em;transition:.15s}
+  .btn-primary{background:var(--aqua);color:#fff}
+  .btn-primary:hover{background:var(--aqua-dark)}
+  .btn-ghost{background:rgba(255,255,255,.10);color:#fff;border:1px solid rgba(255,255,255,.25)}
+  .btn-ghost:hover{background:rgba(255,255,255,.18)}
+  .btn-light{background:#fff;color:var(--navy);border:1px solid var(--line)}
+  .btn-light:hover{border-color:var(--aqua);color:var(--aqua-dark)}
+  .btn[disabled]{opacity:.45;cursor:not-allowed}
+
+  main{max-width:1180px;margin:0 auto;padding:34px 28px 80px}
+
+  /* ---------- Upload ---------- */
+  .upload-wrap{max-width:720px;margin:48px auto;text-align:center}
+  .upload-wrap h1{font-size:30px;font-weight:800;letter-spacing:-.01em;margin:0 0 10px;color:var(--navy)}
+  .upload-wrap p.lead{font-size:16px;color:var(--muted);margin:0 auto 34px;max-width:560px}
+  .dropzone{
+    background:var(--card);border:2px dashed #c3d2d8;border-radius:18px;padding:56px 32px;cursor:pointer;
+    transition:.18s;box-shadow:var(--shadow)
+  }
+  .dropzone:hover,.dropzone.drag{border-color:var(--aqua);background:#fafdfe}
+  .dropzone .ic{width:58px;height:58px;margin:0 auto 18px;color:var(--aqua)}
+  .dropzone .dz-t{font-size:18px;font-weight:700;color:var(--navy)}
+  .dropzone .dz-s{font-size:13px;color:var(--muted);margin-top:6px}
+  .steps-explain{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:40px;text-align:left}
+  .se{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 18px}
+  .se .n{width:26px;height:26px;border-radius:50%;background:var(--navy);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+  .se .h{font-weight:700;font-size:14px;color:var(--navy);margin-bottom:3px}
+  .se .d{font-size:12.5px;color:var(--muted)}
+
+  /* ---------- Section card ---------- */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+  .card .ch{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+  .card .ch h2{margin:0;font-size:16px;font-weight:700;color:var(--navy);letter-spacing:.01em}
+  .card .ch .hint{font-size:12px;color:var(--muted)}
+  .card .cb{padding:22px}
+  .section-eyebrow{font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--aqua-dark);margin:0 0 14px}
+
+  /* ---------- Mapping ---------- */
+  .map-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
+  .fld label{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  .fld select,.fld input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:14px;background:#fff;color:var(--ink)}
+  .fld select:focus,.fld input:focus{outline:0;border-color:var(--aqua);box-shadow:0 0 0 3px rgba(10,166,184,.15)}
+  .preview-table{width:100%;border-collapse:collapse;font-size:13px}
+  .preview-table th{text-align:left;padding:8px 10px;background:#f6f9fa;color:var(--muted);font-weight:700;font-size:11px;letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid var(--line)}
+  .preview-table td{padding:8px 10px;border-bottom:1px solid #f0f4f5}
+  .preview-table td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+  .pv-note{font-size:12.5px;color:var(--muted);margin-top:12px}
+
+  /* ---------- KPIs ---------- */
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .kpi .lab{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+  .kpi .val{font-size:28px;font-weight:800;color:var(--navy);margin-top:6px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .kpi .val .u{font-size:14px;font-weight:600;color:var(--muted);margin-left:4px}
+  .kpi .sub2{font-size:12px;color:var(--muted);margin-top:4px}
+  .kpi.accent{border-top:3px solid var(--aqua)}
+  .kpi.bottleneck{border-top:3px solid var(--bronze)}
+  .kpi.saved{border-top:3px solid var(--good)}
+  .kpi .delta{font-size:12.5px;font-weight:700;color:var(--good);margin-top:4px}
+
+  /* ---------- bottleneck banner ---------- */
+  .bn-banner{display:flex;align-items:center;gap:16px;background:linear-gradient(90deg,#fff7ec,#fffdf9);border:1px solid #f0dcbd;border-left:4px solid var(--bronze);border-radius:12px;padding:16px 20px;margin-bottom:24px}
+  .bn-banner .bdot{width:42px;height:42px;border-radius:10px;background:var(--bronze);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .bn-banner .bt{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--bronze)}
+  .bn-banner .bd{font-size:15px;color:var(--ink);margin-top:2px}
+  .bn-banner .bd strong{color:var(--navy)}
+
+  /* ---------- charts ---------- */
+  .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px}
+  @media(max-width:980px){.chart-grid{grid-template-columns:1fr}}
+  .chart-host{width:100%}
+  .chart-host svg{width:100%;height:auto;display:block}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:6px}
+  .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+
+  /* ---------- split table ---------- */
+  .split-table{width:100%;border-collapse:collapse;font-size:13.5px}
+  .split-table th{text-align:left;padding:11px 12px;background:#f6f9fa;color:var(--muted);font-weight:700;font-size:11px;letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid var(--line);position:sticky;top:0}
+  .split-table td{padding:9px 12px;border-bottom:1px solid #f0f4f5;vertical-align:middle}
+  .split-table tr:hover td{background:#fafdfe}
+  .split-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .split-table .stepname{font-weight:600;color:var(--ink);max-width:340px}
+  .split-table tr.is-bn td.stepname{color:var(--bronze)}
+  .badge-bn{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:var(--bronze);border-radius:5px;padding:2px 7px;margin-left:8px}
+  .mini-bar{height:8px;border-radius:4px;background:#eef3f4;position:relative;min-width:60px;overflow:hidden}
+  .mini-bar > i{position:absolute;left:0;top:0;bottom:0;border-radius:4px;background:var(--navy)}
+  .mini-bar.bn > i{background:var(--bronze)}
+  .split-table select{padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-size:13px;background:#fff}
+  .split-table select:focus{outline:0;border-color:var(--aqua)}
+  .split-table input.pct{width:62px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-size:13px;margin-left:6px}
+  .res-saved{color:var(--good);font-weight:700}
+  .res-zero{color:var(--muted)}
+
+  .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:12px}
+  .toolbar h1{font-size:22px;font-weight:800;color:var(--navy);margin:0;letter-spacing:-.01em}
+  .toolbar .sub{font-size:13px;color:var(--muted);margin-top:2px}
+  .toolbar-actions{display:flex;gap:10px}
+
+  .hide{display:none!important}
+  .footer{text-align:center;font-size:11px;color:#94a8b1;letter-spacing:.04em;margin-top:40px}
+  .err{background:#fdeceb;border:1px solid #f5c6c2;color:#a3271d;border-radius:10px;padding:12px 16px;font-size:13.5px;margin-top:16px}
+</style>
+<script>/*__EXCELJS_LIB__*/</script>
+</head>
+<body>
+
+<header class="app">
+  <div class="brand">
+    <div class="wordmark">TUUCI</div>
+    <div class="rule"></div>
+    <div class="sub">
+      <span class="t1">Standard Work Analyzer</span>
+      <span class="t2">The Art of Shade</span>
+    </div>
+  </div>
+  <div class="hdr-actions">
+    <span id="hdrFile" class="hdr-file"></span>
+    <button id="btnNew" class="btn btn-ghost hide">New file</button>
+  </div>
+</header>
+
+<main>
+  <!-- ===== UPLOAD ===== -->
+  <section id="viewUpload">
+    <div class="upload-wrap">
+      <h1>See where the time really goes.</h1>
+      <p class="lead">Upload a Standard Work template, choose which steps can be split across operators, and find the bottleneck in seconds — no spreadsheets, just the chart that matters.</p>
+      <div id="dropzone" class="dropzone">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        <div class="dz-t">Drop your Standard Work file here</div>
+        <div class="dz-s">or click to browse · Excel .xlsx / .xlsm</div>
+      </div>
+      <input type="file" id="fileInput" accept=".xlsx,.xlsm" class="hide" />
+      <div id="uploadErr"></div>
+      <div class="steps-explain">
+        <div class="se"><div class="n">1</div><div class="h">Upload</div><div class="d">Drop in your SWI workbook. We auto-detect your step and time columns.</div></div>
+        <div class="se"><div class="n">2</div><div class="h">Split</div><div class="d">Flag the steps that can run in parallel and how many operators share them.</div></div>
+        <div class="se"><div class="n">3</div><div class="h">See the bottleneck</div><div class="d">Pareto and per-step charts pinpoint the constraint and the impact of splitting it.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== MAPPING ===== -->
+  <section id="viewMap" class="hide">
+    <p class="section-eyebrow">Step 1 · Confirm your data</p>
+    <div class="card">
+      <div class="ch"><h2>Map your template</h2><span class="hint">We guessed these — adjust if needed</span></div>
+      <div class="cb">
+        <div class="map-grid">
+          <div class="fld"><label>Worksheet</label><select id="mSheet"></select></div>
+          <div class="fld"><label>Header row</label><input type="number" id="mHeader" min="1" /></div>
+          <div class="fld"><label>Step / task column</label><select id="mName"></select></div>
+          <div class="fld"><label>Time column</label><select id="mTime"></select></div>
+          <div class="fld"><label>Time unit</label><select id="mUnit"><option value="min">Minutes</option><option value="sec">Seconds</option></select></div>
+        </div>
+        <div id="mapErr"></div>
+        <div style="overflow:auto;max-height:340px;border:1px solid var(--line);border-radius:10px">
+          <table class="preview-table" id="previewTable"></table>
+        </div>
+        <p class="pv-note" id="pvNote"></p>
+        <div style="margin-top:18px;display:flex;gap:10px;justify-content:flex-end">
+          <button class="btn btn-light" id="btnBackUpload">Back</button>
+          <button class="btn btn-primary" id="btnAnalyze">Analyze →</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== DASHBOARD ===== -->
+  <section id="viewDash" class="hide">
+    <div class="toolbar">
+      <div>
+        <h1 id="dashTitle">Bottleneck Analysis</h1>
+        <div class="sub" id="dashSub"></div>
+      </div>
+      <div class="toolbar-actions">
+        <button class="btn btn-light" id="btnRemap">Adjust mapping</button>
+        <button class="btn btn-light" id="btnReset">Reset splits</button>
+      </div>
+    </div>
+
+    <div class="kpis" id="kpis"></div>
+    <div id="bnBanner"></div>
+
+    <div class="chart-grid">
+      <div class="card">
+        <div class="ch"><h2>Pareto — where the time concentrates</h2><span class="hint">sorted longest → shortest</span></div>
+        <div class="cb"><div class="chart-host" id="paretoChart"></div>
+          <div class="legend"><span><i style="background:var(--navy)"></i>Step time</span><span><i style="background:var(--bronze)"></i>Bottleneck</span><span><i style="background:var(--aqua)"></i>Cumulative %</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ch"><h2>Per-step time — current vs. split</h2><span class="hint">in build order</span></div>
+        <div class="cb"><div class="chart-host" id="barChart"></div>
+          <div class="legend"><span><i style="background:#cfdde2"></i>Current</span><span><i style="background:var(--aqua)"></i>After split</span><span><i style="background:var(--bronze)"></i>Bottleneck</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ch"><h2>Steps &amp; splitting</h2><span class="hint">flag steps that can run in parallel</span></div>
+      <div class="cb" style="padding:0">
+        <div style="overflow:auto">
+          <table class="split-table" id="splitTable"></table>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">TUUCI · Standard Work Analyzer — runs entirely in your browser. Nothing is uploaded.</div>
+  </section>
+</main>
+
+<script>
+"use strict";
+/* ============================================================
+   TUUCI Standard Work Analyzer  —  vanilla JS, exceljs for parse
+   ============================================================ */
+
+var S = {
+  fileName: null,
+  sheets: [],        // [{name, grid}]   grid = 2D array of normalized cell values
+  map: { sheet:0, headerRow:1, nameCol:0, timeCol:1, unit:'min' },
+  steps: []          // [{name, time(min), split:{mode:'off'|'2'|'3'|'4'|'pct', pct:Number}}]
+};
+
+/* ---------- helpers ---------- */
+function $(id){ return document.getElementById(id); }
+function el(tag, attrs, html){ var e=document.createElement(tag); if(attrs) for(var k in attrs) e.setAttribute(k,attrs[k]); if(html!=null) e.innerHTML=html; return e; }
+function colLetter(n){ var s=''; n++; while(n>0){ var m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26);} return s; }
+function fmt(n, d){ d=(d==null?1:d); if(n==null||isNaN(n)) return '–'; var v=Number(n); var r=v.toFixed(d); return r.replace(/\.0+$/,'').replace(/(\.\d*?)0+$/,'$1'); }
+function fmtMin(n){ return fmt(n,1); }
+function clampStr(s,n){ s=String(s==null?'':s); return s.length>n ? s.slice(0,n-1)+'…' : s; }
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* normalize an exceljs cell value to a plain primitive */
+function cellVal(v){
+  if(v==null) return null;
+  if(typeof v==='object'){
+    if(v.result!=null) return v.result;            // formula result
+    if(v.text!=null) return v.text;                // hyperlink
+    if(Array.isArray(v.richText)) return v.richText.map(function(r){return r.text;}).join('');
+    if(v instanceof Date) return v;
+    if(v.formula!=null) return null;
+    return null;
+  }
+  return v;
+}
+function asNum(v){
+  v=cellVal(v);
+  if(v==null) return null;
+  if(typeof v==='number') return isFinite(v)?v:null;
+  var s=String(v).replace(/[^0-9.\-:]/g,'');
+  if(s.indexOf(':')>=0){ var p=s.split(':').map(Number); if(p.some(isNaN))return null; // mm:ss -> minutes
+    return p.length===3 ? p[0]*60+p[1]+p[2]/60 : p[0]+p[1]/60; }
+  var n=parseFloat(s); return isNaN(n)?null:n;
+}
+function asText(v){ v=cellVal(v); if(v==null)return ''; if(v instanceof Date) return ''; return String(v).trim(); }
+
+/* ============================================================
+   FILE LOAD / PARSE
+   ============================================================ */
+function showErr(hostId,msg){ var h=$(hostId); h.innerHTML=''; if(msg) h.appendChild(el('div',{'class':'err'},esc(msg))); }
+
+function handleFile(file){
+  showErr('uploadErr','');
+  if(!file) return;
+  if(!/\.(xlsx|xlsm)$/i.test(file.name)){ showErr('uploadErr','Please choose an Excel .xlsx or .xlsm file.'); return; }
+  S.fileName=file.name;
+  var reader=new FileReader();
+  reader.onload=function(){
+    var wb=new ExcelJS.Workbook();
+    wb.xlsx.load(reader.result).then(function(){
+      S.sheets=[];
+      wb.eachSheet(function(ws){
+        var maxR=Math.min(ws.rowCount||0, 400), maxC=Math.min(ws.columnCount||0, 40);
+        var grid=[];
+        for(var r=1;r<=maxR;r++){
+          var row=[]; var rr=ws.getRow(r);
+          for(var c=1;c<=maxC;c++){ row.push(rr.getCell(c).value); }
+          grid.push(row);
+        }
+        S.sheets.push({ name:ws.name, grid:grid });
+      });
+      if(!S.sheets.length){ showErr('uploadErr','No worksheets found in that file.'); return; }
+      autoDetect();
+      buildMapUI();
+      goView('map');
+    }).catch(function(e){ console.error(e); showErr('uploadErr','Could not read that file. Is it a valid Excel workbook?'); });
+  };
+  reader.onerror=function(){ showErr('uploadErr','Could not read the file.'); };
+  reader.readAsArrayBuffer(file);
+}
+
+/* pick the sheet + columns that look like a standard-work table */
+function autoDetect(){
+  var best=null;
+  var TIME_RE=/\b(time|min|minute|sec|second|duration|cycle|std\.?\s*time)\b/i;
+  var NAME_RE=/\b(step|task|operation|element|description|process|activity|work)\b/i;
+  for(var si=0; si<S.sheets.length; si++){
+    var grid=S.sheets[si].grid;
+    for(var hr=0; hr<Math.min(grid.length,20); hr++){
+      var row=grid[hr]||[]; var timeC=-1,nameC=-1;
+      for(var c=0;c<row.length;c++){ var t=asText(row[c]); if(!t)continue;
+        if(timeC<0 && TIME_RE.test(t)) timeC=c;
+        if(nameC<0 && NAME_RE.test(t)) nameC=c;
+      }
+      if(timeC>=0){
+        var score=(nameC>=0?2:0)+1+countNumericBelow(grid,hr,timeC);
+        if(!best||score>best.score) best={score:score,sheet:si,headerRow:hr,timeCol:timeC,nameCol:chooseNameCol(grid,hr,timeC,nameC)};
+      }
+    }
+  }
+  if(!best){ // fallback: most-numeric column = time, most-texty = name
+    var grid0=S.sheets[0].grid;
+    var tc=mostNumericCol(grid0), nc=mostTextCol(grid0,tc);
+    best={sheet:0,headerRow:findHeaderGuess(grid0,tc),timeCol:tc,nameCol:nc};
+  }
+  S.map.sheet=best.sheet; S.map.headerRow=best.headerRow; S.map.timeCol=best.timeCol; S.map.nameCol=best.nameCol;
+  // unit guess
+  var htxt=asText((S.sheets[best.sheet].grid[best.headerRow]||[])[best.timeCol]);
+  S.map.unit = /\bsec/i.test(htxt) ? 'sec' : 'min';
+}
+function countNumericBelow(grid,hr,c){ var n=0; for(var r=hr+1;r<grid.length;r++){ if(asNum((grid[r]||[])[c])>0)n++; } return n; }
+function mostNumericCol(grid){ var w=(grid[0]||[]).length,best=0,bc=1; for(var c=0;c<w;c++){var n=0;for(var r=0;r<grid.length;r++){if(asNum((grid[r]||[])[c])>0)n++;} if(n>best){best=n;bc=c;}} return bc; }
+function mostTextCol(grid,skip){ var w=(grid[0]||[]).length,best=0,bc=0; for(var c=0;c<w;c++){ if(c===skip)continue; var len=0;for(var r=0;r<grid.length;r++){var t=asText((grid[r]||[])[c]); if(t&&!asNum(t))len+=t.length;} if(len>best){best=len;bc=c;}} return bc; }
+function guessNameCol(grid,hr,skip){ var w=(grid[hr]||[]).length,best=0,bc=0; for(var c=0;c<w;c++){if(c===skip)continue;var len=0;for(var r=hr+1;r<grid.length;r++){var t=asText((grid[r]||[])[c]);if(t&&!asNum(t))len+=t.length;}if(len>best){best=len;bc=c;}} return bc; }
+/* pick the description column: the textiest column below the header, but keep a
+   header-matched column if it actually holds substantial text (not step numbers) */
+function colTextLen(grid,hr,c){ var len=0; for(var r=hr+1;r<grid.length;r++){ var t=asText((grid[r]||[])[c]); if(t&&asNum(t)==null) len+=t.length; } return len; }
+function chooseNameCol(grid,hr,timeCol,regexCol){
+  var textiest=guessNameCol(grid,hr,timeCol);
+  if(regexCol>=0 && regexCol!==timeCol){
+    var rl=colTextLen(grid,hr,regexCol), tl=colTextLen(grid,hr,textiest);
+    if(rl >= 0.5*tl) return regexCol;   // header-matched column is genuinely texty
+  }
+  return textiest;
+}
+function findHeaderGuess(grid,tc){ for(var r=0;r<Math.min(grid.length,20);r++){ if(asText((grid[r]||[])[tc])) return r; } return 0; }
+
+/* ============================================================
+   MAPPING UI
+   ============================================================ */
+function buildMapUI(){
+  var grid=S.sheets[S.map.sheet].grid;
+  // sheet select
+  var sel=$('mSheet'); sel.innerHTML='';
+  S.sheets.forEach(function(s,i){ sel.appendChild(el('option',{value:i},esc(s.name))); });
+  sel.value=S.map.sheet;
+  $('mHeader').value=S.map.headerRow+1;
+  $('mUnit').value=S.map.unit;
+  fillColSelects();
+  renderPreview();
+  // wire (idempotent)
+  sel.onchange=function(){ S.map.sheet=+this.value; var g=S.sheets[S.map.sheet].grid; autoColsForSheet(g); $('mHeader').value=S.map.headerRow+1; fillColSelects(); renderPreview(); };
+  $('mHeader').onchange=function(){ S.map.headerRow=Math.max(0,(+this.value||1)-1); fillColSelects(); renderPreview(); };
+  $('mName').onchange=function(){ S.map.nameCol=+this.value; renderPreview(); };
+  $('mTime').onchange=function(){ S.map.timeCol=+this.value; renderPreview(); };
+  $('mUnit').onchange=function(){ S.map.unit=this.value; renderPreview(); };
+}
+function autoColsForSheet(g){ S.map.timeCol=mostNumericCol(g); S.map.nameCol=mostTextCol(g,S.map.timeCol); S.map.headerRow=findHeaderGuess(g,S.map.timeCol); }
+function fillColSelects(){
+  var grid=S.sheets[S.map.sheet].grid; var hdr=grid[S.map.headerRow]||[];
+  var w=0; grid.forEach(function(r){ if(r&&r.length>w)w=r.length; });
+  function fill(selId,cur){ var s=$(selId); s.innerHTML=''; for(var c=0;c<w;c++){ var label=asText(hdr[c])||('Column '+colLetter(c)); s.appendChild(el('option',{value:c}, colLetter(c)+' · '+esc(clampStr(label,26)))); } s.value=cur; }
+  fill('mName',S.map.nameCol); fill('mTime',S.map.timeCol);
+}
+function extractSteps(){
+  var grid=S.sheets[S.map.sheet].grid, out=[];
+  for(var r=S.map.headerRow+1; r<grid.length; r++){
+    var row=grid[r]||[];
+    var t=asNum(row[S.map.timeCol]);
+    if(t==null||t<=0) continue;
+    var name=asText(row[S.map.nameCol]);
+    if(/^(total|grand total|sum|process total)\b/i.test(name)) continue;
+    if(!name) name='Step '+(out.length+1);
+    var minutes = S.map.unit==='sec' ? t/60 : t;
+    out.push({ name:name, time:minutes });
+  }
+  return out;
+}
+function renderPreview(){
+  showErr('mapErr','');
+  var rows=extractSteps();
+  var tbl=$('previewTable'); tbl.innerHTML='';
+  var thead=el('tr'); thead.appendChild(el('th',null,'#')); thead.appendChild(el('th',null,'Step / Task')); thead.appendChild(el('th',null,'Time ('+(S.map.unit)+')')); tbl.appendChild(thead);
+  rows.slice(0,200).forEach(function(s,i){
+    var tr=el('tr');
+    tr.appendChild(el('td',null,String(i+1)));
+    tr.appendChild(el('td',null,esc(clampStr(s.name,70))));
+    var disp = S.map.unit==='sec' ? s.time*60 : s.time;
+    tr.appendChild(el('td',{'class':'num'},fmt(disp,2)));
+    tbl.appendChild(tr);
+  });
+  var total=rows.reduce(function(a,s){return a+s.time;},0);
+  $('pvNote').innerHTML = rows.length
+    ? '<strong>'+rows.length+' steps</strong> detected · total <strong>'+fmtMin(total)+' min</strong> ('+fmt(total/60,2)+' h). Looks wrong? Adjust the columns or header row above.'
+    : '';
+  if(!rows.length){ showErr('mapErr','No timed steps found with these settings. Try a different time column, header row, or worksheet.'); }
+  $('btnAnalyze').disabled = !rows.length;
+}
+
+/* ============================================================
+   ANALYSIS MODEL
+   ============================================================ */
+function resultTime(step){
+  var sp=step.split||{mode:'off'};
+  if(sp.mode==='off') return step.time;
+  if(sp.mode==='pct'){ var p=Math.max(0,Math.min(95,sp.pct||0)); return step.time*(1-p/100); }
+  var n=parseInt(sp.mode,10)||1; return step.time/n;
+}
+function compute(){
+  var steps=S.steps;
+  var total=0, opt=0, bnIdx=-1, bnVal=-1, optBnIdx=-1, optBnVal=-1;
+  steps.forEach(function(s,i){
+    var rt=resultTime(s);
+    total+=s.time; opt+=rt;
+    if(s.time>bnVal){bnVal=s.time;bnIdx=i;}
+    if(rt>optBnVal){optBnVal=rt;optBnIdx=i;}
+  });
+  return {total:total,opt:opt,saved:total-opt,bnIdx:bnIdx,bnVal:bnVal,optBnIdx:optBnIdx,optBnVal:optBnVal,count:steps.length};
+}
+
+/* ============================================================
+   DASHBOARD RENDER
+   ============================================================ */
+function startAnalysis(){
+  S.steps=extractSteps().map(function(s){ return {name:s.name,time:s.time,split:{mode:'off',pct:50}}; });
+  $('dashTitle').textContent='Bottleneck Analysis';
+  $('dashSub').textContent=S.fileName+'  ·  '+S.sheets[S.map.sheet].name;
+  goView('dash');
+  renderDash();
+}
+function renderDash(){
+  var m=compute();
+  renderKPIs(m); renderBanner(m); renderPareto(m); renderBar(m); renderSplitTable(m);
+}
+
+function renderKPIs(m){
+  var host=$('kpis'); host.innerHTML='';
+  function kpi(cls,lab,val,unit,sub){
+    var k=el('div',{'class':'kpi '+cls});
+    k.appendChild(el('div',{'class':'lab'},lab));
+    k.appendChild(el('div',{'class':'val'},val+(unit?'<span class="u">'+unit+'</span>':'')));
+    if(sub) k.appendChild(el('div',{'class':sub.cls||'sub2'},sub.html));
+    return k;
+  }
+  host.appendChild(kpi('accent','Current cycle time',fmtMin(m.total),'min',{html:fmt(m.total/60,2)+' h · '+m.count+' steps'}));
+  var bn=S.steps[m.bnIdx];
+  host.appendChild(kpi('bottleneck','Bottleneck step',fmtMin(m.bnVal),'min',{html:bn?esc(clampStr(bn.name,30)):'–'}));
+  var pct = m.total>0 ? (m.saved/m.total*100):0;
+  host.appendChild(kpi('saved','Optimized cycle time',fmtMin(m.opt),'min',{html:fmt(m.opt/60,2)+' h'}));
+  host.appendChild(kpi('saved','Time saved by splitting',fmtMin(m.saved),'min',{cls:'delta',html:(m.saved>0?'▼ '+fmt(pct,1)+'% faster':'no splits applied')}));
+}
+function renderBanner(m){
+  var host=$('bnBanner'); var bn=S.steps[m.bnIdx];
+  if(!bn){host.innerHTML='';return;}
+  var share=m.total>0?(bn.time/m.total*100):0;
+  var msg='<span class="bt">Primary bottleneck</span><div class="bd"><strong>'+esc(bn.name)+'</strong> takes <strong>'+fmtMin(bn.time)+' min</strong> — '+fmt(share,0)+'% of the whole build. ';
+  if((bn.split&&bn.split.mode!=='off')){ msg+='With your split it drops to <strong>'+fmtMin(resultTime(bn))+' min</strong>. The next constraint is <strong>'+esc((S.steps[m.optBnIdx]||{}).name||'')+'</strong> at '+fmtMin(m.optBnVal)+' min.'; }
+  else { msg+='Splitting this step across operators will move the line the most.'; }
+  msg+='</div>';
+  host.innerHTML='<div class="bn-banner"><div class="bdot"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0z"/></svg></div><div>'+msg+'</div></div>';
+}
+
+/* ---------- Pareto chart (SVG) ---------- */
+function renderPareto(m){
+  var data=S.steps.map(function(s,i){return {name:s.name,time:s.time,i:i};}).sort(function(a,b){return b.time-a.time;});
+  var W=560,H=300, padL=42,padR=46,padT=18,padB=64;
+  var n=data.length; if(!n){$('paretoChart').innerHTML='';return;}
+  var plotW=W-padL-padR, plotH=H-padT-padB;
+  var maxT=data[0].time||1; var total=data.reduce(function(a,d){return a+d.time;},0)||1;
+  var bw=plotW/n, gap=Math.min(8,bw*0.25);
+  var svg='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" font-family="'+'inherit'+'">';
+  // y grid (left)
+  for(var g=0;g<=4;g++){ var yy=padT+plotH*(1-g/4); var val=maxT*g/4;
+    svg+='<line x1="'+padL+'" y1="'+yy+'" x2="'+(W-padR)+'" y2="'+yy+'" stroke="#eef3f4"/>';
+    svg+='<text x="'+(padL-6)+'" y="'+(yy+3)+'" text-anchor="end" font-size="9" fill="#8aa0a9">'+fmt(val,0)+'</text>';
+  }
+  // bars + cumulative
+  var cum=0, pts=[];
+  for(var i=0;i<n;i++){ var d=data[i];
+    var x=padL+i*bw, bx=x+gap/2, w=bw-gap;
+    var bh=(d.time/maxT)*plotH, by=padT+plotH-bh;
+    var isBn=(d.i===m.bnIdx);
+    svg+='<rect x="'+bx.toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+bh.toFixed(1)+'" rx="2" fill="'+(isBn?'#b8893f':'#00263a')+'"><title>'+esc(d.name)+' — '+fmtMin(d.time)+' min</title></rect>';
+    cum+=d.time; var cy=padT+plotH*(1-cum/total); pts.push([x+bw/2,cy]);
+    if(i<14) svg+='<text x="'+(x+bw/2).toFixed(1)+'" y="'+(H-padB+14)+'" text-anchor="end" font-size="8.5" fill="#7c929b" transform="rotate(-40 '+(x+bw/2).toFixed(1)+' '+(H-padB+14)+')">'+esc(clampStr(d.name,16))+'</text>';
+  }
+  // 80% line
+  var y80=padT+plotH*(1-0.8); svg+='<line x1="'+padL+'" y1="'+y80+'" x2="'+(W-padR)+'" y2="'+y80+'" stroke="#cdb38a" stroke-dasharray="4 4"/><text x="'+(W-padR+3)+'" y="'+(y80+3)+'" font-size="8.5" fill="#b8893f">80%</text>';
+  // cumulative path
+  var path=pts.map(function(p,i){return (i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1);}).join(' ');
+  svg+='<path d="'+path+'" fill="none" stroke="#0aa6b8" stroke-width="2"/>';
+  pts.forEach(function(p){ svg+='<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="2.6" fill="#0aa6b8"/>'; });
+  // right axis %
+  for(var g2=0;g2<=4;g2++){ var yy2=padT+plotH*(1-g2/4); svg+='<text x="'+(W-padR+6)+'" y="'+(yy2+3)+'" font-size="9" fill="#8aa0a9">'+(g2*25)+'%</text>'; }
+  svg+='</svg>';
+  $('paretoChart').innerHTML=svg;
+}
+
+/* ---------- Per-step horizontal bar (current vs split) ---------- */
+function renderBar(m){
+  var steps=S.steps; var n=steps.length; if(!n){$('barChart').innerHTML='';return;}
+  var rowH=26, padT=10, padB=6, labW=150, valW=54, W=560;
+  var plotW=W-labW-valW-12;
+  var H=padT+padB+n*rowH;
+  var maxT=Math.max.apply(null,steps.map(function(s){return s.time;}))||1;
+  var svg='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMin meet">';
+  for(var i=0;i<n;i++){ var s=steps[i]; var y=padT+i*rowH; var cy=y+rowH/2;
+    var isBn=(i===m.bnIdx);
+    var rt=resultTime(s);
+    var wCur=(s.time/maxT)*plotW, wOpt=(rt/maxT)*plotW;
+    svg+='<text x="0" y="'+(cy+3.5)+'" font-size="10.5" fill="#3a5160">'+esc(clampStr((i+1)+'. '+s.name,24))+'</text>';
+    // current (track)
+    svg+='<rect x="'+labW+'" y="'+(cy-7)+'" width="'+wCur.toFixed(1)+'" height="14" rx="3" fill="#cfdde2"><title>'+esc(s.name)+' — current '+fmtMin(s.time)+' min</title></rect>';
+    // optimized overlay
+    var oc=isBn?'#b8893f':'#0aa6b8';
+    svg+='<rect x="'+labW+'" y="'+(cy-7)+'" width="'+wOpt.toFixed(1)+'" height="14" rx="3" fill="'+oc+'"><title>'+esc(s.name)+' — after split '+fmtMin(rt)+' min</title></rect>';
+    var lbl = (rt<s.time-0.01) ? fmtMin(rt)+' / '+fmtMin(s.time) : fmtMin(s.time);
+    svg+='<text x="'+(labW+Math.max(wCur,wOpt)+6)+'" y="'+(cy+3.5)+'" font-size="10" fill="#5d7280" font-weight="600">'+lbl+'</text>';
+  }
+  svg+='</svg>';
+  $('barChart').innerHTML=svg;
+}
+
+/* ---------- Split table ---------- */
+function renderSplitTable(m){
+  var tbl=$('splitTable'); tbl.innerHTML='';
+  var hr=el('tr');
+  ['#','Step / Task','Current (min)','Share','Can split?','Result (min)','Saved'].forEach(function(h,i){ hr.appendChild(el('th',{ style:(i>=2?'text-align:right':'') },h)); });
+  tbl.appendChild(hr);
+  S.steps.forEach(function(s,i){
+    var isBn=(i===m.bnIdx);
+    var rt=resultTime(s); var saved=s.time-rt;
+    var share=m.total>0?(s.time/m.total*100):0;
+    var tr=el('tr',{'class':isBn?'is-bn':''});
+    tr.appendChild(el('td',null,String(i+1)));
+    var nameCell=el('td',{'class':'stepname'}, esc(clampStr(s.name,60))+(isBn?'<span class="badge-bn">Bottleneck</span>':''));
+    tr.appendChild(nameCell);
+    tr.appendChild(el('td',{'class':'num'},fmtMin(s.time)));
+    // share with mini bar
+    var sc=el('td',{'class':'num'});
+    sc.innerHTML='<div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><span>'+fmt(share,0)+'%</span><div class="mini-bar '+(isBn?'bn':'')+'" style="width:60px"><i style="width:'+Math.max(4,share/ (m.total>0?(m.bnVal/m.total*100):1) *100).toFixed(0)+'%"></i></div></div>';
+    tr.appendChild(sc);
+    // split control
+    var ctl=el('td');
+    var sel=el('select',{'data-idx':i,'class':'splitSel'});
+    [['off','— no'],['2','2 operators'],['3','3 operators'],['4','4 operators'],['pct','Custom %']].forEach(function(o){
+      var op=el('option',{value:o[0]},o[1]); if(s.split.mode===o[0])op.setAttribute('selected','selected'); sel.appendChild(op);
+    });
+    ctl.appendChild(sel);
+    if(s.split.mode==='pct'){
+      var inp=el('input',{type:'number','class':'pct','data-idx':i,min:'0',max:'95',value:String(s.split.pct||50)});
+      ctl.appendChild(inp); ctl.appendChild(document.createTextNode(' %'));
+    }
+    tr.appendChild(ctl);
+    tr.appendChild(el('td',{'class':'num'},fmtMin(rt)));
+    tr.appendChild(el('td',{'class':'num '+(saved>0.01?'res-saved':'res-zero')}, saved>0.01?('−'+fmtMin(saved)):'–'));
+    tbl.appendChild(tr);
+  });
+  // wire controls
+  Array.prototype.forEach.call(tbl.querySelectorAll('.splitSel'),function(sel){
+    sel.onchange=function(){ var i=+this.getAttribute('data-idx'); S.steps[i].split.mode=this.value; renderDash(); };
+  });
+  Array.prototype.forEach.call(tbl.querySelectorAll('input.pct'),function(inp){
+    inp.onchange=inp.oninput=function(){ var i=+this.getAttribute('data-idx'); S.steps[i].split.pct=Math.max(0,Math.min(95,+this.value||0)); renderDash(); };
+  });
+}
+
+/* ============================================================
+   VIEW ROUTING + WIRING
+   ============================================================ */
+function goView(v){
+  $('viewUpload').classList.toggle('hide',v!=='upload');
+  $('viewMap').classList.toggle('hide',v!=='map');
+  $('viewDash').classList.toggle('hide',v!=='dash');
+  $('btnNew').classList.toggle('hide',v==='upload');
+  $('hdrFile').textContent = (v!=='upload' && S.fileName)?S.fileName:'';
+  window.scrollTo(0,0);
+}
+function wire(){
+  var dz=$('dropzone'), fi=$('fileInput');
+  dz.onclick=function(){ fi.click(); };
+  fi.onchange=function(){ if(fi.files&&fi.files[0]) handleFile(fi.files[0]); fi.value=''; };
+  ['dragenter','dragover'].forEach(function(ev){ dz.addEventListener(ev,function(e){e.preventDefault();dz.classList.add('drag');}); });
+  ['dragleave','drop'].forEach(function(ev){ dz.addEventListener(ev,function(e){e.preventDefault();dz.classList.remove('drag');}); });
+  dz.addEventListener('drop',function(e){ var f=e.dataTransfer.files&&e.dataTransfer.files[0]; if(f) handleFile(f); });
+  $('btnAnalyze').onclick=startAnalysis;
+  $('btnBackUpload').onclick=function(){ goView('upload'); };
+  $('btnNew').onclick=function(){ goView('upload'); };
+  $('btnRemap').onclick=function(){ buildMapUI(); goView('map'); };
+  $('btnReset').onclick=function(){ S.steps.forEach(function(s){s.split={mode:'off',pct:50};}); renderDash(); };
+}
+wire();
+</script>
+</body>
+</html>
