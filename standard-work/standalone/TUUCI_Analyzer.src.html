@@ -156,6 +156,24 @@
   .cmp-delta.down{color:var(--good);background:#eaf7f1}
   .cmp-delta.zero{color:var(--muted)}
 
+  /* line balance — operator columns */
+  .bal-cols{display:flex;gap:12px;overflow-x:auto;padding-bottom:6px}
+  .bal-col{flex:1;min-width:150px;background:#faf9f6;border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column}
+  .bal-col.over{border-color:var(--bronze);box-shadow:0 0 0 2px rgba(177,84,47,.15)}
+  .bal-col.drag{border-color:var(--aqua);background:#fbfaf5}
+  .bal-col .bch{padding:9px 11px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:baseline}
+  .bal-col .bch .nm{font-size:12.5px;font-weight:700;color:var(--navy)}
+  .bal-col .bch .tot{font-size:13px;font-weight:800;font-variant-numeric:tabular-nums}
+  .bal-col .bch .tot.over{color:var(--bronze)}
+  .bal-col .bch .tot.ok{color:var(--good)}
+  .bal-col .body{padding:8px;display:flex;flex-direction:column;gap:6px;min-height:46px;flex:1}
+  .bal-chip{background:#fff;border:1px solid var(--line);border-left:3px solid var(--aqua);border-radius:7px;padding:7px 9px;cursor:grab;font-size:12px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+  .bal-chip:hover{border-color:var(--aqua);box-shadow:var(--shadow)}
+  .bal-chip.dragging{opacity:.4}
+  .bal-chip .cn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--ink)}
+  .bal-chip .ct{font-variant-numeric:tabular-nums;font-weight:700;color:var(--navy);flex-shrink:0}
+  .bal-empty{color:#aeb8bd;font-size:11.5px;text-align:center;padding:10px 4px}
+
   /* operator bars */
   .opbar-row{display:flex;align-items:center;gap:12px;margin-bottom:8px}
   .opbar-row .lab{width:96px;font-size:12.5px;font-weight:600;color:var(--ink);flex-shrink:0}
@@ -189,6 +207,7 @@
   <button data-tab="skus" class="active">Products</button>
   <button data-tab="analysis">Analysis</button>
   <button data-tab="compare">Compare</button>
+  <button data-tab="balance">Line Balance</button>
   <button data-tab="sim">Line Simulation</button>
 </nav>
 
@@ -196,6 +215,7 @@
   <section id="tab-skus"></section>
   <section id="tab-analysis" class="hide"></section>
   <section id="tab-compare" class="hide"></section>
+  <section id="tab-balance" class="hide"></section>
   <section id="tab-sim" class="hide"></section>
 </main>
 
@@ -212,6 +232,9 @@
 var LS_KEY='tuuci_skus_v2';
 function loadSkus(){ try{ return JSON.parse(localStorage.getItem(LS_KEY))||[]; }catch(e){ return []; } }
 function saveSkus(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(S.skus)); }catch(e){} }
+var LS_BAL='tuuci_bal_v1';
+function loadBal(){ try{ return JSON.parse(localStorage.getItem(LS_BAL))||{}; }catch(e){ return {}; } }
+function saveBal(){ try{ localStorage.setItem(LS_BAL, JSON.stringify(S.bal)); }catch(e){} }
 
 var S = {
   skus: loadSkus(),
@@ -221,7 +244,9 @@ var S = {
   anaId: null,
   cmpA: null, cmpB: null, cmpOrderA: null, cmpOrderB: null,
   simId: null,
-  sim: { units:3, ops:3, mode:'help', buffer:0.5 }
+  sim: { units:3, ops:3, mode:'help', buffer:0.5 },
+  bal: loadBal(),          // { skuId: {demand, hours, ops, assign:[opIndex per step]} }
+  balId: null
 };
 
 /* ---------- helpers ---------- */
@@ -435,11 +460,12 @@ function stepBarSVG(steps, bnIdx){
    ============================================================ */
 function setTab(name){
   S.tab=name;
-  ['skus','analysis','compare','sim'].forEach(function(t){ $('tab-'+t).classList.toggle('hide',t!==name); });
+  ['skus','analysis','compare','balance','sim'].forEach(function(t){ $('tab-'+t).classList.toggle('hide',t!==name); });
   Array.prototype.forEach.call($('tabs').children,function(b){ b.classList.toggle('active', b.getAttribute('data-tab')===name); });
   if(name==='skus') renderSkus();
   if(name==='analysis') renderAnalysis();
   if(name==='compare') renderCompare();
+  if(name==='balance') renderBalance();
   if(name==='sim') renderSim();
   window.scrollTo(0,0);
 }
@@ -660,6 +686,125 @@ function buildDragList(listEl, order, sku, side){
     });
     listEl.appendChild(it);
   });
+}
+
+/* ---------- LINE BALANCE TAB (yamazumi vs takt) ---------- */
+var BAL_COLORS=['#15171a','#a8854c','#4f7a5b','#3c4a52','#8a6b39','#6b7178','#b1542f','#c9a55f','#2f6b5a','#7a5230'];
+function getBal(sku){
+  var c=S.bal[sku.id];
+  if(!c){ c={ demand:10, hours:7, stations:Math.min(4,sku.steps.length), assign:null, people:null }; S.bal[sku.id]=c; }
+  if(c.stations<1)c.stations=1; if(c.stations>sku.steps.length)c.stations=sku.steps.length;
+  if(!c.assign || c.assign.length!==sku.steps.length || Math.max.apply(null,c.assign)>=c.stations) autoBalance(sku,c);
+  if(!c.people || c.people.length!==c.stations){ var p=[]; for(var i=0;i<c.stations;i++)p.push((c.people&&c.people[i])||1); c.people=p; }
+  return c;
+}
+function autoBalance(sku,c){
+  var w=sku.steps.map(function(s){return s.time;});
+  var groups=partition(w,c.stations);
+  var assign=new Array(w.length).fill(0);
+  groups.forEach(function(g,gi){ g.forEach(function(idx){ assign[idx]=gi; }); });
+  c.assign=assign; c.stations=Math.max(groups.length,1);
+  var p=[]; for(var i=0;i<c.stations;i++)p.push(1); c.people=p;
+}
+function balMetrics(sku,c){
+  var loads=[],raw=[]; for(var s=0;s<c.stations;s++){loads.push(0);raw.push(0);}
+  sku.steps.forEach(function(st,i){ var k=Math.min(c.assign[i],c.stations-1); raw[k]+=st.time; });
+  for(var s2=0;s2<c.stations;s2++){ loads[s2]=raw[s2]/Math.max(1,c.people[s2]); }
+  var cycle=Math.max.apply(null,loads.concat([0]));
+  var totalOps=c.people.reduce(function(a,b){return a+b;},0);
+  var labour=sku.steps.reduce(function(a,st){return a+st.time;},0);
+  var availMin=c.hours*60;
+  return { loads:loads, raw:raw, cycle:cycle, totalOps:totalOps, labour:labour, availMin:availMin,
+           takt: c.demand>0?availMin/c.demand:0, chairsDay: cycle>0?availMin/cycle:0,
+           eff: (totalOps*cycle>0)?labour/(totalOps*cycle):0 };
+}
+function yamazumiSVG(sku,c,m){
+  var W=640,H=330,padL=46,padR=16,padT=22,padB=54, plotW=W-padL-padR, plotH=H-padT-padB;
+  var N=c.stations; if(N<1)return '';
+  var maxY=Math.max(m.takt, Math.max.apply(null,m.loads.concat([0])))*1.15||1;
+  var scale=plotH/maxY, base=padT+plotH, bw=plotW/N, barW=Math.min(70,bw*0.62);
+  var svg='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet">';
+  // y grid
+  for(var g=0;g<=5;g++){ var val=maxY*g/5, yy=base-val*scale; svg+='<line x1="'+padL+'" y1="'+yy.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+yy.toFixed(1)+'" stroke="#eef0ec"/><text x="'+(padL-6)+'" y="'+(yy+3).toFixed(1)+'" text-anchor="end" font-size="9" fill="#9aa29a">'+fmt(val,0)+'</text>'; }
+  // bars
+  for(var s=0;s<N;s++){
+    var cx=padL+bw*s+bw/2, x=cx-barW/2, people=Math.max(1,c.people[s]), over=m.loads[s]>m.takt+1e-6, ycur=base;
+    var order=[]; sku.steps.forEach(function(st,i){ if(Math.min(c.assign[i],N-1)===s) order.push(i); });
+    order.forEach(function(i,oi){ var h=(sku.steps[i].time/people)*scale; var y=ycur-h; var col=BAL_COLORS[i%BAL_COLORS.length];
+      svg+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+Math.max(0,h).toFixed(1)+'" fill="'+col+'" stroke="#fff" stroke-width="0.6"><title>'+esc(sku.steps[i].name)+' — '+fmtMin(sku.steps[i].time)+' min'+(people>1?(' ÷'+people+' = '+fmtMin(sku.steps[i].time/people)):'')+'</title></rect>';
+      ycur=y;
+    });
+    if(over) svg+='<rect x="'+(x-1.5).toFixed(1)+'" y="'+ycur.toFixed(1)+'" width="'+(barW+3).toFixed(1)+'" height="'+(base-ycur).toFixed(1)+'" fill="none" stroke="#b1542f" stroke-width="2" rx="2"/>';
+    svg+='<text x="'+cx.toFixed(1)+'" y="'+(ycur-5).toFixed(1)+'" text-anchor="middle" font-size="10.5" font-weight="700" fill="'+(over?'#b1542f':'#15171a')+'">'+fmtMin(m.loads[s])+'</text>';
+    svg+='<text x="'+cx.toFixed(1)+'" y="'+(base+16)+'" text-anchor="middle" font-size="10.5" font-weight="600" fill="#3a4148">S'+(s+1)+'</text>';
+    if(people>1) svg+='<text x="'+cx.toFixed(1)+'" y="'+(base+30)+'" text-anchor="middle" font-size="9.5" fill="#8a6b39">'+people+' people</text>';
+  }
+  // takt line
+  var ty=base-m.takt*scale;
+  svg+='<line x1="'+padL+'" y1="'+ty.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+ty.toFixed(1)+'" stroke="#b1542f" stroke-width="1.6" stroke-dasharray="6 4"/>';
+  svg+='<text x="'+(W-padR)+'" y="'+(ty-4).toFixed(1)+'" text-anchor="end" font-size="10" font-weight="700" fill="#b1542f">TAKT '+fmtMin(m.takt)+' min</text>';
+  return svg+'</svg>';
+}
+function renderBalance(){
+  var host=$('tab-balance'); host.innerHTML='';
+  host.appendChild(headerEl('Line Balance','Assign steps to operators, set how many people share a station, and balance the bars under the takt line.'));
+  if(!S.skus.length){ host.appendChild(emptyEl('Add a product first','Upload a Standard Work file on the Products tab to balance its line.')); return; }
+  if(!skuById(S.balId)) S.balId=S.skus[0].id;
+  var sku=skuById(S.balId), c=getBal(sku), m=balMetrics(sku,c);
+  var bar=el('div',{class:'selrow'});
+  bar.appendChild(fld('Product', sel(S.skus.map(function(s){return [s.id,s.name];}), S.balId, function(v){ S.balId=v; renderBalance(); })));
+  bar.appendChild(fld('Demand (units/day)', numInput(c.demand,1,999,function(v){ c.demand=Math.max(1,parseInt(v,10)||1); saveBal(); renderBalance(); })));
+  bar.appendChild(fld('Hours/day', numInput(c.hours,1,24,function(v){ c.hours=Math.max(0.5,parseFloat(v)||7); saveBal(); renderBalance(); })));
+  bar.appendChild(fld('Stations', numInput(c.stations,1,sku.steps.length,function(v){ c.stations=Math.max(1,Math.min(sku.steps.length,parseInt(v,10)||1)); autoBalance(sku,c); saveBal(); renderBalance(); })));
+  var ab=el('button',{class:'btn btn-light'},'Auto-balance'); ab.onclick=function(){ autoBalance(sku,c); saveBal(); renderBalance(); };
+  bar.appendChild(ab);
+  host.appendChild(bar);
+  // KPIs
+  var kp=el('div',{class:'kpis'});
+  kp.appendChild(kpi('accent','Takt time',fmtMin(m.takt),'min','demand '+c.demand+'/day · '+c.hours+' h'));
+  var meets=m.cycle<=m.takt+1e-6;
+  kp.appendChild(kpi(meets?'saved':'bottleneck','Cycle time',fmtMin(m.cycle),'min', meets?'≤ takt ✓ ('+fmtMin(m.takt-m.cycle)+' min slack)':'> takt by '+fmtMin(m.cycle-m.takt)+' min'));
+  kp.appendChild(kpi('accent','Capacity',fmt(m.chairsDay,1),'/day', 'vs demand '+c.demand+(m.chairsDay>=c.demand?' ✓':' ✗')));
+  kp.appendChild(kpi(m.eff>0.8?'saved':'bottleneck','Operators',String(m.totalOps),'', fmt(m.eff*100,0)+'% line efficiency'));
+  host.appendChild(kp);
+  // chart
+  host.appendChild(chartCard('Operator loading vs. takt','drag steps between stations below to rebalance', yamazumiSVG(sku,c,m),
+    '<span><i style="background:var(--bronze)"></i>Takt line — keep every bar under it</span><span>Capacity = '+fmt(m.chairsDay,1)+' chairs/day</span>'));
+  // station columns
+  var card=el('div',{class:'card'}); var cb=el('div',{class:'cb'});
+  var cols=el('div',{class:'bal-cols'});
+  for(var s=0;s<c.stations;s++){ cols.appendChild(buildStationCol(sku,c,m,s)); }
+  cb.appendChild(cols); card.appendChild(cb); host.appendChild(card);
+  host.appendChild(el('div',{class:'footer'},'TUUCI · Standard Work Analyzer — drag steps to rebalance; settings save in your browser.'));
+}
+function buildStationCol(sku,c,m,s){
+  var over=m.loads[s]>m.takt+1e-6;
+  var col=el('div',{class:'bal-col'+(over?' over':''),'data-station':s});
+  var head=el('div',{class:'bch'});
+  head.innerHTML='<span class="nm">Station '+(s+1)+'</span><span class="tot '+(over?'over':'ok')+'">'+fmtMin(m.loads[s])+' min</span>';
+  col.appendChild(head);
+  var pr=el('div',{style:'padding:6px 11px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px'});
+  pr.appendChild(el('span',{style:'font-size:11px;color:var(--muted)'},'People'));
+  pr.appendChild(sel([[1,'1'],[2,'2'],[3,'3'],[4,'4']], c.people[s], function(v){ c.people[s]=parseInt(v,10)||1; saveBal(); renderBalance(); }));
+  if(c.people[s]>1) pr.appendChild(el('span',{style:'font-size:11px;color:var(--aqua-dark)'},'÷'+c.people[s]+' (raw '+fmtMin(m.raw[s])+')'));
+  col.appendChild(pr);
+  var body=el('div',{class:'body','data-station':s});
+  var any=false;
+  sku.steps.forEach(function(st,i){ if(Math.min(c.assign[i],c.stations-1)!==s) return; any=true;
+    var chip=el('div',{class:'bal-chip',draggable:'true','data-step':i});
+    chip.style.borderLeftColor=BAL_COLORS[i%BAL_COLORS.length];
+    chip.innerHTML='<span class="cn">'+esc(clampStr(st.name,30))+'</span><span class="ct">'+fmtMin(st.time)+'</span>';
+    chip.addEventListener('dragstart',function(e){ chip.classList.add('dragging'); e.dataTransfer.setData('text/plain',String(i)); e.dataTransfer.effectAllowed='move'; });
+    chip.addEventListener('dragend',function(){ chip.classList.remove('dragging'); });
+    body.appendChild(chip);
+  });
+  if(!any) body.appendChild(el('div',{class:'bal-empty'},'drop steps here'));
+  function over_(e){ e.preventDefault(); col.classList.add('drag'); }
+  function leave_(){ col.classList.remove('drag'); }
+  function drop_(e){ e.preventDefault(); col.classList.remove('drag'); var stp=parseInt(e.dataTransfer.getData('text/plain'),10); if(isNaN(stp))return; c.assign[stp]=s; saveBal(); renderBalance(); }
+  col.addEventListener('dragover',over_); col.addEventListener('dragleave',leave_); col.addEventListener('drop',drop_);
+  body.addEventListener('dragover',over_); body.addEventListener('drop',drop_);
+  return col;
 }
 
 /* ---------- SIMULATION TAB ---------- */
