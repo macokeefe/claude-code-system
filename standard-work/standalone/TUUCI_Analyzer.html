@@ -278,6 +278,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 </main>
 
 <input type="file" id="fileInput" accept=".xlsx,.xlsm" class="hide" />
+<input type="file" id="backupInput" accept=".json,application/json" class="hide" />
 
 <script>
 "use strict";
@@ -538,7 +539,12 @@ function renderSkus(){
   var host=$('tab-skus'); host.innerHTML='';
   if(S.add){ renderImport(); return; }
   if(S.edit){ renderSkuEditor(); return; }
-  host.appendChild(headerEl('Products','Your saved standard-work products. Mark which steps can be helped and how many operators can work them at once.'));
+  var ph=headerEl('Products','Your saved standard-work products. Mark which steps can be helped and how many operators can work them at once.');
+  var acts=el('div',{style:'display:flex;gap:10px'});
+  var bExp=el('button',{class:'btn btn-light'},'Export backup'); bExp.onclick=exportBackup; if(!S.skus.length)bExp.disabled=true;
+  var bImp=el('button',{class:'btn btn-light'},'Restore backup'); bImp.onclick=function(){ $('backupInput').click(); };
+  acts.appendChild(bExp); acts.appendChild(bImp); ph.appendChild(acts);
+  host.appendChild(ph);
   var grid=el('div',{class:'sku-grid'});
   S.skus.forEach(function(sku){
     var c=el('div',{class:'sku-card'});
@@ -568,6 +574,31 @@ function renderSkus(){
   }
 }
 function headerEl(title,sub){ var h=el('div',{class:'page-h'}); h.innerHTML='<div><h1>'+esc(title)+'</h1><div class="sub">'+esc(sub)+'</div></div>'; return h; }
+
+/* ---------- backup / restore ---------- */
+function exportBackup(){
+  var data={ app:'TUUCI Standard Work Analyzer', version:2, exportedAt:new Date().toISOString(), skus:S.skus, bal:S.bal };
+  var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a'); a.href=url; a.download='tuuci-analyzer-backup-'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(function(){URL.revokeObjectURL(url);},1500);
+}
+function importBackup(file){
+  var reader=new FileReader();
+  reader.onload=function(){
+    try{
+      var data=JSON.parse(reader.result);
+      var skus = Array.isArray(data)?data:data.skus;
+      if(!skus || !Array.isArray(skus) || !skus.length) throw new Error('no products found in that file');
+      if(!confirm('Restore '+skus.length+' product(s)? This replaces the products currently in this browser.')) return;
+      S.skus=skus; S.bal=(data && data.bal) || {}; saveSkus(); saveBal();
+      S.add=null; S.edit=null; S.anaId=null; S.cmpA=null; S.cmpB=null; S.simId=null; S.balId=null;
+      setTab('skus');
+    }catch(e){ alert('Could not restore that file: '+(e&&e.message||e)); }
+  };
+  reader.onerror=function(){ alert('Could not read that file.'); };
+  reader.readAsText(file);
+}
 
 /* ---------- IMPORT (map + save) ---------- */
 function renderImport(){
@@ -759,7 +790,7 @@ var curBalSku=null, curBalC=null, balDrag=null;
 function getBal(sku){
   var c=S.bal[sku.id];
   if(!c){ c={ demand:10, hours:7, stations:Math.min(4,sku.steps.length), parts:null, assign:null, people:null }; S.bal[sku.id]=c; }
-  if(c.stations<1)c.stations=1; if(c.stations>sku.steps.length)c.stations=sku.steps.length;
+  if(c.stations<1)c.stations=1; if(c.stations>16)c.stations=16;
   var ok = c.parts && c.parts.length && c.parts.every(function(p){return p.step>=0 && p.step<sku.steps.length;}) && c.assign && c.assign.length===c.parts.length;
   if(!ok){ resetParts(sku,c); autoBalance(sku,c); }
   c.assign=c.assign.map(function(a){ return Math.max(0,Math.min(a,c.stations-1)); });
@@ -771,11 +802,12 @@ function partTime(sku,p){ return sku.steps[p.step].time*p.frac; }
 function autoBalance(sku,c){
   if(!c.parts||!c.parts.length) resetParts(sku,c);
   var w=c.parts.map(function(p){return partTime(sku,p);});
-  var groups=partition(w,c.stations);
+  var K=Math.max(1,c.stations);
+  var groups=partition(w,Math.min(K,w.length));
   var assign=new Array(w.length).fill(0);
   groups.forEach(function(g,gi){ g.forEach(function(idx){ assign[idx]=gi; }); });
-  c.assign=assign; c.stations=Math.max(groups.length,1);
-  c.people=[]; for(var i=0;i<c.stations;i++)c.people.push(1);
+  c.assign=assign;
+  var pe=[]; for(var i=0;i<K;i++)pe.push((c.people&&c.people[i])||1); c.people=pe; c.stations=K;
 }
 function cutPart(sku,c,pi){ var p=c.parts[pi]; var nf=p.frac/2; p.frac=nf; c.parts.splice(pi+1,0,{step:p.step,frac:nf}); c.assign.splice(pi+1,0,c.assign[pi]); saveBal(); renderBalance(); }
 /* labels: step position number, with a/b/c suffix when a step is cut */
@@ -832,7 +864,7 @@ function renderBalance(){
   bar.appendChild(fld('Product', sel(S.skus.map(function(s){return [s.id,s.name];}), S.balId, function(v){ S.balId=v; renderBalance(); })));
   bar.appendChild(fld('Demand (units/day)', numInput(c.demand,1,999,function(v){ c.demand=Math.max(1,parseInt(v,10)||1); saveBal(); renderBalance(); })));
   bar.appendChild(fld('Hours/day', numInput(c.hours,1,24,function(v){ c.hours=Math.max(0.5,parseFloat(v)||7); saveBal(); renderBalance(); })));
-  bar.appendChild(fld('Stations', numInput(c.stations,1,Math.max(sku.steps.length,c.parts.length),function(v){ c.stations=Math.max(1,Math.min(20,parseInt(v,10)||1)); autoBalance(sku,c); saveBal(); renderBalance(); })));
+  bar.appendChild(fld('Stations', numInput(c.stations,1,16,function(v){ c.stations=Math.max(1,Math.min(16,parseInt(v,10)||1)); saveBal(); renderBalance(); })));
   var ab=el('button',{class:'btn btn-light'},'Auto-balance'); ab.onclick=function(){ autoBalance(sku,c); saveBal(); renderBalance(); };
   bar.appendChild(ab);
   var rc=el('button',{class:'btn btn-light'},'Reset cuts'); rc.onclick=function(){ resetParts(sku,c); autoBalance(sku,c); saveBal(); renderBalance(); };
@@ -976,6 +1008,7 @@ function renderSim(){
    ============================================================ */
 Array.prototype.forEach.call($('tabs').children,function(b){ b.onclick=function(){ setTab(b.getAttribute('data-tab')); }; });
 $('fileInput').onchange=function(){ if(this.files&&this.files[0]) handleFile(this.files[0]); this.value=''; };
+$('backupInput').onchange=function(){ if(this.files&&this.files[0]) importBackup(this.files[0]); this.value=''; };
 // global drag-drop onto Products
 window.addEventListener('dragover',function(e){ if(S.tab==='skus'){ e.preventDefault(); } });
 window.addEventListener('drop',function(e){ if(S.tab==='skus' && !S.edit){ e.preventDefault(); var f=e.dataTransfer.files&&e.dataTransfer.files[0]; if(f) handleFile(f); } });
