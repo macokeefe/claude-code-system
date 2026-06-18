@@ -188,7 +188,7 @@
         <div>
           <h3 class="ok">Proposed — balanced to takt</h3>
           <div class="chart" id="ya-prop"></div>
-          <p class="small">7 operators, big assemblies shared 2-up, small steps grouped. Every station under the 42-min takt → <b>≈10.2 units/day</b>, 89% utilized.</p>
+          <p class="small">7 operators across 6 stations (Arms built 2-up; Seat &amp; Back Frame split). Every station under the 42-min takt → <b>≈10.1 units/day</b>, 88% utilized.</p>
         </div>
       </div>
       <div class="legend" style="justify-content:center;margin-top:8px"><span>– – takt 42 min · bars are minutes per unit at each station</span></div>
@@ -201,25 +201,24 @@
     <div class="sb"><span class="wm">TUUCI</span><span class="ctx">Meritage 3-Seater · How it looks</span></div>
     <div class="pad" style="padding-top:84px">
       <p class="eyebrow">How it would actually look on the floor</p>
-      <h2>7 operators, every station under takt</h2>
-      <div class="cols" style="grid-template-columns:1.35fr .9fr;align-items:start">
+      <h2>7 operators across 6 stations — every station under takt</h2>
+      <div class="cols" style="grid-template-columns:1.4fr .85fr;align-items:start">
         <table class="tb">
           <tr><th>Station</th><th>Work (SWI steps)</th><th class="num">Min/unit</th></tr>
-          <tr><td>Arms cell — builder 1</td><td>#4 Arms Assembly (shared)</td><td class="num">32.0</td></tr>
-          <tr><td>Arms cell — builder 2</td><td>#4 Arms Assembly (shared)</td><td class="num">32.0</td></tr>
-          <tr><td>Seat Frame cell — builder 1</td><td>#5 Seat Frame (½) · #3 Leg Assembly · #12 TUUCI Plate</td><td class="num">32.5</td></tr>
-          <tr><td>Seat Frame cell — builder 2</td><td>#5 Seat Frame (½) · #9 Leg Finishing · #8 Back Support</td><td class="num">36.5</td></tr>
-          <tr><td>Back Frame cell — builder 1</td><td>#6 Back Frame (½) · #7 Attaching Arms</td><td class="num">39.8</td></tr>
-          <tr><td>Back Frame cell — builder 2</td><td>#6 Back Frame (½) · #2 Connector Prep</td><td class="num">41.0</td></tr>
-          <tr><td>Finish station</td><td>#10 Seat Support · #11 Attaching Seat Frame</td><td class="num">40.5</td></tr>
+          <tr><td><b>S1</b></td><td>#2 Connector Prep · #3 Leg Assembly</td><td class="num">27.3</td></tr>
+          <tr><td><b>S2</b> · 2 builders</td><td>#4 Arms Assembly (built together)</td><td class="num">32.0</td></tr>
+          <tr><td><b>S3</b></td><td>#5 Seat Frame Assembly (first part)</td><td class="num">41.0</td></tr>
+          <tr><td><b>S4</b></td><td>#5 Seat Frame (rest) · #6 Back Frame (first part)</td><td class="num">39.5</td></tr>
+          <tr><td><b>S5</b></td><td>#6 Back Frame (rest) · #7 Attaching Arms · #8 Back Support · #9 Leg Finishing</td><td class="num">41.0</td></tr>
+          <tr><td><b>S6</b></td><td>#10 Seat Support · #11 Attaching Seat Frame · #12 TUUCI Plate</td><td class="num">41.5</td></tr>
         </table>
         <div>
-          <div class="stat" style="border-top-color:var(--good)"><div class="v">10.2<span class="u">/day</span></div><div class="l">capacity vs. 10/day demand — met, with headroom</div></div>
-          <div class="stat" style="margin-top:14px"><div class="v">41<span class="u">min</span></div><div class="l">slowest station — under the 42-min takt</div></div>
-          <div class="stat" style="margin-top:14px;border-top-color:var(--good)"><div class="v">89<span class="u">%</span></div><div class="l">line efficiency (very little idle)</div></div>
+          <div class="stat" style="border-top-color:var(--good)"><div class="v">10.1<span class="u">/day</span></div><div class="l">capacity vs. 10/day demand — met</div></div>
+          <div class="stat" style="margin-top:14px"><div class="v">41.5<span class="u">min</span></div><div class="l">slowest station (S6) — under the 42-min takt</div></div>
+          <div class="stat" style="margin-top:14px;border-top-color:var(--good)"><div class="v">88<span class="u">%</span></div><div class="l">line efficiency (very little idle)</div></div>
         </div>
       </div>
-      <p class="small" style="margin-top:12px">“Shared / ½” = two builders work that assembly together. Times are measured from the SWI; final station layout is tunable in the analyzer tool.</p>
+      <p class="small" style="margin-top:12px">S2 is two builders working Arms together (64 → 32 min). Seat Frame (#5) and Back Frame (#6) are each split across two stations to level the load. Times are measured from the SWI.</p>
     </div>
     <div class="pageno">6</div>
   </section>
@@ -234,8 +233,8 @@
         <ul class="clean">
           <li><b>254 min of labor</b>, with <b>61% in three assemblies</b> — Arms (#4), Seat Frame (#5), Back Frame (#6).</li>
           <li>Those three each run longer than takt, so they’re the constraint.</li>
-          <li><b>Split the big three 2-up and group the rest</b> → 7 operators, every station ≤ 41 min.</li>
-          <li><b>Result: ~10.2 units/day</b> at 89% efficiency, meeting the 10/day demand.</li>
+          <li><b>Build Arms 2-up, split Seat &amp; Back Frame, group the rest</b> → 7 operators across 6 stations, every station ≤ 41.5 min.</li>
+          <li><b>Result: ~10.1 units/day</b> at 88% efficiency, meeting the 10/day demand.</li>
         </ul>
         <div>
           <div class="callout"><b>Assumptions &amp; caveats.</b> Demand 10/day over a 7-hour day → 42-min takt. Times are measured from the standard work instruction. Splitting helps only where a task is genuinely separable; sequence-locked work won’t overlap — to be confirmed on the floor.</div>
@@ -293,8 +292,8 @@ function yama(elId, stations){
   var s='<svg viewBox="0 0 '+W+' '+H+'">';
   for(var g=0;g<=4;g++){var yy=base-maxY*g/4*scale;s+='<line x1="'+pL+'" y1="'+yy.toFixed(1)+'" x2="'+(W-pR)+'" y2="'+yy.toFixed(1)+'" stroke="#eceae4"/><text x="'+(pL-5)+'" y="'+(yy+3).toFixed(1)+'" text-anchor="end" font-size="8.5" fill="#9aa29a">'+f(maxY*g/4,0)+'</text>';}
   stations.forEach(function(st,si){var cx=pL+bw*si+bw/2,x=cx-barW/2,yc=base,over=loads[si]>TAKT+1e-6;
-    st.items.forEach(function(it){var h=it.t*scale,y=yc-h;s+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+Math.max(0,h).toFixed(1)+'" fill="'+(COL[it.n]||'#888')+'" stroke="#fff" stroke-width="0.6"/>';
-      if(h>=12)s+='<text x="'+cx.toFixed(1)+'" y="'+(y+h/2+3).toFixed(1)+'" text-anchor="middle" font-size="8.5" font-weight="700" fill="#fff" stroke="rgba(0,0,0,.3)" stroke-width="0.4" paint-order="stroke">'+it.n+'</text>';
+    st.items.forEach(function(it){var h=it.t*scale,y=yc-h;s+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+Math.max(0,h).toFixed(1)+'" fill="'+(it.c||'#888')+'" stroke="#fff" stroke-width="0.6"/>';
+      if(h>=12)s+='<text x="'+cx.toFixed(1)+'" y="'+(y+h/2+3).toFixed(1)+'" text-anchor="middle" font-size="8.5" font-weight="700" fill="#fff" stroke="rgba(0,0,0,.3)" stroke-width="0.4" paint-order="stroke">'+it.lab+'</text>';
       yc=y;});
     if(over)s+='<rect x="'+(x-1.4).toFixed(1)+'" y="'+yc.toFixed(1)+'" width="'+(barW+2.8).toFixed(1)+'" height="'+(base-yc).toFixed(1)+'" fill="none" stroke="#b1542f" stroke-width="1.8" rx="2"/>';
     s+='<text x="'+cx.toFixed(1)+'" y="'+(yc-4).toFixed(1)+'" text-anchor="middle" font-size="9" font-weight="700" fill="'+(over?'#b1542f':'#15171a')+'">'+f(loads[si],0)+'</text>';
@@ -305,16 +304,15 @@ function yama(elId, stations){
 }
 
 /* today: one op per step */
-var NOW=STEPS.map(function(s){return {lbl:'#'+s.n,items:[{n:s.n,t:s.t}]};});
-/* proposed 7-station balance */
+var NOW=STEPS.map(function(s){return {lbl:'#'+s.n,items:[{lab:s.n,t:s.t,c:COL[s.n]}]};});
+/* proposed line — the chosen 7-operator / 6-station balance (Arms built 2-up) */
 var PROP=[
- {lbl:'Arms 1',items:[{n:4,t:32}]},
- {lbl:'Arms 2',items:[{n:4,t:32}]},
- {lbl:'Seat 1',items:[{n:5,t:23.5},{n:3,t:8},{n:12,t:1}]},
- {lbl:'Seat 2',items:[{n:5,t:23.5},{n:9,t:8},{n:8,t:5}]},
- {lbl:'Back 1',items:[{n:6,t:21.75},{n:7,t:18}]},
- {lbl:'Back 2',items:[{n:6,t:21.75},{n:2,t:19.25}]},
- {lbl:'Finish',items:[{n:10,t:22.5},{n:11,t:18}]}
+ {lbl:'S1',items:[{lab:'2',t:19.25,c:COL[2]},{lab:'3',t:8,c:COL[3]}]},
+ {lbl:'S2 ×2',items:[{lab:'4',t:32,c:COL[4]}]},
+ {lbl:'S3',items:[{lab:'5a',t:41,c:COL[5]}]},
+ {lbl:'S4',items:[{lab:'5b',t:6,c:COL[5]},{lab:'6a',t:33.5,c:COL[6]}]},
+ {lbl:'S5',items:[{lab:'6b',t:10,c:COL[6]},{lab:'7',t:18,c:COL[7]},{lab:'8',t:5,c:COL[8]},{lab:'9',t:8,c:COL[9]}]},
+ {lbl:'S6',items:[{lab:'10',t:22.5,c:COL[10]},{lab:'11',t:18,c:COL[11]},{lab:'12',t:1,c:COL[12]}]}
 ];
 pareto(); yama('ya-now',NOW); yama('ya-prop',PROP);
 
