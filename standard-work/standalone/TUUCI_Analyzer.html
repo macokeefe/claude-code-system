@@ -91,7 +91,7 @@
   .fld label{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
   .fld select,.fld input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:14px;background:#fff;color:var(--ink)}
   .fld select:focus,.fld input:focus{outline:0;border-color:var(--aqua);box-shadow:0 0 0 3px rgba(10,166,184,.15)}
-  .map-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:18px}
+  .map-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
   .selrow{display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;margin-bottom:20px}
   .selrow .fld{min-width:220px}
 
@@ -365,6 +365,19 @@ function autoDetect(sheets){
   if(!best){ var g0=sheets[0].grid, tc=mostNumericCol(g0); best={sheet:0,headerRow:findHeaderGuess(g0,tc),timeCol:tc,nameCol:guessNameCol(g0,0,tc)}; }
   var htxt=asText((sheets[best.sheet].grid[best.headerRow]||[])[best.timeCol]);
   best.unit = /\bsec/i.test(htxt)?'sec':'min';
+  best.numCol = detectNumCol(sheets[best.sheet].grid, best.headerRow, best.timeCol, best.nameCol);
+  return best;
+}
+/* find the column holding step numbers: mostly integers, mostly increasing */
+function detectNumCol(grid,headerRow,timeCol,nameCol){
+  var w=0; grid.forEach(function(r){ if(r&&r.length>w)w=r.length; });
+  var best=-1,bestScore=0;
+  for(var c=0;c<w;c++){ if(c===timeCol||c===nameCol)continue;
+    var prev=null,inc=0,ints=0,total=0;
+    for(var r=headerRow+1;r<grid.length;r++){ var v=asNum((grid[r]||[])[c]); if(v==null)continue; total++;
+      if(Math.abs(v-Math.round(v))<1e-9){ ints++; if(prev==null||v>prev)inc++; prev=v; } }
+    if(total>=3 && ints>=total*0.6){ var score=ints+inc; if(score>bestScore){ bestScore=score; best=c; } }
+  }
   return best;
 }
 function countNum(grid,hr,c){ var n=0; for(var r=hr+1;r<grid.length;r++){ if(asNum((grid[r]||[])[c])>0)n++; } return n; }
@@ -377,7 +390,8 @@ function extractSteps(sheets,map){
   var grid=sheets[map.sheet].grid, out=[];
   for(var r=map.headerRow+1;r<grid.length;r++){ var row=grid[r]||[]; var t=asNum(row[map.timeCol]); if(t==null||t<=0)continue;
     var name=asText(row[map.nameCol]); if(/^(total|grand total|sum|process total)\b/i.test(name))continue; if(!name)name='Step '+(out.length+1);
-    out.push({ name:name, time: map.unit==='sec'?t/60:t });
+    var num=null; if(map.numCol!=null && map.numCol>=0){ var nv=asNum(row[map.numCol]); if(nv!=null && Math.abs(nv-Math.round(nv))<1e-9) num=Math.round(nv); }
+    out.push({ name:name, time:(map.unit==='sec'?t/60:t), num:num });
   }
   return out;
 }
@@ -609,18 +623,19 @@ function renderImport(){
   card.innerHTML='<div class="ch"><h2>'+esc(a.fileName)+'</h2><span class="hint">we guessed these — adjust if needed</span></div>';
   var cb=el('div',{class:'cb'});
   var mg=el('div',{class:'map-grid'});
-  mg.appendChild(fld('Worksheet', sel(sheets.map(function(s,i){return [i,s.name];}), map.sheet, function(v){ map.sheet=+v; var g=sheets[map.sheet].grid; map.timeCol=mostNumericCol(g); map.nameCol=guessNameCol(g,0,map.timeCol); map.headerRow=findHeaderGuess(g,map.timeCol); renderImport(); })));
+  mg.appendChild(fld('Worksheet', sel(sheets.map(function(s,i){return [i,s.name];}), map.sheet, function(v){ map.sheet=+v; var g=sheets[map.sheet].grid; map.timeCol=mostNumericCol(g); map.nameCol=guessNameCol(g,0,map.timeCol); map.headerRow=findHeaderGuess(g,map.timeCol); map.numCol=detectNumCol(g,map.headerRow,map.timeCol,map.nameCol); renderImport(); })));
   mg.appendChild(fld('Header row', numInput(map.headerRow+1, 1, 999, function(v){ map.headerRow=Math.max(0,(+v||1)-1); renderImport(); })));
   var grid=sheets[map.sheet].grid, hdr=grid[map.headerRow]||[], wcols=0; grid.forEach(function(r){ if(r&&r.length>wcols)wcols=r.length; });
   var colOpts=[]; for(var c=0;c<wcols;c++){ colOpts.push([c, colLetter(c)+' · '+clampStr(asText(hdr[c])||('Column '+colLetter(c)),22)]); }
   mg.appendChild(fld('Step / task column', sel(colOpts, map.nameCol, function(v){ map.nameCol=+v; renderImport(); })));
   mg.appendChild(fld('Time column', sel(colOpts, map.timeCol, function(v){ map.timeCol=+v; renderImport(); })));
+  mg.appendChild(fld('Step # column', sel([[-1,'— none (use order) —']].concat(colOpts), (map.numCol==null?-1:map.numCol), function(v){ map.numCol=+v; renderImport(); })));
   mg.appendChild(fld('Time unit', sel([['min','Minutes'],['sec','Seconds']], map.unit, function(v){ map.unit=v; renderImport(); })));
   cb.appendChild(mg);
   var rows=extractSteps(sheets,map);
   var pv=el('div',{class:'preview-wrap'});
-  var tbl=el('table',{class:'t'}); var html='<tr><th>#</th><th>Step / Task</th><th class="num">Time ('+map.unit+')</th></tr>';
-  rows.slice(0,200).forEach(function(s,i){ var disp=map.unit==='sec'?s.time*60:s.time; html+='<tr><td>'+(i+1)+'</td><td>'+esc(clampStr(s.name,80))+'</td><td class="num">'+fmt(disp,2)+'</td></tr>'; });
+  var tbl=el('table',{class:'t'}); var html='<tr><th>Step #</th><th>Step / Task</th><th class="num">Time ('+map.unit+')</th></tr>';
+  rows.slice(0,200).forEach(function(s,i){ var disp=map.unit==='sec'?s.time*60:s.time; html+='<tr><td>'+(s.num!=null?s.num:(i+1))+'</td><td>'+esc(clampStr(s.name,80))+'</td><td class="num">'+fmt(disp,2)+'</td></tr>'; });
   tbl.innerHTML=html; pv.appendChild(tbl); cb.appendChild(pv);
   var total=rows.reduce(function(x,s){return x+s.time;},0);
   cb.appendChild(el('p',{class:'pv-note'}, rows.length? '<strong>'+rows.length+' steps</strong> · total <strong>'+fmtMin(total)+' min</strong> ('+fmt(total/60,2)+' h)' : 'No timed steps found — try another column or header row.'));
@@ -635,7 +650,7 @@ function renderImport(){
   var cancel=el('button',{class:'btn btn-light'},'Cancel'); cancel.onclick=function(){ S.add=null; renderSkus(); };
   var save=el('button',{class:'btn btn-primary'},'Save product →'); save.disabled=!rows.length;
   save.onclick=function(){
-    var steps=extractSteps(sheets,map).map(function(s){ return {name:s.name, time:s.time, helpable:false, maxOps:1}; });
+    var steps=extractSteps(sheets,map).map(function(s){ return {name:s.name, time:s.time, num:(s.num!=null?s.num:null), helpable:false, maxOps:1}; });
     S.skus.push({ id:uid(), name:(a.name||a.fileName).trim()||'Untitled', source:a.fileName+' · '+sheets[map.sheet].name, steps:steps, createdAt:Date.now() });
     saveSkus(); S.add=null; renderSkus();
   };
@@ -810,11 +825,13 @@ function autoBalance(sku,c){
   var pe=[]; for(var i=0;i<K;i++)pe.push((c.people&&c.people[i])||1); c.people=pe; c.stations=K;
 }
 function cutPart(sku,c,pi){ var p=c.parts[pi]; var nf=p.frac/2; p.frac=nf; c.parts.splice(pi+1,0,{step:p.step,frac:nf}); c.assign.splice(pi+1,0,c.assign[pi]); saveBal(); renderBalance(); }
-/* labels: step position number, with a/b/c suffix when a step is cut */
+/* the step's own SWI number if captured on import, else its position */
+function stepNumber(sku,idx){ var n=sku.steps[idx].num; return (n!=null)?n:(idx+1); }
+/* labels: step number, with a/b/c suffix when a step is cut */
 function partLabels(sku,c){
   var counts={}, seen={}, out=[];
   c.parts.forEach(function(p){ counts[p.step]=(counts[p.step]||0)+1; });
-  c.parts.forEach(function(p){ var n=p.step+1; if(counts[p.step]>1){ seen[p.step]=(seen[p.step]||0)+1; out.push(n+String.fromCharCode(96+seen[p.step])); } else out.push(String(n)); });
+  c.parts.forEach(function(p){ var n=stepNumber(sku,p.step); if(counts[p.step]>1){ seen[p.step]=(seen[p.step]||0)+1; out.push(n+String.fromCharCode(96+seen[p.step])); } else out.push(String(n)); });
   return out;
 }
 function balMetrics(sku,c){
