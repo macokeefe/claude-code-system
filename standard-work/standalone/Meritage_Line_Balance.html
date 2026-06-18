@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TUUCI · Meritage 3-Seater — Standard Work Findings</title>
+<style>
+  :root{
+    --navy:#15171a; --ink:#16181b; --muted:#6b7178; --aqua:#a8854c; --aqua-dark:#8a6b39;
+    --bronze:#b1542f; --line:#e6e4df; --bg:#0c0d0f; --card:#ffffff;
+    --good:#4f7a5b;
+    --serif:"Times New Roman",Times,Georgia,serif;
+    --font:"Inter","Segoe UI",-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%}
+  body{font-family:var(--font);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+  .stage{height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .slide{display:none;width:100%;max-width:1120px;aspect-ratio:16/9;background:#fbfaf8;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.4);position:relative;overflow:hidden}
+  .slide.active{display:block}
+  .pad{position:absolute;inset:0;padding:54px 60px 60px}
+  /* brand bar */
+  .sb{position:absolute;top:22px;left:60px;right:60px;display:flex;justify-content:space-between;align-items:center}
+  .wm{font-family:var(--serif);font-weight:500;font-size:18px;letter-spacing:.32em;color:#111}
+  .sb .ctx{font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+  .arc{width:64px;height:9px;display:block;margin-top:1px;color:#111}
+  .pageno{position:absolute;bottom:20px;right:26px;font-size:11px;color:#aab0b3}
+  .accent-edge{position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--aqua)}
+  /* type */
+  h1{font-size:40px;line-height:1.08;letter-spacing:-.02em;color:var(--navy);margin:0 0 14px;font-weight:800}
+  h2{font-size:27px;letter-spacing:-.01em;color:var(--navy);margin:0 0 6px;font-weight:800}
+  .eyebrow{font-size:12px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--aqua-dark);margin:0 0 14px}
+  .sub{font-size:15px;color:var(--muted);margin:0}
+  p{font-size:15px;line-height:1.5;color:#34383c}
+  .small{font-size:12.5px;color:var(--muted)}
+  /* title slide */
+  .title-wrap{height:100%;display:flex;flex-direction:column;justify-content:center}
+  .title-wrap .big-wm{font-family:var(--serif);font-weight:500;font-size:40px;letter-spacing:.34em;color:#111;margin-bottom:4px}
+  .title-wrap .big-arc{width:150px;height:18px;color:#111;margin-bottom:36px}
+  .title-wrap h1{font-size:46px}
+  .rule{height:3px;width:64px;background:var(--aqua);margin:18px 0}
+  /* stat cards */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:26px}
+  .stat{background:#fff;border:1px solid var(--line);border-radius:12px;padding:20px 18px;border-top:3px solid var(--aqua)}
+  .stat.bn{border-top-color:var(--bronze)}
+  .stat .v{font-size:34px;font-weight:800;color:var(--navy);letter-spacing:-.02em;line-height:1}
+  .stat .v .u{font-size:14px;font-weight:600;color:var(--muted);margin-left:3px}
+  .stat .l{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.35}
+  /* two-col */
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:34px;margin-top:18px}
+  .chart{width:100%}
+  .chart svg{width:100%;height:auto;display:block}
+  .legend{font-size:11.5px;color:var(--muted);margin-top:6px;display:flex;gap:16px;flex-wrap:wrap}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+  ul.clean{margin:10px 0 0;padding:0;list-style:none}
+  ul.clean li{position:relative;padding-left:20px;margin-bottom:11px;font-size:14.5px;line-height:1.45;color:#34383c}
+  ul.clean li::before{content:"";position:absolute;left:0;top:8px;width:7px;height:7px;border-radius:50%;background:var(--aqua)}
+  ul.clean li b{color:var(--navy)}
+  .callout{background:#fff7ec;border:1px solid #f0dcbd;border-left:4px solid var(--bronze);border-radius:10px;padding:13px 16px;font-size:13.5px;color:#3a2f20;margin-top:14px}
+  .callout b{color:var(--navy)}
+  /* station table */
+  table.tb{width:100%;border-collapse:collapse;font-size:13px;margin-top:14px}
+  table.tb th{text-align:left;padding:8px 12px;background:#f1efe9;color:var(--muted);font-weight:700;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;border-bottom:1px solid var(--line)}
+  table.tb td{padding:8px 12px;border-bottom:1px solid #eeece6}
+  table.tb td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;color:var(--navy)}
+  table.tb tr:last-child td{border-bottom:0}
+  .pill{display:inline-block;font-size:11px;font-weight:700;border-radius:5px;padding:2px 8px;background:#eef3ee;color:var(--good)}
+  .vs{display:grid;grid-template-columns:1fr 1fr;gap:30px}
+  .vs h3{font-size:14px;margin:0 0 8px;font-weight:700}
+  .vs .bad{color:var(--bronze)} .vs .ok{color:var(--good)}
+  /* nav */
+  .nav{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center;z-index:50}
+  .nav button{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:8px;width:38px;height:34px;font-size:16px;cursor:pointer}
+  .nav button:hover{background:rgba(255,255,255,.22)}
+  .nav .count{color:#cfd3d6;font-size:12px;min-width:48px;text-align:center;letter-spacing:.05em}
+  .hint{position:fixed;top:14px;left:50%;transform:translateX(-50%);color:#6b7176;font-size:11px;letter-spacing:.04em;z-index:50}
+  @media print{
+    body{background:#fff}
+    .stage{display:block;height:auto;padding:0}
+    .slide{display:block!important;page-break-after:always;box-shadow:none;border-radius:0;max-width:none;aspect-ratio:auto;height:100vh}
+    .nav,.hint{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="hint">← → to move · F11 for full screen · print to save as PDF</div>
+<div class="stage" id="stage">
+
+  <!-- 1 TITLE -->
+  <section class="slide active">
+    <div class="accent-edge"></div>
+    <div class="pad title-wrap">
+      <div class="big-wm">TUUCI</div>
+      <svg class="big-arc" viewBox="0 0 160 20"><path d="M5 5 C 45 22, 115 22, 155 5 C 116 15, 44 15, 5 5 Z" fill="currentColor"/></svg>
+      <div class="eyebrow">Standard Work · Line-Balance Study</div>
+      <h1>Meritage 3-Seater<br/>Where the labor goes — and how we level it.</h1>
+      <div class="rule"></div>
+      <p class="sub">Findings from the standard-work data, with a proposed balanced line to meet a 10-unit/day demand.</p>
+    </div>
+    <div class="pageno">1</div>
+  </section>
+
+  <!-- 2 HEADLINES -->
+  <section class="slide">
+    <div class="sb"><span class="wm">TUUCI</span><span class="ctx">Meritage 3-Seater · Headlines</span></div>
+    <div class="pad" style="padding-top:84px">
+      <p class="eyebrow">The numbers at a glance</p>
+      <h2>One Meritage carries 254 minutes of hands-on work</h2>
+      <p class="sub">Summed straight from the standard work instruction — 11 timed steps (the PPE step has no time).</p>
+      <div class="stats">
+        <div class="stat"><div class="v">254<span class="u">min</span></div><div class="l">Total labor per unit (4.24 labor-hours of hands-on work)</div></div>
+        <div class="stat"><div class="v">11</div><div class="l">Timed work steps (SWI steps 2–12)</div></div>
+        <div class="stat bn"><div class="v">64<span class="u">min</span></div><div class="l">Biggest single step — <b>Step 4, Arms Assembly</b> (25% of the build)</div></div>
+        <div class="stat bn"><div class="v">61<span class="u">%</span></div><div class="l">of all labor sits in just <b>3 steps</b> (Arms, Seat Frame, Back Frame)</div></div>
+      </div>
+      <div class="callout"><b>Labor-hours vs. clock time.</b> 254 min is total hands-on work — if one person built it alone. With a few builders working in parallel the wall-clock time per unit is much shorter; this study is about <b>spreading those 254 minutes evenly</b> so the line flows.</div>
+    </div>
+    <div class="pageno">2</div>
+  </section>
+
+  <!-- 3 BOTTLENECKS / PARETO -->
+  <section class="slide">
+    <div class="sb"><span class="wm">TUUCI</span><span class="ctx">Meritage 3-Seater · Bottlenecks</span></div>
+    <div class="pad" style="padding-top:84px">
+      <p class="eyebrow">Where the time concentrates</p>
+      <h2>Three assemblies dominate — and each is bigger than takt</h2>
+      <div class="cols" style="grid-template-columns:1.25fr 1fr;align-items:center">
+        <div>
+          <div class="chart" id="pareto"></div>
+          <div class="legend"><span><i style="background:#15171a"></i>Step time</span><span><i style="background:#b1542f"></i>Over takt</span><span><i style="background:#a8854c"></i>Cumulative %</span><span>– – takt 42 min</span></div>
+        </div>
+        <div>
+          <ul class="clean">
+            <li><b>Step 4 — Arms Assembly: 64 min.</b> A quarter of the whole build, and 1.5× the takt by itself.</li>
+            <li><b>Step 5 — Seat Frame Assembly: 47 min</b> and <b>Step 6 — Back Frame Assembly: 43.5 min.</b></li>
+            <li>These <b>three steps = 61%</b> of the labor. Fix these and you move the line.</li>
+            <li>All three exceed the <b>42-min takt</b>, so as a single-person task they cap output no matter how you staff the rest.</li>
+          </ul>
+        </div>
+      </div>
+      <p class="small" style="margin-top:14px">Takt = available time ÷ demand = 420 min (7 hr) ÷ 10 units = <b>42 min per unit</b>, the pace we must match.</p>
+    </div>
+    <div class="pageno">3</div>
+  </section>
+
+  <!-- 4 WHERE WE CAN HELP -->
+  <section class="slide">
+    <div class="sb"><span class="wm">TUUCI</span><span class="ctx">Meritage 3-Seater · The Opportunity</span></div>
+    <div class="pad" style="padding-top:84px">
+      <p class="eyebrow">Where we can help</p>
+      <h2>Put hands where the hours are</h2>
+      <p class="sub">The three big assemblies are buildable in parallel — more than one person can work them at once. Splitting them is what brings every station under takt.</p>
+      <div class="cols" style="grid-template-columns:1fr 1fr">
+        <div>
+          <table class="tb">
+            <tr><th>Step</th><th class="num">Now</th><th class="num">2 builders</th></tr>
+            <tr><td><b>#4</b> Arms Assembly</td><td class="num">64</td><td class="num" style="color:var(--good)">32</td></tr>
+            <tr><td><b>#5</b> Seat Frame Assembly</td><td class="num">47</td><td class="num" style="color:var(--good)">23.5</td></tr>
+            <tr><td><b>#6</b> Back Frame Assembly</td><td class="num">43.5</td><td class="num" style="color:var(--good)">21.8</td></tr>
+          </table>
+          <p class="small" style="margin-top:10px">Minutes per unit. Splitting a task only helps where the work is genuinely separable — these assemblies are.</p>
+        </div>
+        <div>
+          <ul class="clean">
+            <li><b>The principle:</b> a step's labor doesn't disappear when you split it — but the <b>time on the clock</b> drops, so it stops gating the line.</li>
+            <li><b>Arms (64 → 32)</b> alone takes the worst bottleneck below takt.</li>
+            <li>The smaller steps (legs, attach, finishing, plate) are grouped to fill the remaining operators evenly.</li>
+            <li>Net effect on the next slide: <b>a level line that hits 10/day.</b></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="pageno">4</div>
+  </section>
+
+  <!-- 5 BALANCE today vs proposed -->
+  <section class="slide">
+    <div class="sb"><span class="wm">TUUCI</span><span class="ctx">Meritage 3-Seater · The Balance</span></div>
+    <div class="pad" style="padding-top:84px">
+      <p class="eyebrow">The line balance</p>
+      <h2>From lumpy to level</h2>
+      <div class="vs">
+        <div>
+          <h3 class="bad">Today — work as it sits</h3>
+          <div class="chart" id="ya-now"></div>
+          <p class="small">One operator per step: Arms towers at 64 min. The line can only release a unit every 64 min → <b>≈6.6 units/day</b>, and the tiny steps sit idle.</p>
+        </div>
+        <div>
+          <h3 class="ok">Proposed — balanced to takt</h3>
+          <div class="chart" id="ya-prop"></div>
+          <p class="small">7 operators, big assemblies shared 2-up, small steps grouped. Every station under the 42-min takt → <b>≈10.2 units/day</b>, 89% utilized.</p>
+        </div>
+      </div>
+      <div class="legend" style="justify-content:center;margin-top:8px"><span>– – takt 42 min · bars are minutes per unit at each station</span></div>
+    </div>
+    <div class="pageno">5</div>
+  </section>
+
+  <!-- 6 HOW IT LOOKS -->
+  <section class="slide">
+    <div class="sb"><span class="wm">TUUCI</span><span class="ctx">Meritage 3-Seater · How it looks</span></div>
+    <div class="pad" style="padding-top:84px">
+      <p class="eyebrow">How it would actually look on the floor</p>
+      <h2>7 operators, every station under takt</h2>
+      <div class="cols" style="grid-template-columns:1.35fr .9fr;align-items:start">
+        <table class="tb">
+          <tr><th>Station</th><th>Work (SWI steps)</th><th class="num">Min/unit</th></tr>
+          <tr><td>Arms cell — builder 1</td><td>#4 Arms Assembly (shared)</td><td class="num">32.0</td></tr>
+          <tr><td>Arms cell — builder 2</td><td>#4 Arms Assembly (shared)</td><td class="num">32.0</td></tr>
+          <tr><td>Seat Frame cell — builder 1</td><td>#5 Seat Frame (½) · #3 Leg Assembly · #12 TUUCI Plate</td><td class="num">32.5</td></tr>
+          <tr><td>Seat Frame cell — builder 2</td><td>#5 Seat Frame (½) · #9 Leg Finishing · #8 Back Support</td><td class="num">36.5</td></tr>
+          <tr><td>Back Frame cell — builder 1</td><td>#6 Back Frame (½) · #7 Attaching Arms</td><td class="num">39.8</td></tr>
+          <tr><td>Back Frame cell — builder 2</td><td>#6 Back Frame (½) · #2 Connector Prep</td><td class="num">41.0</td></tr>
+          <tr><td>Finish station</td><td>#10 Seat Support · #11 Attaching Seat Frame</td><td class="num">40.5</td></tr>
+        </table>
+        <div>
+          <div class="stat" style="border-top-color:var(--good)"><div class="v">10.2<span class="u">/day</span></div><div class="l">capacity vs. 10/day demand — met, with headroom</div></div>
+          <div class="stat" style="margin-top:14px"><div class="v">41<span class="u">min</span></div><div class="l">slowest station — under the 42-min takt</div></div>
+          <div class="stat" style="margin-top:14px;border-top-color:var(--good)"><div class="v">89<span class="u">%</span></div><div class="l">line efficiency (very little idle)</div></div>
+        </div>
+      </div>
+      <p class="small" style="margin-top:12px">“Shared / ½” = two builders work that assembly together. Times are measured from the SWI; final station layout is tunable in the analyzer tool.</p>
+    </div>
+    <div class="pageno">6</div>
+  </section>
+
+  <!-- 7 SUMMARY -->
+  <section class="slide">
+    <div class="sb"><span class="wm">TUUCI</span><span class="ctx">Meritage 3-Seater · Summary</span></div>
+    <div class="pad" style="padding-top:84px">
+      <p class="eyebrow">What this means</p>
+      <h2>Same product, leveled to demand</h2>
+      <div class="cols" style="grid-template-columns:1fr 1fr">
+        <ul class="clean">
+          <li><b>254 min of labor</b>, with <b>61% in three assemblies</b> — Arms (#4), Seat Frame (#5), Back Frame (#6).</li>
+          <li>Those three each run longer than takt, so they’re the constraint.</li>
+          <li><b>Split the big three 2-up and group the rest</b> → 7 operators, every station ≤ 41 min.</li>
+          <li><b>Result: ~10.2 units/day</b> at 89% efficiency, meeting the 10/day demand.</li>
+        </ul>
+        <div>
+          <div class="callout"><b>Assumptions &amp; caveats.</b> Demand 10/day over a 7-hour day → 42-min takt. Times are measured from the standard work instruction. Splitting helps only where a task is genuinely separable; sequence-locked work won’t overlap — to be confirmed on the floor.</div>
+          <div class="callout" style="background:#eef3ee;border-color:#cfe0d3;border-left-color:var(--good);color:#23402c"><b>Next step.</b> Validate the three split assemblies on the floor, then trial the 7-station layout. The analyzer lets us re-balance live as real times firm up.</div>
+        </div>
+      </div>
+    </div>
+    <div class="pageno">7</div>
+  </section>
+
+</div>
+
+<div class="nav">
+  <button id="prev">‹</button><span class="count" id="count">1 / 7</span><button id="next">›</button>
+</div>
+
+<script>
+/* ---- step data (CORRECT SWI numbers; PPE step 1 has no time) ---- */
+var STEPS=[
+ {n:2,name:'Connector Prep',t:19.25},{n:3,name:'Leg Assembly',t:8},{n:4,name:'Arms Assembly',t:64},
+ {n:5,name:'Seat Frame',t:47},{n:6,name:'Back Frame',t:43.5},{n:7,name:'Attaching Arms',t:18},
+ {n:8,name:'Back Support',t:5},{n:9,name:'Leg Finishing',t:8},{n:10,name:'Seat Support',t:22.5},
+ {n:11,name:'Attaching Seat Frame',t:18},{n:12,name:'TUUCI Plate',t:1}
+];
+var TAKT=42;
+var COL={2:'#a8854c',3:'#4f7a5b',4:'#15171a',5:'#3c4a52',6:'#8a6b39',7:'#6b7178',8:'#b1542f',9:'#2f6b5a',10:'#7a5230',11:'#9a7b4f',12:'#c9a55f'};
+function f(n,d){d=d==null?1:d;var r=Number(n).toFixed(d);return r.replace(/\.0+$/,'').replace(/(\.\d*?)0+$/,'$1');}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+
+/* ---- Pareto ---- */
+function pareto(){
+  var data=STEPS.slice().sort(function(a,b){return b.t-a.t;});
+  var W=560,H=320,pL=40,pR=44,pT=16,pB=70,pw=W-pL-pR,ph=H-pT-pB;
+  var maxT=data[0].t,total=data.reduce(function(a,s){return a+s.t;},0),bw=pw/data.length,gap=bw*0.28;
+  var s='<svg viewBox="0 0 '+W+' '+H+'">';
+  for(var g=0;g<=4;g++){var yy=pT+ph*(1-g/4);s+='<line x1="'+pL+'" y1="'+yy+'" x2="'+(W-pR)+'" y2="'+yy+'" stroke="#eceae4"/><text x="'+(pL-5)+'" y="'+(yy+3)+'" text-anchor="end" font-size="9" fill="#9aa29a">'+f(maxT*g/4,0)+'</text>';}
+  var cum=0,pts=[];
+  for(var i=0;i<data.length;i++){var d=data[i],x=pL+i*bw,bx=x+gap/2,w=bw-gap,bh=d.t/maxT*ph,by=pT+ph-bh,over=d.t>TAKT;
+    s+='<rect x="'+bx.toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+bh.toFixed(1)+'" rx="2" fill="'+(over?'#b1542f':'#15171a')+'"/>';
+    s+='<text x="'+(bx+w/2).toFixed(1)+'" y="'+(by-4).toFixed(1)+'" text-anchor="middle" font-size="9" font-weight="700" fill="#3a4148">'+f(d.t,0)+'</text>';
+    cum+=d.t;pts.push([x+bw/2,pT+ph*(1-cum/total)]);
+    s+='<text x="'+(x+bw/2).toFixed(1)+'" y="'+(H-pB+13)+'" text-anchor="end" font-size="8.5" fill="#7c8079" transform="rotate(-42 '+(x+bw/2).toFixed(1)+' '+(H-pB+13)+')">#'+d.n+' '+esc(d.name)+'</text>';
+  }
+  var ty=pT+ph*(1-TAKT/maxT);s+='<line x1="'+pL+'" y1="'+ty.toFixed(1)+'" x2="'+(W-pR)+'" y2="'+ty.toFixed(1)+'" stroke="#b1542f" stroke-width="1.4" stroke-dasharray="5 4"/><text x="'+(W-pR)+'" y="'+(ty-4).toFixed(1)+'" text-anchor="end" font-size="9" font-weight="700" fill="#b1542f">takt 42</text>';
+  s+='<path d="'+pts.map(function(p,i){return (i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1);}).join(' ')+'" fill="none" stroke="#a8854c" stroke-width="2"/>';
+  pts.forEach(function(p){s+='<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="2.4" fill="#a8854c"/>';});
+  document.getElementById('pareto').innerHTML=s+'</svg>';
+}
+
+/* ---- yamazumi (stacked stations) ---- */
+function yama(elId, stations){
+  var W=520,H=300,pL=34,pR=14,pT=16,pB=40,pw=W-pL-pR,ph=H-pT-pB;
+  var loads=stations.map(function(st){return st.items.reduce(function(a,it){return a+it.t;},0);});
+  var maxY=Math.max(TAKT,Math.max.apply(null,loads))*1.12,scale=ph/maxY,base=pT+ph,bw=pw/stations.length,barW=Math.min(54,bw*0.66);
+  var s='<svg viewBox="0 0 '+W+' '+H+'">';
+  for(var g=0;g<=4;g++){var yy=base-maxY*g/4*scale;s+='<line x1="'+pL+'" y1="'+yy.toFixed(1)+'" x2="'+(W-pR)+'" y2="'+yy.toFixed(1)+'" stroke="#eceae4"/><text x="'+(pL-5)+'" y="'+(yy+3).toFixed(1)+'" text-anchor="end" font-size="8.5" fill="#9aa29a">'+f(maxY*g/4,0)+'</text>';}
+  stations.forEach(function(st,si){var cx=pL+bw*si+bw/2,x=cx-barW/2,yc=base,over=loads[si]>TAKT+1e-6;
+    st.items.forEach(function(it){var h=it.t*scale,y=yc-h;s+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+Math.max(0,h).toFixed(1)+'" fill="'+(COL[it.n]||'#888')+'" stroke="#fff" stroke-width="0.6"/>';
+      if(h>=12)s+='<text x="'+cx.toFixed(1)+'" y="'+(y+h/2+3).toFixed(1)+'" text-anchor="middle" font-size="8.5" font-weight="700" fill="#fff" stroke="rgba(0,0,0,.3)" stroke-width="0.4" paint-order="stroke">'+it.n+'</text>';
+      yc=y;});
+    if(over)s+='<rect x="'+(x-1.4).toFixed(1)+'" y="'+yc.toFixed(1)+'" width="'+(barW+2.8).toFixed(1)+'" height="'+(base-yc).toFixed(1)+'" fill="none" stroke="#b1542f" stroke-width="1.8" rx="2"/>';
+    s+='<text x="'+cx.toFixed(1)+'" y="'+(yc-4).toFixed(1)+'" text-anchor="middle" font-size="9" font-weight="700" fill="'+(over?'#b1542f':'#15171a')+'">'+f(loads[si],0)+'</text>';
+    s+='<text x="'+cx.toFixed(1)+'" y="'+(base+14)+'" text-anchor="middle" font-size="8.5" fill="#3a4148">'+esc(st.lbl)+'</text>';
+  });
+  var ty=base-TAKT*scale;s+='<line x1="'+pL+'" y1="'+ty.toFixed(1)+'" x2="'+(W-pR)+'" y2="'+ty.toFixed(1)+'" stroke="#b1542f" stroke-width="1.4" stroke-dasharray="5 4"/><text x="'+(W-pR)+'" y="'+(ty-4).toFixed(1)+'" text-anchor="end" font-size="9" font-weight="700" fill="#b1542f">takt 42</text>';
+  document.getElementById(elId).innerHTML=s+'</svg>';
+}
+
+/* today: one op per step */
+var NOW=STEPS.map(function(s){return {lbl:'#'+s.n,items:[{n:s.n,t:s.t}]};});
+/* proposed 7-station balance */
+var PROP=[
+ {lbl:'Arms 1',items:[{n:4,t:32}]},
+ {lbl:'Arms 2',items:[{n:4,t:32}]},
+ {lbl:'Seat 1',items:[{n:5,t:23.5},{n:3,t:8},{n:12,t:1}]},
+ {lbl:'Seat 2',items:[{n:5,t:23.5},{n:9,t:8},{n:8,t:5}]},
+ {lbl:'Back 1',items:[{n:6,t:21.75},{n:7,t:18}]},
+ {lbl:'Back 2',items:[{n:6,t:21.75},{n:2,t:19.25}]},
+ {lbl:'Finish',items:[{n:10,t:22.5},{n:11,t:18}]}
+];
+pareto(); yama('ya-now',NOW); yama('ya-prop',PROP);
+
+/* ---- navigation ---- */
+var slides=document.querySelectorAll('.slide'),cur=0;
+function show(i){cur=Math.max(0,Math.min(slides.length-1,i));slides.forEach(function(s,k){s.classList.toggle('active',k===cur);});document.getElementById('count').textContent=(cur+1)+' / '+slides.length;}
+document.getElementById('next').onclick=function(){show(cur+1);};
+document.getElementById('prev').onclick=function(){show(cur-1);};
+document.addEventListener('keydown',function(e){if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' ')show(cur+1);if(e.key==='ArrowLeft'||e.key==='PageUp')show(cur-1);});
+document.getElementById('stage').addEventListener('click',function(e){if(e.target.closest('.nav'))return;var r=window.innerWidth;if(e.clientX>r*0.6)show(cur+1);else if(e.clientX<r*0.4)show(cur-1);});
+show(0);
+</script>
+</body>
+</html>
