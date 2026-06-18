@@ -167,17 +167,25 @@
   .bal-col .bch .tot.over{color:var(--bronze)}
   .bal-col .bch .tot.ok{color:var(--good)}
   .bal-col .body{padding:8px;display:flex;flex-direction:column;gap:6px;min-height:46px;flex:1}
-  .bal-chip{background:#fff;border:1px solid var(--line);border-left:3px solid var(--aqua);border-radius:7px;padding:6px 8px;cursor:grab;font-size:12px;display:flex;justify-content:space-between;gap:7px;align-items:center;touch-action:none;user-select:none}
+  .bal-chip{background:#fff;border:1px solid var(--line);border-left:3px solid var(--aqua);border-radius:7px;padding:6px 7px;font-size:12px;display:flex;justify-content:space-between;gap:6px;align-items:center;user-select:none}
   .bal-chip:hover{border-color:var(--aqua);box-shadow:var(--shadow)}
   .bal-chip.dragging{opacity:.4}
-  .bal-chip .lft{display:flex;align-items:center;gap:7px;overflow:hidden}
+  .bal-chip .lft{display:flex;align-items:center;gap:6px;overflow:hidden}
+  .bal-chip .drag-h{flex-shrink:0;color:#b3bcc1;font-size:14px;cursor:grab;touch-action:none;letter-spacing:-1px}
   .bal-chip .pnum{flex-shrink:0;width:20px;height:20px;border-radius:5px;background:#15171a;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
   .bal-chip .cn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--ink)}
-  .bal-chip .rgt{display:flex;align-items:center;gap:6px;flex-shrink:0}
-  .bal-chip .ct{font-variant-numeric:tabular-nums;font-weight:700;color:var(--navy)}
-  .bal-chip .cutbtn{border:1px solid var(--line);background:#fff;border-radius:5px;width:22px;height:22px;cursor:pointer;font-size:12px;line-height:1;color:var(--muted);padding:0;display:flex;align-items:center;justify-content:center}
+  .bal-chip .rgt{display:flex;align-items:center;gap:4px;flex-shrink:0}
+  .bal-chip .ct{font-variant-numeric:tabular-nums;font-weight:700;color:var(--navy);margin-right:2px}
+  .bal-chip button{border:1px solid var(--line);background:#fff;border-radius:5px;width:24px;height:24px;cursor:pointer;font-size:12px;line-height:1;color:var(--muted);padding:0;display:flex;align-items:center;justify-content:center}
+  .bal-chip button:hover{border-color:var(--aqua);color:var(--aqua-dark);background:#f5fcfd}
+  .bal-chip button:disabled{opacity:.3;cursor:default}
   .bal-chip .cutbtn:hover{border-color:var(--bronze);color:var(--bronze);background:#fdf4ef}
-  .bal-chip.ghost{position:fixed;z-index:9999;pointer-events:none;opacity:.9;box-shadow:0 10px 28px rgba(0,0,0,.22);width:auto}
+  .bal-chip.ghost{position:fixed;z-index:9999;pointer-events:none;opacity:.92;box-shadow:0 10px 28px rgba(0,0,0,.22)}
+  .prow{padding:6px 11px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  .prow .plab{font-size:11px;color:var(--muted)}
+  .prow .pdiv{font-size:11px;color:var(--aqua-dark)}
+  .bal-hint{font-size:12.5px;color:var(--muted);margin:0 0 12px;display:flex;gap:14px;flex-wrap:wrap}
+  .bal-hint b{color:var(--ink)}
   .bal-empty{color:#aeb8bd;font-size:11.5px;text-align:center;padding:10px 4px}
 
   /* operator bars */
@@ -468,11 +476,16 @@ function setTab(name){
   S.tab=name;
   ['skus','analysis','compare','balance','sim'].forEach(function(t){ $('tab-'+t).classList.toggle('hide',t!==name); });
   Array.prototype.forEach.call($('tabs').children,function(b){ b.classList.toggle('active', b.getAttribute('data-tab')===name); });
-  if(name==='skus') renderSkus();
-  if(name==='analysis') renderAnalysis();
-  if(name==='compare') renderCompare();
-  if(name==='balance') renderBalance();
-  if(name==='sim') renderSim();
+  try{
+    if(name==='skus') renderSkus();
+    if(name==='analysis') renderAnalysis();
+    if(name==='compare') renderCompare();
+    if(name==='balance') renderBalance();
+    if(name==='sim') renderSim();
+  }catch(err){
+    console.error(err);
+    $('tab-'+name).appendChild(el('div',{class:'err'},'Something went wrong drawing this tab: '+esc(err&&err.message||String(err))+'. Try Reset cuts / Auto-balance, or reload.'));
+  }
   window.scrollTo(0,0);
 }
 
@@ -790,37 +803,53 @@ function renderBalance(){
   host.appendChild(kp);
   host.appendChild(chartCard('Operator loading vs. takt','numbers on the bars are step numbers', yamazumiSVG(sku,c,m,labels),
     '<span><i style="background:var(--bronze)"></i>Takt line — keep every bar under it</span><span>Capacity = '+fmt(m.chairsDay,1)+' chairs/day</span>'));
+  host.appendChild(el('div',{class:'bal-hint'},'<span>↔ <b>Drag</b> a step (or use <b>◀ ▶</b>) to move it between stations.</span><span>✂ <b>Cut</b> splits a step in half so two stations can share it.</span>'));
   var card=el('div',{class:'card'}); var cb=el('div',{class:'cb'});
   var cols=el('div',{class:'bal-cols'});
   for(var s=0;s<c.stations;s++){ cols.appendChild(buildStationCol(sku,c,m,labels,s)); }
   cb.appendChild(cols); card.appendChild(cb); host.appendChild(card);
-  host.appendChild(el('div',{class:'footer'},'TUUCI · Standard Work Analyzer — drag steps to rebalance, ✂ to split a step; settings save in your browser.'));
+  host.appendChild(el('div',{class:'footer'},'TUUCI · Standard Work Analyzer — drag or use ◀ ▶ to rebalance, ✂ to split a step; settings save in your browser.'));
 }
 function buildStationCol(sku,c,m,labels,s){
   var over=m.loads[s]>m.takt+1e-6;
   var col=el('div',{class:'bal-col'+(over?' over':''),'data-station':s});
   var head=el('div',{class:'bch'});
-  head.innerHTML='<span class="nm">Station '+(s+1)+'</span><span class="tot '+(over?'over':'ok')+'">'+fmtMin(m.loads[s])+' min</span>';
+  head.appendChild(el('span',{class:'nm'},'Station '+(s+1)));
+  head.appendChild(el('span',{class:'tot '+(over?'over':'ok')}, fmtMin(m.loads[s])+' min'));
   col.appendChild(head);
-  var pr=el('div',{style:'padding:6px 11px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px'});
-  pr.appendChild(el('span',{style:'font-size:11px;color:var(--muted)'},'People'));
+  var pr=el('div',{class:'prow'});
+  pr.appendChild(el('span',{class:'plab'},'People'));
   pr.appendChild(sel([[1,'1'],[2,'2'],[3,'3'],[4,'4']], c.people[s], function(v){ c.people[s]=parseInt(v,10)||1; saveBal(); renderBalance(); }));
-  if(c.people[s]>1) pr.appendChild(el('span',{style:'font-size:11px;color:var(--aqua-dark)'},'÷'+c.people[s]+' (raw '+fmtMin(m.raw[s])+')'));
+  if(c.people[s]>1) pr.appendChild(el('span',{class:'pdiv'},'÷'+c.people[s]+' (raw '+fmtMin(m.raw[s])+')'));
   col.appendChild(pr);
   var body=el('div',{class:'body','data-station':s});
   var any=false;
-  c.parts.forEach(function(p,i){ if(Math.min(c.assign[i],c.stations-1)!==s) return; any=true;
-    var st=sku.steps[p.step];
-    var chip=el('div',{class:'bal-chip','data-part':i});
-    chip.style.borderLeftColor=BAL_COLORS[p.step%BAL_COLORS.length];
-    chip.innerHTML='<span class="lft"><span class="pnum">'+esc(labels[i])+'</span><span class="cn">'+esc(clampStr(st.name,26))+'</span></span>'+
-      '<span class="rgt"><span class="ct">'+fmtMin(partTime(sku,p))+'</span><button class="cutbtn" title="Cut this step in half">✂</button></span>';
-    chip.querySelector('.cutbtn').addEventListener('click',function(ev){ ev.stopPropagation(); cutPart(sku,c,i); });
-    chip.addEventListener('pointerdown',function(ev){ if(ev.target.closest('.cutbtn'))return; startBalDrag(ev, i, chip); });
-    body.appendChild(chip);
-  });
-  if(!any) body.appendChild(el('div',{class:'bal-empty'},'drop steps here'));
+  c.parts.forEach(function(p,i){ if(Math.min(c.assign[i],c.stations-1)!==s) return; any=true; body.appendChild(buildChip(sku,c,p,i,labels[i],s)); });
+  if(!any) body.appendChild(el('div',{class:'bal-empty'},'no steps — drag or move one here'));
+  col.appendChild(body);
   return col;
+}
+function buildChip(sku,c,p,i,label,s){
+  var st=sku.steps[p.step];
+  var chip=el('div',{class:'bal-chip','data-part':i});
+  chip.style.borderLeftColor=BAL_COLORS[p.step%BAL_COLORS.length];
+  var lft=el('div',{class:'lft'});
+  lft.appendChild(el('span',{class:'drag-h',title:'Drag to move'},'⠿'));
+  lft.appendChild(el('span',{class:'pnum'},esc(label)));
+  lft.appendChild(el('span',{class:'cn'},esc(clampStr(st.name,22))));
+  chip.appendChild(lft);
+  var rgt=el('div',{class:'rgt'});
+  rgt.appendChild(el('span',{class:'ct'},fmtMin(partTime(sku,p))));
+  var bprev=el('button',{class:'mvbtn',title:'Move to previous station'},'◀'); if(s<=0)bprev.disabled=true;
+  bprev.onclick=function(ev){ ev.stopPropagation(); if(s>0){ c.assign[i]=s-1; saveBal(); renderBalance(); } };
+  var bnext=el('button',{class:'mvbtn',title:'Move to next station'},'▶'); if(s>=c.stations-1)bnext.disabled=true;
+  bnext.onclick=function(ev){ ev.stopPropagation(); if(s<c.stations-1){ c.assign[i]=s+1; saveBal(); renderBalance(); } };
+  var bcut=el('button',{class:'cutbtn',title:'Cut this step in half'},'✂');
+  bcut.onclick=function(ev){ ev.stopPropagation(); cutPart(sku,c,i); };
+  rgt.appendChild(bprev); rgt.appendChild(bnext); rgt.appendChild(bcut);
+  chip.appendChild(rgt);
+  chip.addEventListener('pointerdown',function(ev){ if(ev.target&&ev.target.closest&&ev.target.closest('button'))return; startBalDrag(ev,i,chip); });
+  return chip;
 }
 /* pointer-based drag (works on mouse + touch) */
 function startBalDrag(ev, partIdx, chip){
