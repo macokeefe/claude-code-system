@@ -132,30 +132,48 @@ def probe_gamma(condition_id: str | None) -> None:
         return
 
     print(f"\n########## GAMMA RESOLUTION for {condition_id} ##########")
-    # try the candidate filter params; the right one returns exactly this market
-    for param in ("condition_ids", "condition_id", "conditionIds", "conditionId"):
+    GAMMA = "https://gamma-api.polymarket.com/markets"
+    CLOB = "https://clob.polymarket.com/markets/"
+
+    # condition_ids is the right filter, but Gamma hides closed/resolved markets
+    # by default. Try the flags that should surface a resolved market.
+    attempts = [
+        ("gamma condition_ids + closed=true",
+         GAMMA, {"condition_ids": condition_id, "closed": "true", "limit": 5}),
+        ("gamma condition_ids + archived=true",
+         GAMMA, {"condition_ids": condition_id, "archived": "true", "limit": 5}),
+        ("gamma condition_ids + closed + archived",
+         GAMMA, {"condition_ids": condition_id, "closed": "true",
+                 "archived": "true", "limit": 5}),
+    ]
+    for label, url, params in attempts:
         try:
-            rows = _rows(_get(GAMMA, {param: condition_id, "limit": 5}))
+            rows = _rows(_get(url, params))
         except Exception as e:
-            print(f"  {param:<14} -> {e}")
+            print(f"  {label} -> {e}")
             continue
         match = [m for m in rows if m.get("conditionId") == condition_id]
-        tag = "MATCH" if match else f"{len(rows)} rows, none match (param ignored?)"
-        print(f"  {param:<14} -> {tag}")
         if match:
             m = match[0]
             keep = {k: m.get(k) for k in
-                    ("conditionId", "question", "closed", "active",
-                     "outcomes", "outcomePrices", "umaResolutionStatus")}
+                    ("question", "closed", "archived", "outcomes",
+                     "outcomePrices", "umaResolutionStatuses")}
+            print(f"  {label} -> MATCH")
             print("   ", json.dumps(keep, default=str)[:500])
-            return
-    print("  none of the tried params returned this market — see field dump:")
+            break
+        print(f"  {label} -> {len(rows)} rows, no match")
+
+    # CLOB returns the market by conditionId with a `winner` flag per token
     try:
-        rows = _rows(_get(GAMMA, {"limit": 1}))
-        if rows:
-            print("   sample market fields:", ", ".join(rows[0].keys()))
+        m = _get(CLOB + condition_id)
+        toks = m.get("tokens") or []
+        print("\n  CLOB /markets/<cid> -> OK")
+        print("    closed:", m.get("closed"), " question:", str(m.get("question"))[:80])
+        for t in toks:
+            print(f"    token outcome={t.get('outcome')!r} "
+                  f"price={t.get('price')} winner={t.get('winner')}")
     except Exception as e:
-        print("   ", e)
+        print("\n  CLOB /markets/<cid> ->", e)
 
 
 def main() -> None:
