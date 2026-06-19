@@ -109,65 +109,48 @@ def _cmd_serve(args) -> int:
 
 
 def _cmd_probe(args) -> int:
-    """Dump raw Kalshi market data so we can see how to reach real markets."""
-    from collections import Counter
+    """Find where real liquid markets + their volume actually live."""
+    import json as _json
+    import time as _time
     config = _build_config(args)
     config.source = "kalshi"
     src = make_source("kalshi", config)
     print("auth:", "ON (authenticated)" if getattr(src, "auth", None) else "OFF (public)")
 
-    def vol_fields(m):
-        return {k: m.get(k) for k in ("volume", "volume_24h", "open_interest",
-                                      "liquidity", "last_price")}
-
-    # --- Strategy A: the /events endpoint with nested markets ---
-    print("\n=== Strategy A: /events?status=open&with_nested_markets=true ===")
+    # A) Enumerate real (non-KXMVE) market tickers via the events endpoint.
     ev = src._get("events", {"limit": 200, "status": "open",
                              "with_nested_markets": "true"})
     events = ev.get("events") or []
-    real_ev = [e for e in events
+    tickers = [m.get("ticker") for e in events
                if not e.get("event_ticker", "").startswith("KXMVE")
-               and not (e.get("series_ticker", "") or "").startswith("KXMVE")]
-    nested = [m for e in real_ev for m in (e.get("markets") or [])]
-    print(f"events returned: {len(events)} | non-KXMVE events: {len(real_ev)} "
-          f"| their nested markets: {len(nested)}")
-    if nested:
-        nested.sort(key=lambda m: (m.get("volume") or 0), reverse=True)
-        top = nested[0]
-        print(f"sample real market: {top.get('ticker')}")
-        print(f"  vol fields: {vol_fields(top)}")
-        print("  top nested markets by volume:")
-        for m in nested[:8]:
-            print(f"    {m.get('ticker',''):40} vol={m.get('volume')} "
-                  f"oi={m.get('open_interest')} last={m.get('last_price')}")
-        print("  event series prefixes:",
-              dict(Counter((e.get('series_ticker') or e.get('event_ticker','')).split('-')[0]
-                           for e in real_ev).most_common(12)))
+               for m in (e.get("markets") or []) if m.get("ticker")]
+    print(f"\nA) events gave {len(tickers)} real market tickers")
 
-    # --- Strategy B: deep scan of /markets, skipping KXMVE ---
-    print("\n=== Strategy B: deep /markets scan (skip KXMVE), up to 30 pages ===")
-    others, kxmve, cursor, pages = [], 0, None, 0
-    for _ in range(30):
-        page = src.raw_page({"limit": 1000, "status": "open", "cursor": cursor})
-        ms = page.get("markets") or []
-        if not ms:
-            break
-        pages += 1
-        for m in ms:
-            (others if not m.get("ticker", "").startswith("KXMVE") else None)
-            if m.get("ticker", "").startswith("KXMVE"):
-                kxmve += 1
-            else:
-                others.append(m)
-        if len(others) >= 10:
-            break
-        cursor = page.get("cursor")
-        if not cursor:
-            break
-    print(f"scanned {pages} pages: {kxmve} KXMVE, {len(others)} real")
-    if others:
-        m = others[0]
-        print(f"first real: {m.get('ticker')} | vol fields: {vol_fields(m)}")
+    # B) Full dump of one real market fetched directly — reveals the true fields.
+    if tickers:
+        one = src._get(f"markets/{tickers[0]}", {})
+        mk = one.get("market") or one
+        print(f"\nB) FULL DUMP of {tickers[0]} (direct fetch):")
+        print(_json.dumps(mk, indent=2)[:1800])
+
+    # C) Batch-fetch those tickers via ?tickers= — does this return volume?
+    got = src._get("markets", {"tickers": ",".join(tickers[:100]), "limit": 1000})
+    ms = got.get("markets") or []
+    withvol = [m for m in ms if (m.get("volume") or 0) > 0]
+    print(f"\nC) ?tickers= returned {len(ms)} markets; {len(withvol)} have volume>0")
+    for m in sorted(ms, key=lambda m: (m.get("volume") or 0), reverse=True)[:8]:
+        print(f"   {m.get('ticker',''):40} vol={m.get('volume')} "
+              f"oi={m.get('open_interest')} last={m.get('last_price')}")
+
+    # D) Markets closing within ~2 days (today's games = the liquid ones).
+    maxts = int(_time.time()) + 2 * 86400
+    page = src.raw_page({"limit": 1000, "status": "open", "max_close_ts": maxts})
+    ms2 = [m for m in (page.get("markets") or [])
+           if not m.get("ticker", "").startswith("KXMVE")]
+    print(f"\nD) closing<=2d: {len(ms2)} real markets; top by volume:")
+    for m in sorted(ms2, key=lambda m: (m.get("volume") or 0), reverse=True)[:8]:
+        print(f"   {m.get('ticker',''):40} vol={m.get('volume')} "
+              f"oi={m.get('open_interest')} close={m.get('close_time')}")
     return 0
 
 
