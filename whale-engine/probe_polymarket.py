@@ -114,12 +114,62 @@ def probe_wallet(wallet: str) -> None:
         print("trades ->", e)
 
 
+def probe_gamma(condition_id: str | None) -> None:
+    """Find out how to resolve a market's outcome via the Gamma API.
+    The per-wallet grader needs this: given a conditionId, which query param
+    returns THAT market with its winning outcome? Tries several spellings."""
+    GAMMA = "https://gamma-api.polymarket.com/markets"
+
+    if not condition_id:  # grab a real one from the #1 wallet's latest trade
+        lb = fetch_leaderboard(1)
+        w = _wallet_of(lb[0]) if lb else None
+        if w:
+            trades = _rows(_get(DATA_API + "/trades", {"user": w, "limit": 1}))
+            if trades:
+                condition_id = trades[0].get("conditionId")
+    if not condition_id:
+        print("no conditionId to test (pass --gamma 0x...)")
+        return
+
+    print(f"\n########## GAMMA RESOLUTION for {condition_id} ##########")
+    # try the candidate filter params; the right one returns exactly this market
+    for param in ("condition_ids", "condition_id", "conditionIds", "conditionId"):
+        try:
+            rows = _rows(_get(GAMMA, {param: condition_id, "limit": 5}))
+        except Exception as e:
+            print(f"  {param:<14} -> {e}")
+            continue
+        match = [m for m in rows if m.get("conditionId") == condition_id]
+        tag = "MATCH" if match else f"{len(rows)} rows, none match (param ignored?)"
+        print(f"  {param:<14} -> {tag}")
+        if match:
+            m = match[0]
+            keep = {k: m.get(k) for k in
+                    ("conditionId", "question", "closed", "active",
+                     "outcomes", "outcomePrices", "umaResolutionStatus")}
+            print("   ", json.dumps(keep, default=str)[:500])
+            return
+    print("  none of the tried params returned this market — see field dump:")
+    try:
+        rows = _rows(_get(GAMMA, {"limit": 1}))
+        if rows:
+            print("   sample market fields:", ", ".join(rows[0].keys()))
+    except Exception as e:
+        print("   ", e)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Polymarket data-shape probe")
     ap.add_argument("--limit", type=int, default=10,
                     help="leaderboard rows to pull")
     ap.add_argument("--wallet", help="probe this wallet instead of the #1")
+    ap.add_argument("--gamma", nargs="?", const="", default=None,
+                    help="test Gamma market resolution (optionally pass a conditionId)")
     args = ap.parse_args()
+
+    if args.gamma is not None:
+        probe_gamma(args.gamma or None)
+        return
 
     if args.wallet:
         probe_wallet(args.wallet)
