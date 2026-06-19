@@ -112,3 +112,41 @@ class Storage:
         )
         row = cur.fetchone()
         return row["ts"] if row and row["ts"] is not None else None
+
+    # --- dashboard reads (across all markets) ---
+    def recent_signals(self, limit: int = 100) -> list[sqlite3.Row]:
+        cur = self.conn.execute(
+            "SELECT * FROM signals ORDER BY ts DESC LIMIT ?", (limit,)
+        )
+        return list(cur.fetchall())
+
+    def latest_markets(self, limit: int = 200) -> list[sqlite3.Row]:
+        """Most-recent snapshot for each market, busiest first."""
+        cur = self.conn.execute(
+            """
+            SELECT s.* FROM snapshots s
+            JOIN (
+                SELECT market_id, MAX(ts) AS mx FROM snapshots GROUP BY market_id
+            ) last ON s.market_id = last.market_id AND s.ts = last.mx
+            ORDER BY s.volume DESC LIMIT ?
+            """,
+            (limit,),
+        )
+        return list(cur.fetchall())
+
+    def signal_counts(self) -> dict[str, int]:
+        cur = self.conn.execute(
+            "SELECT type, COUNT(*) AS n FROM signals GROUP BY type"
+        )
+        return {row["type"]: row["n"] for row in cur.fetchall()}
+
+    def totals(self) -> dict[str, int]:
+        out = {}
+        for name, table in (("markets", "snapshots"), ("trades", "trades"),
+                            ("signals", "signals")):
+            if table == "snapshots":
+                cur = self.conn.execute("SELECT COUNT(DISTINCT market_id) AS n FROM snapshots")
+            else:
+                cur = self.conn.execute(f"SELECT COUNT(*) AS n FROM {table}")
+            out[name] = cur.fetchone()["n"]
+        return out

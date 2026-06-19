@@ -11,10 +11,26 @@ See [`SPEC.md`](./SPEC.md) for the full vision and roadmap.
 
 No dependencies — stdlib Python 3.10+ only.
 
+### Web dashboard (no terminal-watching needed)
+
 ```bash
 cd whale-engine
 
-# Watch the synthetic market simulator and see signals fire (offline, no API):
+# Start the dashboard + a background watcher, then open the URL in a browser:
+python -m whale_engine.cli serve --source synthetic        # offline demo
+python -m whale_engine.cli serve --source kalshi            # live public data
+#  -> open http://127.0.0.1:8765
+```
+
+The page auto-refreshes every few seconds: summary stats, a live feed of
+recent signals, and the markets being tracked. `--port`, `--host`, and
+`--interval` are configurable; `--no-watch` serves an existing db without
+starting a watcher.
+
+### Terminal mode
+
+```bash
+# Watch the synthetic simulator and see signals fire (offline, no API):
 python -m whale_engine.cli run --source synthetic --cycles 40 --interval 0
 
 # A single live cycle against Kalshi's public API:
@@ -60,7 +76,8 @@ adapters/ (kalshi, synthetic)  ->  engine (ingest loop)  ->  storage (sqlite)
 - **`detectors.py`** — the four v1 detectors, per-market calibrated, with cooldowns.
 - **`storage.py`** — SQLite history (snapshots, trades, signals) for backtesting.
 - **`engine.py`** — the watch-only poll loop.
-- **`cli.py`** — `python -m whale_engine.cli run ...`
+- **`web.py`** — the browser dashboard + JSON API (stdlib http.server).
+- **`cli.py`** — `python -m whale_engine.cli run|serve ...`
 
 ## Notes on Kalshi
 
@@ -72,7 +89,7 @@ adapters/ (kalshi, synthetic)  ->  engine (ingest loop)  ->  storage (sqlite)
 
 ## What's next (per SPEC.md)
 
-- **Phase 2:** news enrichment + a live dashboard + alerts.
+- **Phase 2:** live dashboard ✅ · news enrichment + alerts (next).
 - **Phase 3:** paper-trading engine + an edge report graded against real
   market resolutions.
 - **Phase 4:** Polymarket adapter for *literal* wallet-level whale tracking.

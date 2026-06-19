@@ -4,12 +4,16 @@
   python -m whale_engine.cli run --once          # a single cycle
   python -m whale_engine.cli run --source kalshi # live Kalshi public data
   python -m whale_engine.cli run --cycles 20 --interval 2
+
+  python -m whale_engine.cli serve               # web dashboard + background watcher
+  python -m whale_engine.cli serve --port 8765 --source kalshi
 """
 
 from __future__ import annotations
 
 import argparse
 import logging
+import threading
 from datetime import datetime, timezone
 
 from .adapters import make_source
@@ -17,6 +21,7 @@ from .config import Config
 from .engine import Engine
 from .models import Signal
 from .storage import Storage
+from . import web
 
 _ICON = {
     "size_spike": "🐋",
@@ -35,34 +40,19 @@ def _print_signal(sig: Signal) -> None:
         print(f"      ↳ {sig.question}")
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="whale_engine", description=__doc__)
-    sub = parser.add_subparsers(dest="cmd", required=True)
-
-    run = sub.add_parser("run", help="run the watch-only detection loop")
-    run.add_argument("--source", choices=["synthetic", "kalshi"], default=None)
-    run.add_argument("--db", default=None, help="sqlite path (default: config or whales.db)")
-    run.add_argument("--config", default="config.json", help="config JSON path")
-    run.add_argument("--interval", type=int, default=None, help="poll interval seconds")
-    run.add_argument("--cycles", type=int, default=None, help="stop after N cycles")
-    run.add_argument("--once", action="store_true", help="run a single cycle and exit")
-    run.add_argument("--quiet", action="store_true", help="suppress info logging")
-
-    args = parser.parse_args(argv)
-
-    logging.basicConfig(
-        level=logging.WARNING if args.quiet else logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
-
+def _build_config(args) -> Config:
     config = Config.load(args.config)
-    if args.source:
+    if getattr(args, "source", None):
         config.source = args.source
-    if args.db:
+    if getattr(args, "db", None):
         config.db_path = args.db
-    if args.interval is not None:
+    if getattr(args, "interval", None) is not None:
         config.poll_interval_sec = args.interval
+    return config
 
+
+def _cmd_run(args) -> int:
+    config = _build_config(args)
     store = Storage(config.db_path)
     source = make_source(config.source, config)
     engine = Engine(config, source, store, sink=_print_signal)
@@ -78,6 +68,58 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         store.close()
     return 0
+
+
+def _cmd_serve(args) -> int:
+    config = _build_config(args)
+    print(f"Whale Engine — serving dashboard for '{config.source}'. "
+          f"Watch-only, no trading.")
+    if not args.no_watch:
+        # Run the watcher in a daemon thread (its own Storage/connection) so the
+        # dashboard updates live while the web server runs in the foreground.
+        def _watch() -> None:
+            store = Storage(config.db_path)
+            source = make_source(config.source, config)
+            Engine(config, source, store, sink=lambda _s: None).run()
+        threading.Thread(target=_watch, daemon=True, name="watcher").start()
+        print(f"Background watcher started (source={config.source}, "
+              f"interval={config.poll_interval_sec}s).")
+    web.serve(config.db_path, host=args.host, port=args.port)
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="whale_engine", description=__doc__)
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    run = sub.add_parser("run", help="run the watch-only detection loop")
+    run.add_argument("--source", choices=["synthetic", "kalshi"], default=None)
+    run.add_argument("--db", default=None, help="sqlite path (default: config or whales.db)")
+    run.add_argument("--config", default="config.json", help="config JSON path")
+    run.add_argument("--interval", type=int, default=None, help="poll interval seconds")
+    run.add_argument("--cycles", type=int, default=None, help="stop after N cycles")
+    run.add_argument("--once", action="store_true", help="run a single cycle and exit")
+    run.add_argument("--quiet", action="store_true", help="suppress info logging")
+    run.set_defaults(func=_cmd_run)
+
+    serve = sub.add_parser("serve", help="run the web dashboard (+ background watcher)")
+    serve.add_argument("--source", choices=["synthetic", "kalshi"], default=None)
+    serve.add_argument("--db", default=None, help="sqlite path (default: config or whales.db)")
+    serve.add_argument("--config", default="config.json", help="config JSON path")
+    serve.add_argument("--interval", type=int, default=None, help="poll interval seconds")
+    serve.add_argument("--host", default="127.0.0.1", help="bind host")
+    serve.add_argument("--port", type=int, default=8765, help="bind port")
+    serve.add_argument("--no-watch", action="store_true",
+                       help="serve only; don't start the background watcher")
+    serve.add_argument("--quiet", action="store_true", help="suppress info logging")
+    serve.set_defaults(func=_cmd_serve)
+
+    args = parser.parse_args(argv)
+    logging.basicConfig(
+        level=logging.WARNING if args.quiet else logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    return args.func(args)
 
 
 if __name__ == "__main__":
