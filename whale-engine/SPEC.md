@@ -183,7 +183,10 @@ Agree on vision, scope, architecture, and guardrails.
 
 ## 8. Open questions (to resolve before/within Phase 1)
 
-1. Kalshi API access: which market categories to start with (politics, econ, sports)?
+1. ~~Kalshi API access: which market categories to start with?~~ **Decided: all
+   major categories.** Ingest broadly, but calibrate whale thresholds *per-market
+   by liquidity* so a "whale" is relative to that market's own normal size (avoids
+   noise from thin markets). Liquid markets get priority in detection/alerting.
 2. Polling cadence vs. websocket streaming — what does Kalshi's API support / allow?
 3. What's "whale-sized" per market? Thresholds will need per-category calibration.
 4. Alerting channel preference (push? email? Discord/Telegram webhook?).
