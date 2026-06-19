@@ -40,7 +40,7 @@ class KalshiSource:
     # combos. They have no liquidity and just bury the real markets — skip them.
     EXCLUDE_PREFIXES = ("KXMVECROSSCATEGORY",)
 
-    def __init__(self, base_url: str, market_limit: int, timeout: int = 15,
+    def __init__(self, base_url: str, market_limit: int, timeout: int = 30,
                  auth=None, scan_pages: int = 120, active_only: bool = True,
                  discovery_every: int = 40) -> None:
         self.base_url = base_url.rstrip("/")
@@ -75,6 +75,10 @@ class KalshiSource:
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
             log.warning("Kalshi request failed (%s): %s", path, exc)
             return {}
+
+    def raw_page(self, params: dict) -> dict:
+        """Fetch one raw /markets page (diagnostics)."""
+        return self._get("markets", params)
 
     def fetch_markets(self) -> list[MarketSnapshot]:
         # Expensive full scan to *discover* the liquid markets, then cheap

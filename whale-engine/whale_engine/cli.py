@@ -108,6 +108,43 @@ def _cmd_serve(args) -> int:
     return 0
 
 
+def _cmd_probe(args) -> int:
+    """Dump raw Kalshi market data so we can see the true field names/values."""
+    import json as _json
+    config = _build_config(args)
+    config.source = "kalshi"
+    src = make_source("kalshi", config)
+
+    print("\n=== Probe 1: one page of open markets ===")
+    page = src.raw_page({"limit": 100, "status": "open"})
+    markets = page.get("markets") or []
+    print(f"markets returned: {len(markets)}")
+    if markets:
+        m = markets[0]
+        print(f"\nfirst market, ALL fields:\n{_json.dumps(m, indent=2)[:1500]}")
+        # how many have any volume / open interest?
+        def num(x, *keys):
+            for k in keys:
+                v = x.get(k)
+                if isinstance(v, (int, float)):
+                    return v
+            return 0
+        with_vol = sum(1 for x in markets if num(x, "volume", "volume_24h"))
+        with_oi = sum(1 for x in markets if num(x, "open_interest"))
+        print(f"\nof {len(markets)} markets: {with_vol} have volume, {with_oi} have open_interest")
+        from collections import Counter
+        prefixes = Counter(x.get("ticker", "").split("-")[0] for x in markets)
+        print(f"ticker prefixes on this page: {dict(prefixes.most_common(10))}")
+
+    print("\n=== Probe 2: top markets via /markets sorted (no status filter) ===")
+    page2 = src.raw_page({"limit": 20})
+    ms2 = page2.get("markets") or []
+    for x in ms2[:10]:
+        print(f"  {x.get('ticker','?'):40} vol={x.get('volume')} "
+              f"vol24={x.get('volume_24h')} oi={x.get('open_interest')} status={x.get('status')}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="whale_engine", description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -135,6 +172,11 @@ def main(argv: list[str] | None = None) -> int:
                        help="don't auto-open the browser")
     serve.add_argument("--quiet", action="store_true", help="suppress info logging")
     serve.set_defaults(func=_cmd_serve)
+
+    probe = sub.add_parser("probe", help="dump raw Kalshi market data (diagnostics)")
+    probe.add_argument("--config", default="config.json", help="config JSON path")
+    probe.add_argument("--quiet", action="store_true")
+    probe.set_defaults(func=_cmd_probe)
 
     args = parser.parse_args(argv)
     logging.basicConfig(
