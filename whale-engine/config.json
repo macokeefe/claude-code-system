@@ -1,0 +1,20 @@
+{
+  "db_path": "whales.db",
+  "source": "synthetic",
+  "poll_interval_sec": 30,
+  "market_limit": 200,
+  "kalshi_base_url": "https://api.elections.kalshi.com/trade-api/v2",
+  "thresholds": {
+    "size_spike_mult": 5.0,
+    "size_spike_min": 100,
+    "volume_surge_mult": 4.0,
+    "volume_surge_min": 200,
+    "oi_jump_mult": 4.0,
+    "oi_jump_min": 200,
+    "sharp_move_delta": 0.10,
+    "sharp_move_window_min": 15,
+    "baseline_window": 50,
+    "min_history": 5,
+    "cooldown_min": 20
+  }
+}

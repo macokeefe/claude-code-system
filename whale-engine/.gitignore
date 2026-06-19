@@ -1,0 +1,16 @@
+# databases / data
+*.db
+*.sqlite
+*.sqlite3
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# secrets — never commit API keys
+.env
+*.key
+*.pem
