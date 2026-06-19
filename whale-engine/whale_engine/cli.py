@@ -132,48 +132,40 @@ def _cmd_backfill(args) -> int:
 
 
 def _cmd_probe(args) -> int:
-    """Find where real liquid markets + their volume actually live."""
+    """Dump a raw Kalshi TRADE so we can fix count/price field parsing."""
     import json as _json
-    import time as _time
     config = _build_config(args)
     config.source = "kalshi"
     src = make_source("kalshi", config)
     print("auth:", "ON (authenticated)" if getattr(src, "auth", None) else "OFF (public)")
 
-    # A) Enumerate real (non-KXMVE) market tickers via the events endpoint.
+    # Find a liquid market via events -> batch fetch -> highest volume.
     ev = src._get("events", {"limit": 200, "status": "open",
                              "with_nested_markets": "true"})
-    events = ev.get("events") or []
-    tickers = [m.get("ticker") for e in events
+    tickers = [m.get("ticker") for e in (ev.get("events") or [])
                if not e.get("event_ticker", "").startswith("KXMVE")
                for m in (e.get("markets") or []) if m.get("ticker")]
-    print(f"\nA) events gave {len(tickers)} real market tickers")
+    full = (src._get("markets", {"tickers": ",".join(tickers[:100]),
+                                 "limit": 1000}).get("markets") or [])
+    full.sort(key=lambda m: src._num(m, "volume_fp", "volume"), reverse=True)
+    if not full:
+        print("no markets found")
+        return 0
 
-    # B) Full dump of one real market fetched directly — reveals the true fields.
-    if tickers:
-        one = src._get(f"markets/{tickers[0]}", {})
-        mk = one.get("market") or one
-        print(f"\nB) FULL DUMP of {tickers[0]} (direct fetch):")
-        print(_json.dumps(mk, indent=2)[:1800])
-
-    # C) Batch-fetch those tickers via ?tickers= — does this return volume?
-    got = src._get("markets", {"tickers": ",".join(tickers[:100]), "limit": 1000})
-    ms = got.get("markets") or []
-    withvol = [m for m in ms if (m.get("volume") or 0) > 0]
-    print(f"\nC) ?tickers= returned {len(ms)} markets; {len(withvol)} have volume>0")
-    for m in sorted(ms, key=lambda m: (m.get("volume") or 0), reverse=True)[:8]:
-        print(f"   {m.get('ticker',''):40} vol={m.get('volume')} "
-              f"oi={m.get('open_interest')} last={m.get('last_price')}")
-
-    # D) Markets closing within ~2 days (today's games = the liquid ones).
-    maxts = int(_time.time()) + 2 * 86400
-    page = src.raw_page({"limit": 1000, "status": "open", "max_close_ts": maxts})
-    ms2 = [m for m in (page.get("markets") or [])
-           if not m.get("ticker", "").startswith("KXMVE")]
-    print(f"\nD) closing<=2d: {len(ms2)} real markets; top by volume:")
-    for m in sorted(ms2, key=lambda m: (m.get("volume") or 0), reverse=True)[:8]:
-        print(f"   {m.get('ticker',''):40} vol={m.get('volume')} "
-              f"oi={m.get('open_interest')} close={m.get('close_time')}")
+    # Probe trades for the few most-liquid markets until one has trades.
+    for m in full[:5]:
+        ticker = m.get("ticker")
+        page = src._get("markets/trades", {"ticker": ticker, "limit": 10})
+        trades = page.get("trades") or []
+        print(f"\n{ticker}: {len(trades)} trades "
+              f"(market volume_fp={m.get('volume_fp')})")
+        if trades:
+            print("FULL first trade:")
+            print(_json.dumps(trades[0], indent=2))
+            print("trade field names:", sorted(trades[0].keys()))
+            return 0
+    print("\nNo trades found on the top markets right now (quiet period). "
+          "Re-run during active trading.")
     return 0
 
 
