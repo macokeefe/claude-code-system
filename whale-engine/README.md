@@ -40,6 +40,23 @@ python -m whale_engine.cli run --source kalshi --once
 python -m whale_engine.cli run --source kalshi --interval 30
 ```
 
+### Backfill recent history (so it doesn't start blind)
+
+The detectors learn each market's "normal" from history. Seed that history
+on startup so signals are meaningful right away instead of after a warm-up:
+
+```bash
+# dashboard, pre-seeded with the last 6 hours of real market history:
+python -m whale_engine.cli serve --source kalshi --backfill 6
+
+# or just backfill the database once and exit:
+python -m whale_engine.cli backfill --source kalshi --hours 12
+```
+
+Backfill pulls Kalshi candlestick history (price / volume / open-interest
+buckets) and reconstructs a cumulative series that lines up seamlessly with
+live polling.
+
 Run the tests:
 
 ```bash

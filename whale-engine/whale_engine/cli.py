@@ -74,6 +74,9 @@ def _cmd_run(args) -> int:
     config = _build_config(args)
     store = Storage(config.db_path)
     source = make_source(config.source, config)
+    if getattr(args, "backfill", 0) > 0:
+        from .backfill import backfill
+        backfill(source, store, args.backfill)
     engine = Engine(config, source, store, sink=_print_signal)
 
     cycles = 1 if args.once else args.cycles
@@ -99,12 +102,30 @@ def _cmd_serve(args) -> int:
         def _watch() -> None:
             store = Storage(config.db_path)
             source = make_source(config.source, config)
+            if args.backfill > 0:
+                from .backfill import backfill
+                backfill(source, store, args.backfill)
             Engine(config, source, store, sink=lambda _s: None).run()
         threading.Thread(target=_watch, daemon=True, name="watcher").start()
         print(f"Background watcher started (source={config.source}, "
-              f"interval={config.poll_interval_sec}s).")
+              f"interval={config.poll_interval_sec}s"
+              f"{', backfilling ' + str(args.backfill) + 'h' if args.backfill else ''}).")
     web.serve(config.db_path, host=args.host, port=args.port,
               open_browser=not args.no_open)
+    return 0
+
+
+def _cmd_backfill(args) -> int:
+    """Seed the DB with recent history, then exit (diagnostics/one-off)."""
+    from .backfill import backfill
+    config = _build_config(args)
+    store = Storage(config.db_path)
+    source = make_source(config.source, config)
+    print(f"Backfilling {args.hours}h of history for '{config.source}' "
+          f"into {config.db_path}…")
+    n = backfill(source, store, args.hours)
+    print(f"done — inserted {n} historical snapshots.")
+    store.close()
     return 0
 
 
@@ -165,6 +186,8 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--interval", type=int, default=None, help="poll interval seconds")
     run.add_argument("--cycles", type=int, default=None, help="stop after N cycles")
     run.add_argument("--once", action="store_true", help="run a single cycle and exit")
+    run.add_argument("--backfill", type=int, default=0,
+                     help="seed N hours of history before watching (Kalshi only)")
     run.add_argument("--quiet", action="store_true", help="suppress info logging")
     run.set_defaults(func=_cmd_run)
 
@@ -179,8 +202,18 @@ def main(argv: list[str] | None = None) -> int:
                        help="serve only; don't start the background watcher")
     serve.add_argument("--no-open", action="store_true",
                        help="don't auto-open the browser")
+    serve.add_argument("--backfill", type=int, default=0,
+                       help="seed N hours of history before watching (Kalshi only)")
     serve.add_argument("--quiet", action="store_true", help="suppress info logging")
     serve.set_defaults(func=_cmd_serve)
+
+    bf = sub.add_parser("backfill", help="seed the DB with recent history, then exit")
+    bf.add_argument("--source", choices=["synthetic", "kalshi"], default="kalshi")
+    bf.add_argument("--db", default=None, help="sqlite path")
+    bf.add_argument("--config", default="config.json", help="config JSON path")
+    bf.add_argument("--hours", type=int, default=6, help="hours of history to pull")
+    bf.add_argument("--quiet", action="store_true")
+    bf.set_defaults(func=_cmd_backfill)
 
     probe = sub.add_parser("probe", help="dump raw Kalshi market data (diagnostics)")
     probe.add_argument("--config", default="config.json", help="config JSON path")

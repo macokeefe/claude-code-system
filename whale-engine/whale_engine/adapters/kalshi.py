@@ -52,6 +52,8 @@ class KalshiSource:
         self.discovery_every = discovery_every
         self._liquid: list[MarketSnapshot] = []   # cached most-liquid markets
         self._cycle = 0
+        self._series_of: dict[str, str] = {}      # market ticker -> series ticker
+        self._logged_candle = False
 
     def _get(self, path: str, params: dict) -> dict:
         qs = urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
@@ -122,10 +124,13 @@ class KalshiSource:
                     continue
                 if (e.get("series_ticker") or "").startswith("KXMVE"):
                     continue
+                series = e.get("series_ticker") or e.get("event_ticker", "").split("-")[0]
                 for m in e.get("markets") or []:
                     t = m.get("ticker")
                     if t:
                         tickers.append(t)
+                        if series:
+                            self._series_of[t] = series
             if len(tickers) >= cap:
                 break
             cursor = page.get("cursor")
@@ -220,4 +225,43 @@ class KalshiSource:
                 taker_side=t.get("taker_side", "") or "",
                 trade_id=str(t.get("trade_id") or f"{market_id}:{ts}:{count}"),
             ))
+        return out
+
+    def series_of(self, ticker: str) -> str:
+        """Series ticker for a market (from discovery, else the ticker prefix)."""
+        return self._series_of.get(ticker) or ticker.split("-")[0]
+
+    def _candle_price(self, c: dict) -> float:
+        po = c.get("price")
+        if isinstance(po, dict):
+            v = self._num(po, "close_dollars", "close", "mean_dollars", "mean")
+        else:
+            v = self._num(c, "close_dollars", "close")
+        if v > 1.0:  # legacy cents
+            v /= 100.0
+        return max(0.0, min(1.0, v))
+
+    def fetch_candlesticks(self, ticker: str, series_ticker: str,
+                           start_ts: int, end_ts: int, interval: int = 60) -> list[dict]:
+        """Historical OHLC/volume/OI buckets for a market. `interval` is minutes
+        (1, 60, or 1440). Returns [{ts, price, vol, oi}] oldest-first."""
+        path = f"series/{series_ticker}/markets/{ticker}/candlesticks"
+        page = self._get(path, {"start_ts": start_ts, "end_ts": end_ts,
+                                "period_interval": interval})
+        cs = page.get("candlesticks") or []
+        if cs and not self._logged_candle:
+            self._logged_candle = True
+            log.info("sample candlestick: %s", json.dumps(cs[0])[:400])
+        out = []
+        for c in cs:
+            ts = int(float(c.get("end_period_ts") or 0)) * 1000
+            if not ts:
+                continue
+            out.append({
+                "ts": ts,
+                "price": self._candle_price(c),
+                "vol": self._num(c, "volume_fp", "volume"),
+                "oi": int(self._num(c, "open_interest_fp", "open_interest")),
+            })
+        out.sort(key=lambda p: p["ts"])
         return out
