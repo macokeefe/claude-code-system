@@ -46,6 +46,18 @@ def backfill(source, store, hours: int, interval: int = 60) -> int:
         if not points:
             continue
 
+        # Carry the last known price across empty candles. A candle with no
+        # trades reports no price (parsed as 0); writing that 0 would make the
+        # detectors see a phantom 0 -> N "move". Seed leading gaps with the
+        # first real price (or today's price) and forward-fill the rest.
+        last_price = next((p["price"] for p in points if p["price"] > 0),
+                          snap.yes_price)
+        for p in points:
+            if p["price"] > 0:
+                last_price = p["price"]
+            else:
+                p["price"] = last_price
+
         # Reconstruct cumulative volume so the series ends at today's lifetime
         # total (snap.volume), keeping per-period deltas intact.
         total_recent = sum(p["vol"] for p in points)

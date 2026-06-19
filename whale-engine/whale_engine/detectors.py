@@ -120,6 +120,10 @@ class Detectors:
         past = next((r for r in rows if snap.ts - r["ts"] >= window_ms), None)
         if past is None:
             return []
+        # A 0 price almost always means a data gap, not a real price — a
+        # "0 -> 7%" move is spurious. Require both ends to be real.
+        if past["yes_price"] <= 0 or snap.yes_price <= 0:
+            return []
         delta = snap.yes_price - past["yes_price"]
         if abs(delta) >= th.sharp_move_delta:
             direction = "up" if delta > 0 else "down"

@@ -62,6 +62,13 @@ class DetectorTests(unittest.TestCase):
         sigs = self.det.on_snapshot(last)
         self.assertTrue(any(s.type == "sharp_move" for s in sigs), sigs)
 
+    def test_sharp_move_ignores_zero_price(self):
+        # a "0 -> 7%" move is a data gap, not a real move — must not fire
+        snaps = [snap(i * MIN, price=0.0) for i in range(20)]
+        snaps.append(snap(20 * MIN, price=0.07))
+        last = self._seed(snaps)
+        self.assertFalse([s for s in self.det.on_snapshot(last) if s.type == "sharp_move"])
+
     def test_size_spike_fires(self):
         # baseline of small trades
         small = [TradeEvent("test", "MKT", i * MIN, 0.5, 20, "yes", f"t{i}")
