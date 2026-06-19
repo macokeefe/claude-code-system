@@ -14,12 +14,33 @@ from typing import Callable
 from .adapters.base import Source
 from .config import Config
 from .detectors import Detectors
-from .models import Signal
+from .models import MarketSnapshot, Signal
 from .storage import Storage
 
 log = logging.getLogger("whale_engine.engine")
 
 SignalSink = Callable[[Signal], None]
+
+
+def _sanitize(snap: MarketSnapshot) -> bool:
+    """Clamp/repair a snapshot in place; return False to drop garbage.
+
+    Defends the DB and detectors from malformed venue data: missing ids,
+    out-of-range probabilities, negative counts, or completely empty rows.
+    """
+    if not snap.market_id:
+        return False
+    try:
+        snap.yes_price = min(1.0, max(0.0, float(snap.yes_price)))
+        snap.volume = max(0, int(snap.volume))
+        snap.open_interest = max(0, int(snap.open_interest))
+        snap.liquidity = max(0.0, float(snap.liquidity))
+    except (TypeError, ValueError):
+        return False
+    # a row with no price, no volume, and no open interest carries no signal
+    if snap.yes_price <= 0 and snap.volume <= 0 and snap.open_interest <= 0:
+        return False
+    return True
 
 
 class Engine:
@@ -38,7 +59,11 @@ class Engine:
         markets = self.source.fetch_markets()
         log.info("fetched %d markets from %s", len(markets), self.source.name)
 
+        dropped = 0
         for snap in markets:
+            if not _sanitize(snap):
+                dropped += 1
+                continue
             self.store.insert_snapshot(snap)
 
             for sig in self.detectors.on_snapshot(snap):
@@ -54,6 +79,8 @@ class Engine:
                     self._emit(sig)
                     emitted += 1
 
+        if dropped:
+            log.info("dropped %d malformed market snapshots this cycle", dropped)
         return emitted
 
     def run(self, max_cycles: int | None = None) -> None:

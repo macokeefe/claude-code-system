@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import urllib.parse
 from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -24,6 +25,7 @@ log = logging.getLogger("whale_engine.web")
 
 _ICON = {"size_spike": "🐋", "volume_surge": "📈", "oi_jump": "🧱", "sharp_move": "⚡"}
 _EXPLAIN_CACHE: dict[str, str] = {}  # AI rundowns, keyed by signal, so re-clicks are free
+_ACTIVITY_CACHE: dict = {"ts": 0.0, "data": None}  # short-lived cache for /api/activity
 
 
 def _state(db_path: str) -> dict:
@@ -41,6 +43,54 @@ def _state(db_path: str) -> dict:
         }
     finally:
         store.close()
+
+
+def _activity(db_path: str) -> dict:
+    """What the engine is observing right now — even when nothing is a whale:
+    a live trade feed, the biggest recent trades, and the top movers. Cached
+    a few seconds so multiple browser polls don't hammer the DB."""
+    now = time.time()
+    if _ACTIVITY_CACHE["data"] is not None and now - _ACTIVITY_CACHE["ts"] < 4:
+        return _ACTIVITY_CACHE["data"]
+
+    store = Storage(db_path)
+    try:
+        markets = [dict(r) for r in store.latest_markets(80)]
+        qmap = {m["market_id"]: m.get("question") for m in markets}
+
+        window_ms = 30 * 60 * 1000
+        movers = []
+        for m in markets:
+            rows = store.recent_snapshots(m["market_id"], 40)  # newest-first
+            if len(rows) < 2:
+                continue
+            cur = rows[0]
+            past = next((r for r in rows if cur["ts"] - r["ts"] >= window_ms), rows[-1])
+            movers.append({
+                "market_id": m["market_id"], "question": m.get("question"),
+                "price": cur["yes_price"],
+                "dprice": cur["yes_price"] - past["yes_price"],
+                "dvol": max(cur["volume"] - past["volume"], 0),
+            })
+        top_movers = sorted(movers, key=lambda x: abs(x["dprice"]), reverse=True)[:8]
+        most_active = sorted(movers, key=lambda x: x["dvol"], reverse=True)[:8]
+
+        since = int(now * 1000) - 24 * 3600 * 1000
+        biggest = [dict(r) for r in store.biggest_trades(since, 10)]
+        recent = [dict(r) for r in store.recent_trades_all(15)]
+        for t in biggest + recent:
+            t["question"] = qmap.get(t["market_id"], "")
+
+        data = {
+            "top_movers": top_movers,
+            "most_active": [m for m in most_active if m["dvol"] > 0],
+            "biggest_trades": biggest,
+            "recent_trades": recent,
+        }
+    finally:
+        store.close()
+    _ACTIVITY_CACHE.update(ts=now, data=data)
+    return data
 
 
 def _explain(db_path: str, market_id: str, ts: int, sig_type: str) -> dict:
@@ -84,6 +134,13 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send(200, body, "application/json")
             except Exception as exc:  # never 500 the page; report cleanly
                 log.exception("state failed")
+                self._send(500, json.dumps({"error": str(exc)}).encode(), "application/json")
+        elif path == "/api/activity":
+            try:
+                self._send(200, json.dumps(_activity(self.db_path)).encode("utf-8"),
+                           "application/json")
+            except Exception as exc:
+                log.exception("activity failed")
                 self._send(500, json.dumps({"error": str(exc)}).encode(), "application/json")
         elif path == "/api/explain":
             try:
@@ -169,6 +226,11 @@ _PAGE = """<!doctype html>
   .legend ul { margin: 10px 0 4px; padding-left: 18px; }
   .legend li { margin: 4px 0; color: #c9d1d9; }
   .cap { font-size: 12px; color: #8b949e; margin: -4px 0 8px; }
+  h3 { font-size: 12px; color: #8b949e; text-transform: uppercase; letter-spacing: .05em;
+       margin: 18px 0 6px; }
+  .act-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 820px) { .act-grid { grid-template-columns: 1fr; } }
+  .up { color: #3fb950; } .down { color: #f85149; }
   .tabs { display: flex; gap: 8px; margin: 8px 0 6px; }
   .tab { background: #161b22; border: 1px solid #21262d; color: #8b949e;
          padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; }
@@ -211,6 +273,24 @@ _PAGE = """<!doctype html>
       <li><b>vs normal</b> — how much bigger than that market's usual activity (3× = three times normal).</li>
     </ul>
   </details>
+
+  <h2>Live activity <span class="ask">— what the engine is recording right now</span></h2>
+  <div class="cap">Even when nothing crosses the whale bar, this is the flow it's measuring and storing.</div>
+  <div class="act-grid">
+    <div>
+      <h3>Recent trades</h3>
+      <table><thead><tr><th>Time</th><th>Market</th><th>Side</th><th>$</th></tr></thead>
+        <tbody id="recent-trades"><tr><td class="empty" colspan="4">…</td></tr></tbody></table>
+    </div>
+    <div>
+      <h3>Biggest trades (24h)</h3>
+      <table><thead><tr><th>Market</th><th>Side</th><th>$</th><th>Contracts</th></tr></thead>
+        <tbody id="biggest-trades"><tr><td class="empty" colspan="4">…</td></tr></tbody></table>
+    </div>
+  </div>
+  <h3>Top movers (last ~30 min)</h3>
+  <table><thead><tr><th>Market</th><th>Chance</th><th>Δ price</th><th>Δ volume</th></tr></thead>
+    <tbody id="top-movers"><tr><td class="empty" colspan="4">…</td></tr></tbody></table>
 
   <h2>Recent signals <span class="ask">— click any row for an AI rundown</span></h2>
   <table>
@@ -326,6 +406,42 @@ async function refresh() {
     document.getElementById('live').textContent = '● disconnected';
   }
 }
+function pts(d) {
+  const v = Math.round((d || 0) * 100);
+  if (v === 0) return '0';
+  return `<span class="${v > 0 ? 'up' : 'down'}">${v > 0 ? '+' : ''}${v} pts</span>`;
+}
+function tradeDollars(t) { return money((t.count || 0) * (t.price || 0)); }
+
+async function refreshActivity() {
+  try {
+    const d = await (await fetch('/api/activity')).json();
+    const rt = d.recent_trades || [];
+    document.getElementById('recent-trades').innerHTML = rt.length ? rt.map(t => `
+      <tr><td>${fmtTime(t.ts)}</td>
+      <td>${esc(t.question || t.market_id)}</td>
+      <td>${sideBadge(t.taker_side)}</td>
+      <td class="money">${tradeDollars(t)}</td></tr>`).join('')
+      : '<tr><td class="empty" colspan="4">no trades recorded yet</td></tr>';
+
+    const bt = d.biggest_trades || [];
+    document.getElementById('biggest-trades').innerHTML = bt.length ? bt.map(t => `
+      <tr><td>${esc(t.question || t.market_id)}</td>
+      <td>${sideBadge(t.taker_side)}</td>
+      <td class="money">${tradeDollars(t)}</td>
+      <td>${(t.count || 0).toLocaleString()}</td></tr>`).join('')
+      : '<tr><td class="empty" colspan="4">—</td></tr>';
+
+    const tm = d.top_movers || [];
+    document.getElementById('top-movers').innerHTML = tm.length ? tm.map(m => `
+      <tr><td><b>${esc(m.question || m.market_id)}</b><div class="q">${esc(m.market_id)}</div></td>
+      <td>${Math.round(m.price * 100)}%</td>
+      <td>${pts(m.dprice)}</td>
+      <td>${(m.dvol || 0).toLocaleString()}</td></tr>`).join('')
+      : '<tr><td class="empty" colspan="4">building history…</td></tr>';
+  } catch (e) { /* leave last values on screen */ }
+}
+
 function closeModal() { document.getElementById('modal').classList.add('hidden'); }
 
 async function explainSignal(row) {
@@ -350,6 +466,8 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 
 refresh();
 setInterval(refresh, 3000);
+refreshActivity();
+setInterval(refreshActivity, 5000);
 </script>
 </body>
 </html>

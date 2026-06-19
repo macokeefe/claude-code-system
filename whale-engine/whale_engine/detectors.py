@@ -71,6 +71,10 @@ class Detectors:
         if not deltas:
             return []
         current = deltas[0]
+        # a single interval can't exceed the market's lifetime volume — if it
+        # does, the cumulative series glitched (reset/backfill seam); skip
+        if current > snap.volume:
+            return []
         if not self._qualifies(current, snap.yes_price, snap.open_interest):
             return []
         baseline = max(_median(deltas[1:]) or _median(deltas), th.min_contracts)

@@ -126,6 +126,21 @@ class Storage:
         )
         return list(cur.fetchall())
 
+    def recent_trades_all(self, limit: int = 20) -> list[sqlite3.Row]:
+        """Latest trades across all markets — the live 'it's recording' feed."""
+        cur = self.conn.execute(
+            "SELECT * FROM trades ORDER BY ts DESC LIMIT ?", (limit,)
+        )
+        return list(cur.fetchall())
+
+    def biggest_trades(self, since_ms: int, limit: int = 10) -> list[sqlite3.Row]:
+        """Largest single trades since a timestamp (whale-ish flow, any size)."""
+        cur = self.conn.execute(
+            "SELECT * FROM trades WHERE ts>=? ORDER BY count DESC LIMIT ?",
+            (since_ms, limit),
+        )
+        return list(cur.fetchall())
+
     def last_signal_ts(self, market_id: str, sig_type: str) -> int | None:
         cur = self.conn.execute(
             "SELECT MAX(ts) AS ts FROM signals WHERE market_id=? AND type=?",
