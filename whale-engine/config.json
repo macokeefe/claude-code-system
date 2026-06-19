@@ -3,7 +3,7 @@
   "source": "synthetic",
   "poll_interval_sec": 30,
   "market_limit": 60,
-  "scan_pages": 120,
+  "scan_pages": 20,
   "active_only": true,
   "discovery_every": 40,
   "kalshi_base_url": "https://api.elections.kalshi.com/trade-api/v2",

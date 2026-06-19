@@ -42,7 +42,7 @@ class Config:
     source: str = "synthetic"         # "kalshi" | "synthetic"
     poll_interval_sec: int = 30
     market_limit: int = 60            # how many (most-liquid) markets to keep
-    scan_pages: int = 120             # max Kalshi pages (x1000) to scan during discovery
+    scan_pages: int = 20              # max event pages (x200) to scan during discovery
     active_only: bool = True          # drop dead markets (0 volume AND 0 open interest)
     discovery_every: int = 40         # re-run the full liquid-market discovery every N cycles
     kalshi_base_url: str = "https://api.elections.kalshi.com/trade-api/v2"

@@ -101,36 +101,49 @@ class KalshiSource:
             self._liquid = discovered
         return self._liquid
 
-    def _discover_liquid(self) -> list[MarketSnapshot]:
-        """Page through open markets, skip parlay junk, keep ones with real
-        volume/open-interest, and return the most-liquid `market_limit`."""
-        found: list[MarketSnapshot] = []
-        scanned = 0
-        pages = 0
+    def _discover_real_tickers(self) -> list[str]:
+        """Enumerate real (non-KXMVE) market tickers via the events endpoint.
+        The plain /markets listing is flooded with KXMVE parlay combos; events
+        give us the genuine markets."""
+        tickers: list[str] = []
+        cap = self.market_limit * 25
         cursor = None
+        pages = 0
         for _ in range(self.scan_pages):
-            page = self._get("markets", {"limit": 1000, "status": "open",
-                                         "cursor": cursor})
-            markets = page.get("markets") or []
-            if not markets:
+            page = self._get("events", {"limit": 200, "status": "open",
+                                        "with_nested_markets": "true",
+                                        "cursor": cursor})
+            events = page.get("events") or []
+            if not events:
                 break
             pages += 1
-            scanned += len(markets)
-            for m in markets:
-                if m.get("ticker", "").startswith(self.EXCLUDE_PREFIXES):
+            for e in events:
+                if e.get("event_ticker", "").startswith("KXMVE"):
                     continue
-                snap = self._to_snapshot(m)
-                if not self.active_only or snap.volume > 0 or snap.open_interest > 0:
-                    found.append(snap)
-            if len(found) >= self.market_limit * 3:  # plenty to rank from
+                if (e.get("series_ticker") or "").startswith("KXMVE"):
+                    continue
+                for m in e.get("markets") or []:
+                    t = m.get("ticker")
+                    if t:
+                        tickers.append(t)
+            if len(tickers) >= cap:
                 break
             cursor = page.get("cursor")
             if not cursor:
                 break
-        found.sort(key=lambda s: s.volume, reverse=True)
-        top = found[: self.market_limit]
-        log.info("Kalshi discovery: scanned %d markets over %d pages, kept %d active; "
-                 "top: %s", scanned, pages, len(top),
+        return tickers[:cap], pages
+
+    def _discover_liquid(self) -> list[MarketSnapshot]:
+        """Find real markets via events, fetch their full data (with volume),
+        keep the ones with real activity, and return the most-liquid ones."""
+        tickers, ev_pages = self._discover_real_tickers()
+        snaps = self._fetch_by_tickers(tickers)
+        if self.active_only:
+            snaps = [s for s in snaps if s.volume > 0 or s.open_interest > 0]
+        snaps.sort(key=lambda s: s.volume, reverse=True)
+        top = snaps[: self.market_limit]
+        log.info("Kalshi discovery: %d real tickers over %d event pages, %d active; "
+                 "top: %s", len(tickers), ev_pages, len(top),
                  ", ".join(f"{s.market_id}({s.volume})" for s in top[:5]) or "none")
         return top
 
@@ -144,25 +157,44 @@ class KalshiSource:
         out.sort(key=lambda s: s.volume, reverse=True)
         return out
 
+    @staticmethod
+    def _num(m: dict, *keys) -> float:
+        """First parseable numeric value among keys (Kalshi sends them as strings)."""
+        for k in keys:
+            v = m.get(k)
+            if v is None or v == "":
+                continue
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                continue
+        return 0.0
+
     def _to_snapshot(self, m: dict) -> MarketSnapshot:
-        # Prefer the bid/ask midpoint; fall back to last price. All in cents.
-        yes_bid = m.get("yes_bid")
-        yes_ask = m.get("yes_ask")
-        if yes_bid is not None and yes_ask is not None and (yes_bid or yes_ask):
-            yes_cents = (yes_bid + yes_ask) / 2
+        # Kalshi's current schema uses `_dollars` (price 0..1) and `_fp` (counts)
+        # string fields; older field names are kept as fallbacks.
+        yes_bid = self._num(m, "yes_bid_dollars")
+        yes_ask = self._num(m, "yes_ask_dollars")
+        if yes_bid or yes_ask:
+            yes = (yes_bid + yes_ask) / 2.0
         else:
-            yes_cents = m.get("last_price") or 0
-        title = m.get("title") or m.get("subtitle") or m.get("ticker", "")
+            yes = self._num(m, "last_price_dollars")
+            if not yes:  # legacy cents field
+                yes = self._num(m, "last_price") / 100.0
+        if yes > 1.0:  # safety: a cents value slipped through
+            yes /= 100.0
+        title = (m.get("title") or m.get("yes_sub_title")
+                 or m.get("subtitle") or m.get("ticker", ""))
         return MarketSnapshot(
             platform=self.name,
             market_id=m.get("ticker", ""),
             question=title,
             status=m.get("status", ""),
             ts=int(datetime.now(timezone.utc).timestamp() * 1000),
-            yes_price=max(0.0, min(1.0, yes_cents / 100.0)),
-            volume=int(m.get("volume") or 0),
-            open_interest=int(m.get("open_interest") or 0),
-            liquidity=float(m.get("liquidity") or 0),
+            yes_price=max(0.0, min(1.0, yes)),
+            volume=int(self._num(m, "volume_fp", "volume")),
+            open_interest=int(self._num(m, "open_interest_fp", "open_interest")),
+            liquidity=self._num(m, "liquidity_dollars", "liquidity"),
         )
 
     def fetch_trades(self, market_id: str, since_ms: int) -> list[TradeEvent]:
@@ -173,14 +205,19 @@ class KalshiSource:
             ts = _iso_to_ms(t.get("created_time", ""))
             if since_ms and ts <= since_ms:
                 continue
-            yes_cents = t.get("yes_price") or 0
+            price = self._num(t, "yes_price_dollars")
+            if not price:  # legacy cents field
+                price = self._num(t, "yes_price") / 100.0
+            if price > 1.0:
+                price /= 100.0
+            count = int(self._num(t, "count"))
             out.append(TradeEvent(
                 platform=self.name,
                 market_id=market_id,
                 ts=ts,
-                price=max(0.0, min(1.0, yes_cents / 100.0)),
-                count=int(t.get("count") or 0),
+                price=max(0.0, min(1.0, price)),
+                count=count,
                 taker_side=t.get("taker_side", "") or "",
-                trade_id=str(t.get("trade_id") or f"{market_id}:{ts}:{t.get('count')}"),
+                trade_id=str(t.get("trade_id") or f"{market_id}:{ts}:{count}"),
             ))
         return out
