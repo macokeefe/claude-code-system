@@ -110,38 +110,56 @@ def _cmd_serve(args) -> int:
 
 def _cmd_probe(args) -> int:
     """Dump raw Kalshi market data so we can see the true field names/values."""
-    import json as _json
+    from collections import Counter
     config = _build_config(args)
     config.source = "kalshi"
     src = make_source("kalshi", config)
+    print("auth:", "ON (authenticated)" if getattr(src, "auth", None) else "OFF (public)")
 
-    print("\n=== Probe 1: one page of open markets ===")
-    page = src.raw_page({"limit": 100, "status": "open"})
-    markets = page.get("markets") or []
-    print(f"markets returned: {len(markets)}")
-    if markets:
-        m = markets[0]
-        print(f"\nfirst market, ALL fields:\n{_json.dumps(m, indent=2)[:1500]}")
-        # how many have any volume / open interest?
-        def num(x, *keys):
-            for k in keys:
-                v = x.get(k)
-                if isinstance(v, (int, float)):
-                    return v
-            return 0
-        with_vol = sum(1 for x in markets if num(x, "volume", "volume_24h"))
-        with_oi = sum(1 for x in markets if num(x, "open_interest"))
-        print(f"\nof {len(markets)} markets: {with_vol} have volume, {with_oi} have open_interest")
-        from collections import Counter
-        prefixes = Counter(x.get("ticker", "").split("-")[0] for x in markets)
-        print(f"ticker prefixes on this page: {dict(prefixes.most_common(10))}")
+    # Scan several pages, splitting multivariate (KXMVE*) from real single markets.
+    kxmve = 0
+    others: list[dict] = []
+    cursor = None
+    pages = 0
+    for _ in range(8):
+        page = src.raw_page({"limit": 1000, "status": "open", "cursor": cursor})
+        ms = page.get("markets") or []
+        if not ms:
+            break
+        pages += 1
+        for m in ms:
+            if m.get("ticker", "").startswith("KXMVE"):
+                kxmve += 1
+            else:
+                others.append(m)
+        if len(others) >= 20:
+            break
+        cursor = page.get("cursor")
+        if not cursor:
+            break
 
-    print("\n=== Probe 2: top markets via /markets sorted (no status filter) ===")
-    page2 = src.raw_page({"limit": 20})
-    ms2 = page2.get("markets") or []
-    for x in ms2[:10]:
-        print(f"  {x.get('ticker','?'):40} vol={x.get('volume')} "
-              f"vol24={x.get('volume_24h')} oi={x.get('open_interest')} status={x.get('status')}")
+    print(f"\nscanned {pages} page(s) (~{pages*1000} markets): "
+          f"{kxmve} multivariate KXMVE*, {len(others)} real single markets")
+
+    if not others:
+        print("\nNo non-KXMVE markets found in the scan — the listing is all "
+              "multivariate combos. We'll need to fetch via events/series instead.")
+        return 0
+
+    m = others[0]
+    print(f"\nfirst REAL market: {m.get('ticker')}  (status={m.get('status')})")
+    print("all field names:", sorted(m.keys()))
+    print("volume/interest/price-ish fields:")
+    for k, v in sorted(m.items()):
+        if any(s in k.lower() for s in ("vol", "interest", "price", "liquid")):
+            print(f"   {k} = {v!r}")
+    print("\nnext few real markets:")
+    for x in others[:8]:
+        print(f"   {x.get('ticker',''):42} vol={x.get('volume')} "
+              f"vol24={x.get('volume_24h')} oi={x.get('open_interest')} "
+              f"liq={x.get('liquidity')}")
+    print("\nreal-market ticker prefixes:",
+          dict(Counter(x.get('ticker', '').split('-')[0] for x in others).most_common(15)))
     return 0
 
 
