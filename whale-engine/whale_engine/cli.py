@@ -132,40 +132,40 @@ def _cmd_backfill(args) -> int:
 
 
 def _cmd_probe(args) -> int:
-    """Dump a raw Kalshi TRADE so we can fix count/price field parsing."""
-    import json as _json
+    """Test Kalshi's GLOBAL trade feed (markets/trades with no ticker) so we
+    can show the true biggest trades across all of Kalshi, not just tracked
+    markets."""
+    import time as _time
     config = _build_config(args)
     config.source = "kalshi"
     src = make_source("kalshi", config)
     print("auth:", "ON (authenticated)" if getattr(src, "auth", None) else "OFF (public)")
 
-    # Find a liquid market via events -> batch fetch -> highest volume.
-    ev = src._get("events", {"limit": 200, "status": "open",
-                             "with_nested_markets": "true"})
-    tickers = [m.get("ticker") for e in (ev.get("events") or [])
-               if not e.get("event_ticker", "").startswith("KXMVE")
-               for m in (e.get("markets") or []) if m.get("ticker")]
-    full = (src._get("markets", {"tickers": ",".join(tickers[:100]),
-                                 "limit": 1000}).get("markets") or [])
-    full.sort(key=lambda m: src._num(m, "volume_fp", "volume"), reverse=True)
-    if not full:
-        print("no markets found")
+    since = int(_time.time()) - 3600  # last hour, unix seconds
+    page = src._get("markets/trades", {"limit": 1000, "min_ts": since})
+    trades = page.get("trades") or []
+    print(f"\nglobal markets/trades (no ticker), last 1h: {len(trades)} trades, "
+          f"cursor={'yes' if page.get('cursor') else 'none'}")
+    if not trades:
+        print("Endpoint returned nothing without a ticker — may require one, "
+              "or it's a quiet hour. (We'll fall back to per-market polling.)")
         return 0
 
-    # Probe trades for the few most-liquid markets until one has trades.
-    for m in full[:5]:
-        ticker = m.get("ticker")
-        page = src._get("markets/trades", {"ticker": ticker, "limit": 10})
-        trades = page.get("trades") or []
-        print(f"\n{ticker}: {len(trades)} trades "
-              f"(market volume_fp={m.get('volume_fp')})")
-        if trades:
-            print("FULL first trade:")
-            print(_json.dumps(trades[0], indent=2))
-            print("trade field names:", sorted(trades[0].keys()))
-            return 0
-    print("\nNo trades found on the top markets right now (quiet period). "
-          "Re-run during active trading.")
+    distinct = {t.get("ticker") for t in trades}
+    print(f"distinct markets in feed: {len(distinct)}")
+
+    def dollars(t):
+        try:
+            c = float(t.get("count_fp", 0))
+            p = float(t.get("yes_price_dollars", 0))
+            return c * (1 - p) if t.get("taker_side") == "no" else c * p
+        except (TypeError, ValueError):
+            return 0.0
+
+    print("\ntrue biggest trades across Kalshi (last 1h, by $):")
+    for t in sorted(trades, key=dollars, reverse=True)[:10]:
+        print(f"  {t.get('ticker',''):34} {t.get('count_fp'):>10} @ "
+              f"{t.get('yes_price_dollars')} {t.get('taker_side'):>3}  ~${round(dollars(t)):,}")
     return 0
 
 

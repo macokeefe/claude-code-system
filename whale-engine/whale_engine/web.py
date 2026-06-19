@@ -76,10 +76,21 @@ def _activity(db_path: str) -> dict:
         most_active = sorted(movers, key=lambda x: x["dvol"], reverse=True)[:8]
 
         since = int(now * 1000) - 24 * 3600 * 1000
-        biggest = [dict(r) for r in store.biggest_trades(since, 10)]
+        biggest = [dict(r) for r in store.biggest_trades(since, 40)]
         recent = [dict(r) for r in store.recent_trades_all(15)]
+
+        def dollars(t: dict) -> float:
+            # money the taker put up: 'no' trades pay (1 - yes_price)
+            p = t.get("price") or 0.0
+            c = t.get("count") or 0
+            return c * (1 - p) if t.get("taker_side") == "no" else c * p
+
         for t in biggest + recent:
             t["question"] = qmap.get(t["market_id"], "")
+            t["dollars"] = round(dollars(t))
+        # rank the candidate pool by actual dollars, keep the real top 10
+        biggest.sort(key=lambda t: t["dollars"], reverse=True)
+        biggest = biggest[:10]
 
         data = {
             "top_movers": top_movers,
@@ -283,7 +294,7 @@ _PAGE = """<!doctype html>
         <tbody id="recent-trades"><tr><td class="empty" colspan="4">…</td></tr></tbody></table>
     </div>
     <div>
-      <h3>Biggest trades (24h)</h3>
+      <h3>Biggest trades (this session, by $)</h3>
       <table><thead><tr><th>Market</th><th>Side</th><th>$</th><th>Contracts</th></tr></thead>
         <tbody id="biggest-trades"><tr><td class="empty" colspan="4">…</td></tr></tbody></table>
     </div>
@@ -411,7 +422,7 @@ function pts(d) {
   if (v === 0) return '0';
   return `<span class="${v > 0 ? 'up' : 'down'}">${v > 0 ? '+' : ''}${v} pts</span>`;
 }
-function tradeDollars(t) { return money((t.count || 0) * (t.price || 0)); }
+function tradeDollars(t) { return money(t.dollars || 0); }
 
 async function refreshActivity() {
   try {

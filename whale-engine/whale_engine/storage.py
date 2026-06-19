@@ -133,10 +133,11 @@ class Storage:
         )
         return list(cur.fetchall())
 
-    def biggest_trades(self, since_ms: int, limit: int = 10) -> list[sqlite3.Row]:
-        """Largest single trades since a timestamp (whale-ish flow, any size)."""
+    def biggest_trades(self, since_ms: int, limit: int = 40) -> list[sqlite3.Row]:
+        """Largest single trades by contract count since a timestamp — a
+        candidate pool; the caller ranks by side-aware dollar value."""
         cur = self.conn.execute(
-            "SELECT * FROM trades WHERE ts>=? ORDER BY count DESC LIMIT ?",
+            "SELECT * FROM trades WHERE ts>=? AND count>0 ORDER BY count DESC LIMIT ?",
             (since_ms, limit),
         )
         return list(cur.fetchall())
