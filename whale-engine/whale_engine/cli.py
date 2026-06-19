@@ -132,40 +132,41 @@ def _cmd_backfill(args) -> int:
 
 
 def _cmd_probe(args) -> int:
-    """Test Kalshi's GLOBAL trade feed (markets/trades with no ticker) so we
-    can show the true biggest trades across all of Kalshi, not just tracked
-    markets."""
-    import time as _time
+    """Confirm we can backtest whales on RESOLVED markets: settled-market list,
+    the `result` field, and per-market trade-history depth."""
     config = _build_config(args)
     config.source = "kalshi"
     src = make_source("kalshi", config)
     print("auth:", "ON (authenticated)" if getattr(src, "auth", None) else "OFF (public)")
 
-    since = int(_time.time()) - 3600  # last hour, unix seconds
-    page = src._get("markets/trades", {"limit": 1000, "min_ts": since})
-    trades = page.get("trades") or []
-    print(f"\nglobal markets/trades (no ticker), last 1h: {len(trades)} trades, "
-          f"cursor={'yes' if page.get('cursor') else 'none'}")
-    if not trades:
-        print("Endpoint returned nothing without a ticker — may require one, "
-              "or it's a quiet hour. (We'll fall back to per-market polling.)")
+    page = src._get("markets", {"status": "settled", "limit": 100})
+    ms = page.get("markets") or []
+    print(f"\nsettled markets returned: {len(ms)}  more_pages={'yes' if page.get('cursor') else 'no'}")
+    if not ms:
+        print("No settled markets via status=settled — may need a different status value.")
         return 0
 
-    distinct = {t.get("ticker") for t in trades}
-    print(f"distinct markets in feed: {len(distinct)}")
+    m = ms[0]
+    print("\nsettled-market fields:", sorted(m.keys()))
+    print("result / settlement-ish fields:")
+    for k in sorted(m):
+        if any(s in k.lower() for s in ("result", "settle", "close", "determin")):
+            print(f"   {k} = {m[k]!r}")
 
-    def dollars(t):
-        try:
-            c = float(t.get("count_fp", 0))
-            p = float(t.get("yes_price_dollars", 0))
-            return c * (1 - p) if t.get("taker_side") == "no" else c * p
-        except (TypeError, ValueError):
-            return 0.0
+    # how many settled markets are 'real' (non-parlay) and have a result?
+    real = [x for x in ms if not x.get("ticker", "").startswith("KXMVE")]
+    print(f"\nnon-KXMVE settled markets on this page: {len(real)}")
 
-    print("\ntrue biggest trades across Kalshi (last 1h, by $):")
-    for t in sorted(trades, key=dollars, reverse=True)[:10]:
-        print(f"  {t.get('ticker',''):34} {t.get('count_fp'):>10} @ "
-              f"{t.get('yes_price_dollars')} {t.get('taker_side'):>3}  ~${round(dollars(t)):,}")
+    target = next((x for x in real if x.get("result")), real[0] if real else m)
+    tk = target.get("ticker")
+    print(f"\nsample resolved market: {tk}  result={target.get('result')!r}  "
+          f"title={target.get('title')!r}")
+    tp = src._get("markets/trades", {"ticker": tk, "limit": 1000})
+    tr = tp.get("trades") or []
+    print(f"trade history for it: {len(tr)} trades  more_pages={'yes' if tp.get('cursor') else 'no'}")
+    if tr:
+        times = sorted(t.get("created_time", "") for t in tr)
+        print(f"trade time range: {times[0]}  ->  {times[-1]}")
     return 0
 
 
