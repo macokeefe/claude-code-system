@@ -29,6 +29,7 @@ class MarketSnapshot:
     volume: int            # cumulative contracts traded (lifetime)
     open_interest: int     # contracts currently held open
     liquidity: float = 0.0 # notional resting liquidity, if the venue reports it
+    close_ts: int = 0      # when the market closes (epoch ms); 0 if unknown. Not persisted.
 
 
 @dataclass

@@ -57,6 +57,24 @@ Backfill pulls Kalshi candlestick history (price / volume / open-interest
 buckets) and reconstructs a cumulative series that lines up seamlessly with
 live polling.
 
+### Focus on markets closing soon
+
+Markets resolving soon (today's games, this week's events) move the most.
+Restrict the watch list to them:
+
+```bash
+python -m whale_engine.cli serve --source kalshi --backfill 6 --closing-soon 3
+```
+
+`--closing-soon 3` keeps only markets closing within 3 days.
+
+### What counts as a "whale"
+
+A move must clear all of: a minimum number of contracts, a minimum dollar
+cost basis, *and* a minimum fraction of that market's open interest — so a
+big trade registers whether the market is tiny or huge, and quiet markets
+don't scream just because their baseline is ~0. Tune in `config.json`.
+
 Run the tests:
 
 ```bash

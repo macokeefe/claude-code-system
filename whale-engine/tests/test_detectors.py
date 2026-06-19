@@ -17,14 +17,17 @@ from whale_engine.storage import Storage  # noqa: E402
 MIN = 60_000  # one minute in ms
 
 
-def snap(ts, price=0.50, volume=0, oi=0, mid="MKT"):
+def snap(ts, price=0.50, volume=0, oi=5000, mid="MKT"):
     return MarketSnapshot("test", mid, "Q?", "open", ts, price, volume, oi)
 
 
 class DetectorTests(unittest.TestCase):
     def setUp(self):
         self.store = Storage(":memory:")
-        self.det = Detectors(self.store, Thresholds(cooldown_min=0))
+        # oi_fraction=0 so tests exercise the absolute floors, not OI scaling.
+        self.det = Detectors(self.store, Thresholds(
+            cooldown_min=0, oi_fraction=0.0, min_contracts=500,
+            min_notional=100.0, sharp_move_min_oi=0, sharp_move_window_min=15))
 
     def _seed(self, snaps):
         """Insert all but the last snapshot as history; return the last."""
@@ -75,6 +78,44 @@ class DetectorTests(unittest.TestCase):
         self.store.insert_trades(small)
         normal = TradeEvent("test", "MKT", 11 * MIN, 0.5, 25, "yes", "N")
         self.assertFalse(self.det.on_trades(snap(11 * MIN), [normal]))
+
+
+class SizeRelativeTests(unittest.TestCase):
+    """The fix: signals must scale with the market's size + clear a $ floor."""
+
+    def setUp(self):
+        self.store = Storage(":memory:")
+        self.det = Detectors(self.store, Thresholds(
+            cooldown_min=0, min_contracts=500, min_notional=250.0, oi_fraction=0.02))
+
+    def _series(self, oi, last_delta, mid):
+        snaps = [snap(i * MIN, volume=10_000 + i * 30, oi=oi, mid=mid) for i in range(8)]
+        snaps.append(snap(8 * MIN, volume=snaps[-1].volume + last_delta, oi=oi, mid=mid))
+        for s in snaps[:-1]:
+            self.store.insert_snapshot(s)
+        self.store.insert_snapshot(snaps[-1])
+        return snaps[-1]
+
+    def test_small_market_fires_on_modest_burst(self):
+        # OI 1000 -> floor = max(500, 20) = 500; a 600-lot qualifies
+        last = self._series(oi=1000, last_delta=600, mid="SMALL")
+        self.assertTrue(any(s.type == "volume_surge" for s in self.det.on_snapshot(last)))
+
+    def test_huge_market_ignores_same_burst(self):
+        # OI 2,000,000 -> floor = 40,000; a 600-lot is noise, must NOT fire
+        last = self._series(oi=2_000_000, last_delta=600, mid="HUGE")
+        self.assertFalse([s for s in self.det.on_snapshot(last) if s.type == "volume_surge"])
+
+    def test_dollar_floor_blocks_cheap_longshot(self):
+        # 600 contracts at 1c = ~$6 notional -> below the $250 floor, no fire
+        snaps = [snap(i * MIN, price=0.01, volume=10_000 + i * 30, oi=1000, mid="LONG")
+                 for i in range(8)]
+        snaps.append(snap(8 * MIN, price=0.01, volume=snaps[-1].volume + 600,
+                          oi=1000, mid="LONG"))
+        for s in snaps:
+            self.store.insert_snapshot(s)
+        self.assertFalse([s for s in self.det.on_snapshot(snaps[-1])
+                          if s.type == "volume_surge"])
 
 
 if __name__ == "__main__":

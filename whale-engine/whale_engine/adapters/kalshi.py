@@ -42,7 +42,7 @@ class KalshiSource:
 
     def __init__(self, base_url: str, market_limit: int, timeout: int = 30,
                  auth=None, scan_pages: int = 120, active_only: bool = True,
-                 discovery_every: int = 40) -> None:
+                 discovery_every: int = 40, max_close_days: int = 0) -> None:
         self.base_url = base_url.rstrip("/")
         self.market_limit = market_limit
         self.timeout = timeout
@@ -50,6 +50,7 @@ class KalshiSource:
         self.scan_pages = scan_pages
         self.active_only = active_only
         self.discovery_every = discovery_every
+        self.max_close_days = max_close_days
         self._liquid: list[MarketSnapshot] = []   # cached most-liquid markets
         self._cycle = 0
         self._series_of: dict[str, str] = {}      # market ticker -> series ticker
@@ -145,6 +146,10 @@ class KalshiSource:
         snaps = self._fetch_by_tickers(tickers)
         if self.active_only:
             snaps = [s for s in snaps if s.volume > 0 or s.open_interest > 0]
+        if self.max_close_days > 0:
+            import time as _t
+            horizon = int(_t.time() * 1000) + self.max_close_days * 86_400_000
+            snaps = [s for s in snaps if 0 < s.close_ts <= horizon]
         snaps.sort(key=lambda s: s.volume, reverse=True)
         top = snaps[: self.market_limit]
         log.info("Kalshi discovery: %d real tickers over %d event pages, %d active; "
@@ -200,6 +205,7 @@ class KalshiSource:
             volume=int(self._num(m, "volume_fp", "volume")),
             open_interest=int(self._num(m, "open_interest_fp", "open_interest")),
             liquidity=self._num(m, "liquidity_dollars", "liquidity"),
+            close_ts=_iso_to_ms(m.get("close_time", "")),
         )
 
     def fetch_trades(self, market_id: str, since_ms: int) -> list[TradeEvent]:

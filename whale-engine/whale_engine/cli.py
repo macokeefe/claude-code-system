@@ -67,6 +67,8 @@ def _build_config(args) -> Config:
         config.db_path = args.db
     if getattr(args, "interval", None) is not None:
         config.poll_interval_sec = args.interval
+    if getattr(args, "closing_soon", None):
+        config.max_close_days = args.closing_soon
     return config
 
 
@@ -188,6 +190,8 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--once", action="store_true", help="run a single cycle and exit")
     run.add_argument("--backfill", type=int, default=0,
                      help="seed N hours of history before watching (Kalshi only)")
+    run.add_argument("--closing-soon", type=int, default=0, dest="closing_soon",
+                     help="only watch markets closing within N days")
     run.add_argument("--quiet", action="store_true", help="suppress info logging")
     run.set_defaults(func=_cmd_run)
 
@@ -204,6 +208,8 @@ def main(argv: list[str] | None = None) -> int:
                        help="don't auto-open the browser")
     serve.add_argument("--backfill", type=int, default=0,
                        help="seed N hours of history before watching (Kalshi only)")
+    serve.add_argument("--closing-soon", type=int, default=0, dest="closing_soon",
+                       help="only watch markets closing within N days")
     serve.add_argument("--quiet", action="store_true", help="suppress info logging")
     serve.set_defaults(func=_cmd_serve)
 

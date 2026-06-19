@@ -14,26 +14,25 @@ from dataclasses import asdict, dataclass
 
 @dataclass
 class Thresholds:
-    # --- size spike: one unusually large single trade ---
-    size_spike_mult: float = 5.0      # trade count > mult x market's median trade size
-    size_spike_min: int = 100         # ...and at least this many contracts
+    # A move must clear ALL of these to count as a "whale", so signals scale
+    # with each market's size instead of a flat number:
+    min_contracts: int = 500          # at least this many contracts moved, AND
+    min_notional: float = 250.0       # at least ~$this in cost basis (contracts x price), AND
+    oi_fraction: float = 0.02         # at least this fraction of the market's open interest
 
-    # --- volume surge: a burst of activity in one poll interval ---
-    volume_surge_mult: float = 4.0    # interval volume > mult x baseline interval volume
-    volume_surge_min: int = 200       # ...and at least this many contracts
+    # multiples vs the market's own recent baseline (informational severity;
+    # baseline is floored by min_contracts so we never divide by ~0)
+    size_spike_mult: float = 4.0      # single trade > mult x median trade size
 
-    # --- open-interest jump: new conviction money entering ---
-    oi_jump_mult: float = 4.0         # |OI change| > mult x baseline OI change
-    oi_jump_min: int = 200            # ...and at least this many contracts
-
-    # --- sharp move: fast repricing ---
-    sharp_move_delta: float = 0.10    # implied-prob move >= this (e.g. 0.10 = 10 points)
-    sharp_move_window_min: int = 15   # ...within this many minutes
+    # --- sharp move: fast repricing (size-independent, but gated to liquid mkts) ---
+    sharp_move_delta: float = 0.07    # implied-prob move >= this (0.07 = 7 points)
+    sharp_move_window_min: int = 30   # ...within this many minutes
+    sharp_move_min_oi: int = 1000     # ...and only in markets with at least this OI
 
     # --- shared ---
     baseline_window: int = 50         # how many recent points define "normal"
-    min_history: int = 5              # need at least this much history before judging
-    cooldown_min: int = 20            # don't re-fire the same (market, type) within this
+    min_history: int = 3              # need at least this much history before judging
+    cooldown_min: int = 30            # don't re-fire the same (market, type) within this
 
 
 @dataclass
@@ -45,6 +44,7 @@ class Config:
     scan_pages: int = 20              # max event pages (x200) to scan during discovery
     active_only: bool = True          # drop dead markets (0 volume AND 0 open interest)
     discovery_every: int = 40         # re-run the full liquid-market discovery every N cycles
+    max_close_days: int = 0           # if >0, only watch markets closing within this many days
     kalshi_base_url: str = "https://api.elections.kalshi.com/trade-api/v2"
     thresholds: Thresholds = None     # type: ignore[assignment]
 

@@ -194,7 +194,62 @@ Agree on vision, scope, architecture, and guardrails.
 
 ---
 
-## 9. Next action
+## 9. From whale-tracker to analysis & alpha engine (the long game)
 
-With this spec agreed, Phase 1 is the first build: Kalshi adapter + ingestion +
-core detectors, watch-only. Say the word and that's what gets scaffolded next.
+The detector is the seed. The real ambition is a system that forms its *own*
+probabilistic view of each market and **beats the crowd's consensus** — then
+proves it against real resolutions before risking money. How it grows:
+
+**Stage A — Context layer.** For every whale signal, auto-attach context: recent
+news for that event, the event's historical base rate, related markets, and
+cross-venue prices (Polymarket). Turns "something moved" into "here's likely why."
+
+**Stage B — Predictive models (the edge).** Per-domain models that each output a
+probability, compared against the market's implied probability. Edge = |model −
+market| after fees. Examples that match your instinct:
+  - *Speech / Fed / official model:* ingest transcripts of a person's or
+    institution's last N speeches & press conferences, model their language and
+    track record → probability they say / decide a specific thing. Compare to the
+    market on "Will <official> say <X>?" type contracts.
+  - *Forecasting models:* polls + fundamentals for elections, Elo/injury models
+    for sports, time-series for econ prints — each vs the market line.
+  - *News-reaction model:* learn how specific kinds of news historically moved
+    specific kinds of markets, so we can price a fresh headline instantly.
+
+**Stage C — Low-latency public-data ingestion.** Stream public news, filings, and
+social the instant they publish; NLP classifies relevance + direction; the system
+reprices its view and flags markets that *haven't moved yet*. The edge here is
+**speed and synthesis on public information** — being first to correctly read what
+everyone is allowed to see.
+
+**Stage D — Calibration & backtesting (continuous).** Every prediction is scored
+against the real outcome (prediction markets resolve — that's the superpower).
+Track calibration (Brier score); a model only graduates if it beats both the
+market and fees over a real sample.
+
+**Stage E — Paper → live → self-funding.** Calibrated models move to paper
+trading, then small live positions with strict risk caps and a kill switch;
+profits fund more data and compute. That's the flywheel.
+
+**Stage F — Earned autonomy.** The system proposes new models/data sources, tests
+them in paper, and keeps only what beats baseline — capability growth that has to
+earn its place.
+
+### ⚖️ The legal line (non-negotiable)
+Edge must come from **(a) being faster on PUBLIC information** and **(b) better
+prediction from public data.** Trading on *material non-public information* —
+leaks, insider tips, embargoed releases, anything obtained non-publicly — is
+illegal insider trading and is **out of scope, period.** "Trading before the
+announcement is public" is only legitimate when we **predicted** it from public
+signals, never when we **obtained** it non-publicly. Staying on the right side of
+this line is what makes the system durable instead of a liability.
+
+---
+
+## 10. Status / next action
+
+Built so far (watch-only, no money): Kalshi adapter with authenticated access and
+the current `_fp`/`_dollars` schema, events-based discovery of real liquid markets,
+size-relative + dollar-floored detectors, historical backfill, a closing-soon lens,
+and a live browser dashboard. Next candidates: Stage A context layer (news +
+base rates on signals), alerts to phone, or Phase 3 paper-trading + edge report.

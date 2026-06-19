@@ -1,15 +1,19 @@
 """Whale / unusual-activity detectors.
 
-Each detector judges a market against *its own* recent history, so
-thresholds are relative to that market's normal size (per SPEC.md §2).
-All detectors honor a per-(market, type) cooldown so the same event
-doesn't re-fire every poll.
+A move counts as a whale only if it's big in absolute terms (contracts),
+big in dollars (cost basis), AND big relative to the market's own size
+(a fraction of its open interest). That last part is what makes a 600-lot
+in a tiny market and a 40k-lot in a giant market both register — and keeps
+quiet markets from screaming just because their baseline is ~0.
+
+Severity is reported against the market's recent baseline, but the
+baseline is floored by `min_contracts` so we never show "999x vs ~0".
 
 v1 detectors:
   - size_spike   : one unusually large single trade
   - volume_surge : a burst of volume in one interval
   - oi_jump      : a sharp step up in open interest (new conviction money)
-  - sharp_move   : fast repricing within a short window
+  - sharp_move   : fast repricing within a short window (liquid markets only)
 """
 
 from __future__ import annotations
@@ -38,14 +42,21 @@ class Detectors:
         self.store = store
         self.th = th
 
+    def _size_floor(self, open_interest: int) -> float:
+        """Minimum contracts to qualify, scaled to the market's open interest."""
+        return max(self.th.min_contracts, self.th.oi_fraction * max(open_interest, 0))
+
+    def _qualifies(self, contracts: float, price: float, open_interest: int) -> bool:
+        notional = contracts * max(price, 0.01)
+        return (contracts >= self._size_floor(open_interest)
+                and notional >= self.th.min_notional)
+
     # --- snapshot-driven detectors (volume surge, OI jump, sharp move) ---
     def on_snapshot(self, snap: MarketSnapshot) -> list[Signal]:
         signals: list[Signal] = []
-        # Rows are newest-first; [0] is the snapshot we just stored.
         rows = self.store.recent_snapshots(snap.market_id, self.th.baseline_window)
         if len(rows) < self.th.min_history:
             return signals
-
         signals += self._volume_surge(snap, rows)
         signals += self._oi_jump(snap, rows)
         signals += self._sharp_move(snap, rows)
@@ -55,22 +66,23 @@ class Detectors:
         th = self.th
         if _on_cooldown(self.store, snap.market_id, "volume_surge", snap.ts, th.cooldown_min):
             return []
-        # interval volume = consecutive deltas of cumulative volume (newest-first)
         deltas = [max(rows[i]["volume"] - rows[i + 1]["volume"], 0)
                   for i in range(len(rows) - 1)]
         if not deltas:
             return []
         current = deltas[0]
-        baseline = _median(deltas[1:]) or _median(deltas)
-        if current >= th.volume_surge_min and current >= th.volume_surge_mult * max(baseline, 1):
-            mult = current / max(baseline, 1)
-            return [Signal(
-                platform=snap.platform, market_id=snap.market_id, ts=snap.ts,
-                type="volume_surge", severity=round(mult, 2),
-                reason=f"{current} contracts this interval vs ~{baseline:.0f} baseline ({mult:.1f}x)",
-                price=snap.yes_price, question=snap.question,
-            )]
-        return []
+        if not self._qualifies(current, snap.yes_price, snap.open_interest):
+            return []
+        baseline = max(_median(deltas[1:]) or _median(deltas), th.min_contracts)
+        mult = current / baseline
+        oi_pct = (current / snap.open_interest * 100) if snap.open_interest else 0
+        return [Signal(
+            platform=snap.platform, market_id=snap.market_id, ts=snap.ts,
+            type="volume_surge", severity=round(mult, 2),
+            reason=(f"{int(current)} contracts (~${current*snap.yes_price:,.0f}) traded "
+                    f"this interval — {oi_pct:.1f}% of open interest, {mult:.1f}x baseline"),
+            price=snap.yes_price, question=snap.question,
+        )]
 
     def _oi_jump(self, snap: MarketSnapshot, rows: list) -> list[Signal]:
         th = self.th
@@ -81,24 +93,27 @@ class Detectors:
         if not deltas:
             return []
         current = deltas[0]
-        baseline = _median([abs(d) for d in deltas[1:]]) or _median([abs(d) for d in deltas])
-        if abs(current) >= th.oi_jump_min and abs(current) >= th.oi_jump_mult * max(baseline, 1):
-            mult = abs(current) / max(baseline, 1)
-            direction = "added" if current > 0 else "closed"
-            return [Signal(
-                platform=snap.platform, market_id=snap.market_id, ts=snap.ts,
-                type="oi_jump", severity=round(mult, 2),
-                reason=f"open interest {direction} {abs(current)} vs ~{baseline:.0f} baseline ({mult:.1f}x)",
-                price=snap.yes_price, question=snap.question,
-            )]
-        return []
+        if not self._qualifies(abs(current), snap.yes_price, snap.open_interest):
+            return []
+        baseline = max(_median([abs(d) for d in deltas[1:]]) or
+                       _median([abs(d) for d in deltas]), th.min_contracts)
+        mult = abs(current) / baseline
+        direction = "added" if current > 0 else "closed"
+        return [Signal(
+            platform=snap.platform, market_id=snap.market_id, ts=snap.ts,
+            type="oi_jump", severity=round(mult, 2),
+            reason=(f"{int(abs(current))} new positions {direction} "
+                    f"(~${abs(current)*snap.yes_price:,.0f}) — {mult:.1f}x baseline"),
+            price=snap.yes_price, question=snap.question,
+        )]
 
     def _sharp_move(self, snap: MarketSnapshot, rows: list) -> list[Signal]:
         th = self.th
+        if snap.open_interest < th.sharp_move_min_oi:
+            return []
         if _on_cooldown(self.store, snap.market_id, "sharp_move", snap.ts, th.cooldown_min):
             return []
         window_ms = th.sharp_move_window_min * _MIN_AGO_MS
-        # find the most recent snapshot at least `window` older than now
         past = next((r for r in rows if snap.ts - r["ts"] >= window_ms), None)
         if past is None:
             return []
@@ -110,7 +125,7 @@ class Detectors:
                 type="sharp_move", severity=round(abs(delta), 3),
                 reason=(f"implied prob moved {direction} {abs(delta)*100:.0f} pts in "
                         f"~{th.sharp_move_window_min}m ({past['yes_price']*100:.0f}->"
-                        f"{snap.yes_price*100:.0f})"),
+                        f"{snap.yes_price*100:.0f}%)"),
                 price=snap.yes_price, question=snap.question,
             )]
         return []
@@ -124,19 +139,23 @@ class Detectors:
         sizes = [r["count"] for r in history]
         if len(sizes) < th.min_history:
             return []
-        baseline = _median(sizes)
+        baseline = max(_median(sizes), 1)
         signals: list[Signal] = []
         for t in sorted(new_trades, key=lambda x: x.count, reverse=True):
-            if t.count >= th.size_spike_min and t.count >= th.size_spike_mult * max(baseline, 1):
-                if _on_cooldown(self.store, snap.market_id, "size_spike", t.ts, th.cooldown_min):
-                    break
-                mult = t.count / max(baseline, 1)
-                signals.append(Signal(
-                    platform=snap.platform, market_id=snap.market_id, ts=t.ts,
-                    type="size_spike", severity=round(mult, 2),
-                    reason=(f"single trade of {t.count} contracts vs ~{baseline:.0f} median "
-                            f"({mult:.1f}x){' ' + t.taker_side if t.taker_side else ''}"),
-                    price=t.price, question=snap.question,
-                ))
-                break  # one size-spike signal per market per cycle is enough
+            if not self._qualifies(t.count, t.price or snap.yes_price, snap.open_interest):
+                continue
+            if t.count < th.size_spike_mult * baseline:
+                continue
+            if _on_cooldown(self.store, snap.market_id, "size_spike", t.ts, th.cooldown_min):
+                break
+            mult = t.count / baseline
+            signals.append(Signal(
+                platform=snap.platform, market_id=snap.market_id, ts=t.ts,
+                type="size_spike", severity=round(mult, 2),
+                reason=(f"single trade of {t.count} contracts "
+                        f"(~${t.count*(t.price or snap.yes_price):,.0f}) vs ~{baseline:.0f} "
+                        f"median ({mult:.1f}x){' ' + t.taker_side if t.taker_side else ''}"),
+                price=t.price or snap.yes_price, question=snap.question,
+            ))
+            break  # one size-spike per market per cycle is enough
         return signals
