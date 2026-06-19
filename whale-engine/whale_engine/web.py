@@ -68,11 +68,20 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(404, b"not found", "text/plain")
 
 
-def serve(db_path: str, host: str = "127.0.0.1", port: int = 8765) -> None:
+def serve(db_path: str, host: str = "127.0.0.1", port: int = 8765,
+          open_browser: bool = True) -> None:
     handler = partial(_Handler)
     _Handler.db_path = db_path
     httpd = ThreadingHTTPServer((host, port), handler)
-    print(f"Dashboard: http://{host}:{port}  (db={db_path})  — Ctrl-C to stop")
+    url = f"http://{host}:{port}"
+    print(f"\n{'='*54}\n  Dashboard is running — open this in your browser:\n"
+          f"    {url}\n  (this terminal will look idle — that's normal; "
+          f"Ctrl-C to stop)\n{'='*54}\n")
+    if open_browser:
+        # Pop the browser automatically, just after the server starts listening.
+        import threading
+        import webbrowser
+        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

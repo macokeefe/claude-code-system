@@ -103,7 +103,8 @@ def _cmd_serve(args) -> int:
         threading.Thread(target=_watch, daemon=True, name="watcher").start()
         print(f"Background watcher started (source={config.source}, "
               f"interval={config.poll_interval_sec}s).")
-    web.serve(config.db_path, host=args.host, port=args.port)
+    web.serve(config.db_path, host=args.host, port=args.port,
+              open_browser=not args.no_open)
     return 0
 
 
@@ -130,6 +131,8 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--port", type=int, default=8765, help="bind port")
     serve.add_argument("--no-watch", action="store_true",
                        help="serve only; don't start the background watcher")
+    serve.add_argument("--no-open", action="store_true",
+                       help="don't auto-open the browser")
     serve.add_argument("--quiet", action="store_true", help="suppress info logging")
     serve.set_defaults(func=_cmd_serve)
 
