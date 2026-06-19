@@ -45,7 +45,10 @@ CREATE TABLE IF NOT EXISTS signals (
     severity  REAL,
     reason    TEXT,
     price     REAL,
-    question  TEXT
+    question  TEXT,
+    contracts REAL DEFAULT 0,
+    notional  REAL DEFAULT 0,
+    side      TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_signal_market_type_ts ON signals(market_id, type, ts);
 """
@@ -56,7 +59,17 @@ class Storage:
         self.conn = sqlite3.connect(db_path)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(_SCHEMA)
+        self._migrate()
         self.conn.commit()
+
+    def _migrate(self) -> None:
+        """Add newer columns to a signals table created by an older version."""
+        existing = {r["name"] for r in self.conn.execute("PRAGMA table_info(signals)")}
+        for col, decl in (("contracts", "REAL DEFAULT 0"),
+                          ("notional", "REAL DEFAULT 0"),
+                          ("side", "TEXT DEFAULT ''")):
+            if col not in existing:
+                self.conn.execute(f"ALTER TABLE signals ADD COLUMN {col} {decl}")
 
     def close(self) -> None:
         self.conn.close()
@@ -84,9 +97,11 @@ class Storage:
 
     def insert_signal(self, sig: Signal) -> None:
         self.conn.execute(
-            "INSERT INTO signals VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT INTO signals (platform, market_id, ts, type, severity, reason, "
+            "price, question, contracts, notional, side) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (sig.platform, sig.market_id, sig.ts, sig.type,
-             sig.severity, sig.reason, sig.price, sig.question),
+             sig.severity, sig.reason, sig.price, sig.question,
+             sig.contracts, sig.notional, sig.side),
         )
         self.conn.commit()
 

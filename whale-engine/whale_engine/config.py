@@ -9,7 +9,13 @@ election market (see SPEC.md §2).
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
+
+
+def _known(cls, data: dict) -> dict:
+    """Keep only keys that are real fields of the dataclass `cls`."""
+    valid = {f.name for f in fields(cls)}
+    return {k: v for k, v in data.items() if k in valid}
 
 
 @dataclass
@@ -52,11 +58,12 @@ class Config:
         if self.thresholds is None:
             self.thresholds = Thresholds()
         elif isinstance(self.thresholds, dict):
-            self.thresholds = Thresholds(**self.thresholds)
+            self.thresholds = Thresholds(**_known(Thresholds, self.thresholds))
 
     @classmethod
     def load(cls, path: str | None) -> "Config":
-        """Load config from JSON, falling back to defaults for missing keys."""
+        """Load config from JSON, ignoring unknown/stale keys so an older
+        config file can never crash a newer build."""
         if not path:
             return cls()
         try:
@@ -64,7 +71,7 @@ class Config:
                 data = json.load(fh)
         except FileNotFoundError:
             return cls()
-        return cls(**data)
+        return cls(**_known(cls, data))
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)

@@ -82,6 +82,7 @@ class Detectors:
             reason=(f"{int(current)} contracts (~${current*snap.yes_price:,.0f}) traded "
                     f"this interval — {oi_pct:.1f}% of open interest, {mult:.1f}x baseline"),
             price=snap.yes_price, question=snap.question,
+            contracts=int(current), notional=current * snap.yes_price,
         )]
 
     def _oi_jump(self, snap: MarketSnapshot, rows: list) -> list[Signal]:
@@ -105,6 +106,8 @@ class Detectors:
             reason=(f"{int(abs(current))} new positions {direction} "
                     f"(~${abs(current)*snap.yes_price:,.0f}) — {mult:.1f}x baseline"),
             price=snap.yes_price, question=snap.question,
+            contracts=int(abs(current)), notional=abs(current) * snap.yes_price,
+            side=direction,
         )]
 
     def _sharp_move(self, snap: MarketSnapshot, rows: list) -> list[Signal]:
@@ -126,7 +129,7 @@ class Detectors:
                 reason=(f"implied prob moved {direction} {abs(delta)*100:.0f} pts in "
                         f"~{th.sharp_move_window_min}m ({past['yes_price']*100:.0f}->"
                         f"{snap.yes_price*100:.0f}%)"),
-                price=snap.yes_price, question=snap.question,
+                price=snap.yes_price, question=snap.question, side=direction,
             )]
         return []
 
@@ -156,6 +159,8 @@ class Detectors:
                         f"(~${t.count*(t.price or snap.yes_price):,.0f}) vs ~{baseline:.0f} "
                         f"median ({mult:.1f}x){' ' + t.taker_side if t.taker_side else ''}"),
                 price=t.price or snap.yes_price, question=snap.question,
+                contracts=t.count, notional=t.count * (t.price or snap.yes_price),
+                side=t.taker_side,
             ))
             break  # one size-spike per market per cycle is enough
         return signals

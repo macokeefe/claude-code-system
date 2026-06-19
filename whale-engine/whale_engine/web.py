@@ -124,6 +124,17 @@ _PAGE = """<!doctype html>
   .empty { color: #8b949e; padding: 16px 0; }
   .pill { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #21262d; }
   code { background: #161b22; padding: 1px 5px; border-radius: 4px; }
+  .money { font-weight: 600; color: #e6edf3; }
+  .side { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+  .side.buy { background: #1b3a26; color: #3fb950; }
+  .side.sell { background: #3a1d1d; color: #f85149; }
+  .side.flat { background: #21262d; color: #8b949e; }
+  .legend { background: #161b22; border: 1px solid #21262d; border-radius: 8px;
+            padding: 8px 14px; margin-bottom: 18px; font-size: 13px; }
+  .legend summary { cursor: pointer; color: #58a6ff; }
+  .legend ul { margin: 10px 0 4px; padding-left: 18px; }
+  .legend li { margin: 4px 0; color: #c9d1d9; }
+  .cap { font-size: 12px; color: #8b949e; margin: -4px 0 8px; }
 </style>
 </head>
 <body>
@@ -135,16 +146,31 @@ _PAGE = """<!doctype html>
 <div class="wrap">
   <div class="stats" id="stats"></div>
 
+  <details class="legend">
+    <summary>What am I looking at?</summary>
+    <ul>
+      <li>🐋 <b>Big single trade</b> — one large order hit a market.</li>
+      <li>📈 <b>Volume spike</b> — a burst of trading in a short window.</li>
+      <li>🧱 <b>New positions</b> — open interest jumped: fresh money entered (not just reshuffling).</li>
+      <li>⚡ <b>Price jump</b> — the odds moved sharply within minutes.</li>
+      <li><b>$ Size</b> — approximate money involved (contracts × price). Each contract pays $1 if it happens.</li>
+      <li><b>Open interest</b> — how many live positions are held in a market right now.</li>
+      <li><b>vs normal</b> — how much bigger than that market's usual activity (3× = three times normal).</li>
+    </ul>
+  </details>
+
   <h2>Recent signals</h2>
   <table>
-    <thead><tr><th>Time</th><th>Type</th><th>Market</th><th>Price</th>
-      <th>Severity</th><th>Why</th></tr></thead>
-    <tbody id="signals"><tr><td class="empty" colspan="6">waiting for data…</td></tr></tbody>
+    <thead><tr><th>Time</th><th>Signal</th><th>Market</th><th>Side</th>
+      <th>$ Size</th><th>vs normal</th><th>Detail</th></tr></thead>
+    <tbody id="signals"><tr><td class="empty" colspan="7">waiting for data…</td></tr></tbody>
   </table>
 
   <h2>Markets tracked</h2>
+  <div class="cap">Price = market's estimated chance · Volume = total contracts ever traded ·
+    Open interest = live positions held now</div>
   <table>
-    <thead><tr><th>Market</th><th>Price</th><th>Volume</th><th>Open interest</th></tr></thead>
+    <thead><tr><th>Market</th><th>Chance</th><th>Volume</th><th>Open interest</th></tr></thead>
     <tbody id="markets"></tbody>
   </table>
 </div>
@@ -152,6 +178,15 @@ _PAGE = """<!doctype html>
 const fmtTime = ms => new Date(ms).toLocaleTimeString();
 const esc = s => (s ?? "").toString().replace(/[&<>]/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const LABEL = {size_spike:'🐋 Big trade', volume_surge:'📈 Volume spike',
+               oi_jump:'🧱 New positions', sharp_move:'⚡ Price jump'};
+const money = n => n ? '$' + Math.round(n).toLocaleString() : '—';
+function sideBadge(side) {
+  if (!side) return '';
+  const buy = ['yes','added','up'], sell = ['no','closed','down'];
+  const cls = buy.includes(side) ? 'buy' : sell.includes(side) ? 'sell' : 'flat';
+  return `<span class="side ${cls}">${esc(side)}</span>`;
+}
 
 async function refresh() {
   try {
@@ -169,16 +204,19 @@ async function refresh() {
     const sig = d.signals || [];
     document.getElementById('signals').innerHTML = sig.length ? sig.map(s => `
       <tr><td>${fmtTime(s.ts)}</td>
-      <td><span class="pill">${s.icon} ${esc(s.type)}</span></td>
-      <td>${esc(s.market_id)}<div class="q">${esc(s.question)}</div></td>
-      <td>${Math.round(s.price*100)}%</td>
-      <td class="sev">${s.severity}×</td>
+      <td>${LABEL[s.type] || esc(s.type)}</td>
+      <td><b>${esc(s.question || s.market_id)}</b>
+          <div class="q">${esc(s.market_id)} · ${Math.round(s.price*100)}% chance</div></td>
+      <td>${sideBadge(s.side)}</td>
+      <td class="money">${money(s.notional)}${s.contracts ?
+          `<div class="q">${Math.round(s.contracts).toLocaleString()} contracts</div>` : ''}</td>
+      <td class="sev">${s.severity ? s.severity + '×' : '—'}</td>
       <td class="q">${esc(s.reason)}</td></tr>`).join('')
-      : '<tr><td class="empty" colspan="6">no signals yet — the watcher is collecting baseline data</td></tr>';
+      : '<tr><td class="empty" colspan="7">no signals yet — the watcher is learning each market\\'s normal first</td></tr>';
 
     const mk = d.markets || [];
     document.getElementById('markets').innerHTML = mk.map(m => `
-      <tr><td>${esc(m.market_id)}<div class="q">${esc(m.question)}</div></td>
+      <tr><td><b>${esc(m.question || m.market_id)}</b><div class="q">${esc(m.market_id)}</div></td>
       <td>${Math.round(m.yes_price*100)}%</td>
       <td>${(m.volume||0).toLocaleString()}</td>
       <td>${(m.open_interest||0).toLocaleString()}</td></tr>`).join('');

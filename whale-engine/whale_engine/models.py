@@ -57,3 +57,6 @@ class Signal:
     reason: str            # human-readable explanation
     price: float = 0.0     # implied prob at time of signal
     question: str = ""
+    contracts: float = 0.0 # how many contracts moved (0 for price-only signals)
+    notional: float = 0.0  # approx dollars involved (contracts x price)
+    side: str = ""         # yes/no/added/closed/up/down, when meaningful
