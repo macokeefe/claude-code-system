@@ -222,29 +222,65 @@ class KalshiSource:
             close_ts=_iso_to_ms(m.get("close_time", "")),
         )
 
+    def _to_trade(self, t: dict, market_id: str) -> TradeEvent:
+        ts = _iso_to_ms(t.get("created_time", ""))
+        price = self._num(t, "yes_price_dollars")
+        if not price:  # legacy cents field
+            price = self._num(t, "yes_price") / 100.0
+        if price > 1.0:
+            price /= 100.0
+        count = int(self._num(t, "count_fp", "count"))
+        return TradeEvent(
+            platform=self.name,
+            market_id=market_id,
+            ts=ts,
+            price=max(0.0, min(1.0, price)),
+            count=count,
+            taker_side=t.get("taker_side", "") or "",
+            trade_id=str(t.get("trade_id") or f"{market_id}:{ts}:{count}"),
+        )
+
     def fetch_trades(self, market_id: str, since_ms: int) -> list[TradeEvent]:
         page = self._get("markets/trades", {"ticker": market_id, "limit": 100})
-        trades = page.get("trades") or []
+        out = [self._to_trade(t, market_id) for t in (page.get("trades") or [])]
+        return [t for t in out if not (since_ms and t.ts <= since_ms)]
+
+    def fetch_recent_trades(self, since_ms: int, max_pages: int = 5) -> list[TradeEvent]:
+        """The GLOBAL trade feed: every trade across Kalshi since `since_ms`,
+        paginated. This is the whale firehose — not limited to tracked markets."""
         out: list[TradeEvent] = []
-        for t in trades:
-            ts = _iso_to_ms(t.get("created_time", ""))
-            if since_ms and ts <= since_ms:
-                continue
-            price = self._num(t, "yes_price_dollars")
-            if not price:  # legacy cents field
-                price = self._num(t, "yes_price") / 100.0
-            if price > 1.0:
-                price /= 100.0
-            count = int(self._num(t, "count_fp", "count"))
-            out.append(TradeEvent(
-                platform=self.name,
-                market_id=market_id,
-                ts=ts,
-                price=max(0.0, min(1.0, price)),
-                count=count,
-                taker_side=t.get("taker_side", "") or "",
-                trade_id=str(t.get("trade_id") or f"{market_id}:{ts}:{count}"),
-            ))
+        cursor = None
+        base = {"limit": 1000}
+        if since_ms:
+            base["min_ts"] = int(since_ms / 1000)  # Kalshi min_ts is unix seconds
+        for _ in range(max_pages):
+            params = dict(base)
+            if cursor:
+                params["cursor"] = cursor
+            page = self._get("markets/trades", params)
+            trades = page.get("trades") or []
+            if not trades:
+                break
+            for t in trades:
+                ticker = t.get("ticker", "")
+                if ticker:
+                    out.append(self._to_trade(t, ticker))
+            cursor = page.get("cursor")
+            if not cursor:
+                break
+        return out
+
+    def resolve_titles(self, tickers: list[str]) -> dict:
+        """Look up human-readable titles for market tickers (batched)."""
+        out: dict = {}
+        for i in range(0, len(tickers), 100):
+            batch = tickers[i:i + 100]
+            page = self._get("markets", {"tickers": ",".join(batch), "limit": 1000})
+            for m in page.get("markets") or []:
+                tk = m.get("ticker")
+                if tk:
+                    out[tk] = (m.get("title") or m.get("yes_sub_title")
+                               or m.get("subtitle") or tk)
         return out
 
     def series_of(self, ticker: str) -> str:

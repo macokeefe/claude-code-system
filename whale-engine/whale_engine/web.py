@@ -79,6 +79,10 @@ def _activity(db_path: str) -> dict:
         biggest = [dict(r) for r in store.biggest_trades(since, 40)]
         recent = [dict(r) for r in store.recent_trades_all(15)]
 
+        # global-feed trades are in markets we don't track — pull their titles
+        trade_tickers = {t["market_id"] for t in biggest + recent}
+        titles = store.title_map(trade_tickers)
+
         def dollars(t: dict) -> float:
             # money the taker put up: 'no' trades pay (1 - yes_price)
             p = t.get("price") or 0.0
@@ -86,7 +90,8 @@ def _activity(db_path: str) -> dict:
             return c * (1 - p) if t.get("taker_side") == "no" else c * p
 
         for t in biggest + recent:
-            t["question"] = qmap.get(t["market_id"], "")
+            t["question"] = (qmap.get(t["market_id"]) or titles.get(t["market_id"])
+                             or t["market_id"])
             t["dollars"] = round(dollars(t))
         # rank the candidate pool by actual dollars, keep the real top 10
         biggest.sort(key=lambda t: t["dollars"], reverse=True)

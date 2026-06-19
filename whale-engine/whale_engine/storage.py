@@ -52,6 +52,11 @@ CREATE TABLE IF NOT EXISTS signals (
     side      TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_signal_market_type_ts ON signals(market_id, type, ts);
+
+CREATE TABLE IF NOT EXISTS titles (
+    ticker TEXT PRIMARY KEY,
+    title  TEXT
+);
 """
 
 
@@ -132,6 +137,27 @@ class Storage:
             "SELECT * FROM trades ORDER BY ts DESC LIMIT ?", (limit,)
         )
         return list(cur.fetchall())
+
+    # --- market titles (for the global trade feed, where markets aren't tracked) ---
+    def upsert_titles(self, items) -> None:
+        rows = [(t, title) for t, title in items if t and title]
+        if rows:
+            self.conn.executemany(
+                "INSERT OR REPLACE INTO titles (ticker, title) VALUES (?,?)", rows)
+            self.conn.commit()
+
+    def title_map(self, tickers) -> dict:
+        tickers = list({t for t in tickers if t})
+        if not tickers:
+            return {}
+        out: dict = {}
+        for i in range(0, len(tickers), 400):  # bound the IN-clause size
+            batch = tickers[i:i + 400]
+            ph = ",".join("?" * len(batch))
+            cur = self.conn.execute(
+                f"SELECT ticker, title FROM titles WHERE ticker IN ({ph})", batch)
+            out.update({r["ticker"]: r["title"] for r in cur.fetchall()})
+        return out
 
     def biggest_trades(self, since_ms: int, limit: int = 40) -> list[sqlite3.Row]:
         """Largest single trades by contract count since a timestamp — a
