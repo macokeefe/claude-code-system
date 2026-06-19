@@ -162,6 +162,22 @@ def _cmd_backtest(args) -> int:
     print(f"  Total staked:    ${o['staked']:,.0f}")
     print(f"  Net P&L (a/fees):${o['pnl']:,.0f}")
     print(f"  ROI:             {o['roi']*100:+.1f}%")
+
+    print(f"\nConcentration: {o['trades']:,} trades across "
+          f"{rep['distinct_markets_traded']} distinct markets; "
+          f"top category = {rep['top_category_share']*100:.0f}% of trades.")
+    if rep["top_category_share"] > 0.5:
+        print("  WARNING: one event dominates the sample — treat the overall")
+        print("  number as noise, not a conclusion. Look at the breakdowns below.")
+
+    print(f"\nBy price band (where is the edge?):")
+    print(f"  {'band':<10}{'trades':>7}{'win%':>6}{'edge':>7}{'ROI%':>7}")
+    for band in ("0-30c", "30-50c", "50-70c", "70-90c", "90c+"):
+        a = rep["by_price_band"].get(band)
+        if a:
+            print(f"  {band:<10}{a['trades']:>7}{a['win_rate']*100:>5.0f}%"
+                  f"{a['edge']*100:>+6.0f}{a['roi']*100:>+6.0f}%")
+
     print(f"\nBy category (most-traded first):")
     print(f"  {'category':<24}{'trades':>7}{'win%':>6}{'price':>7}{'edge':>7}{'ROI%':>7}")
     for cat, a in list(rep["by_category"].items())[:15]:

@@ -75,8 +75,8 @@ def run(source, days: int = 3, min_dollars: float = 500.0,
             won = t.taker_side == result
             payout = t.count if won else 0.0
             pnl = payout - cost - _fee(t.count, paid)
-            graded.append({"category": _category(ticker), "cost": cost,
-                           "pnl": pnl, "won": won, "paid": paid})
+            graded.append({"category": _category(ticker), "market": ticker,
+                           "cost": cost, "pnl": pnl, "won": won, "paid": paid})
         if i % 25 == 0:
             log.info("backtest: %d/%d markets, %d whale trades so far",
                      i, len(markets), len(graded))
@@ -110,12 +110,29 @@ def _summarize(graded, markets, days, min_dollars) -> dict:
     for r in graded:
         by_cat[r["category"]].append(r)
     cats = {c: _agg(rows) for c, rows in by_cat.items()}
-    # rank categories by absolute staked $ (most-traded first)
     cats = dict(sorted(cats.items(), key=lambda kv: kv[1]["staked"], reverse=True))
+
+    # price-band breakdown — reveals the favorite-longshot structure
+    bands = {"0-30c": [], "30-50c": [], "50-70c": [], "70-90c": [], "90c+": []}
+    for r in graded:
+        p = r["paid"]
+        key = ("0-30c" if p < .30 else "30-50c" if p < .50 else
+               "50-70c" if p < .70 else "70-90c" if p < .90 else "90c+")
+        bands[key].append(r)
+    by_band = {b: _agg(rows) for b, rows in bands.items() if rows}
+
+    # concentration — is this one event or a real pattern?
+    distinct_markets = len({r["market"] for r in graded})
+    top_share = (max((a["trades"] for a in cats.values()), default=0)
+                 / len(graded)) if graded else 0.0
+
     return {
         "days": days,
         "min_dollars": min_dollars,
         "markets": len(markets),
+        "distinct_markets_traded": distinct_markets,
+        "top_category_share": top_share,
         "overall": _agg(graded),
         "by_category": cats,
+        "by_price_band": by_band,
     }
