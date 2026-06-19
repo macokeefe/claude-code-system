@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import logging
 import threading
+import os
 from datetime import datetime, timezone
 
 from .adapters import make_source
@@ -22,6 +23,24 @@ from .engine import Engine
 from .models import Signal
 from .storage import Storage
 from . import web
+
+
+def _load_dotenv(path: str = ".env") -> None:
+    """Minimal .env loader (no dependency). Loads simple KEY=VALUE lines into
+    the environment without overriding values already set. Use the
+    KALSHI_PRIVATE_KEY_PATH approach for the key (single-line, parses cleanly)."""
+    if not os.path.exists(path):
+        return
+    with open(path, "r", encoding="utf-8") as fh:
+        for raw in fh:
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key, val = key.strip(), val.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = val
+
 
 _ICON = {
     "size_spike": "🐋",
@@ -119,6 +138,7 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.WARNING if args.quiet else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    _load_dotenv()  # pick up Kalshi credentials from a local .env if present
     return args.func(args)
 
 

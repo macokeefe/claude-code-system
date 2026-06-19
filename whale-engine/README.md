@@ -79,10 +79,32 @@ adapters/ (kalshi, synthetic)  ->  engine (ingest loop)  ->  storage (sqlite)
 - **`web.py`** — the browser dashboard + JSON API (stdlib http.server).
 - **`cli.py`** — `python -m whale_engine.cli run|serve ...`
 
-## Notes on Kalshi
+## Live Kalshi access (API key)
 
-- Market & trade reads use the public `trade-api/v2` endpoints and need **no
-  API key**. A key is only required for trading, which is out of scope here.
+Kalshi authenticates requests with an RSA API key. If Kalshi returns
+**403** for unauthenticated reads from your network, set up a key:
+
+1. In your Kalshi account: **Settings → API Keys → Create**. You get a
+   **Key ID** and download an **RSA private-key file** (once).
+2. Install the one optional dependency: `pip install cryptography`
+3. Copy `.env.example` to `.env` and fill in:
+   ```
+   KALSHI_API_KEY_ID=your-key-id
+   KALSHI_PRIVATE_KEY_PATH=/absolute/path/to/your_private_key.pem
+   ```
+4. Run as normal — credentials load automatically:
+   ```bash
+   python -m whale_engine.cli run --source kalshi --once
+   ```
+
+Your private key **never leaves your machine** and is never committed
+(`.env` and `*.pem`/`*.key` are gitignored). Only a per-request signature
+is sent. With no credentials configured, the adapter still tries
+unauthenticated public access.
+
+> Tip: test against Kalshi's **demo** environment first by setting
+> `kalshi_base_url` in `config.json` to the demo host (needs a demo key).
+
 - Prices are normalized from cents (0–100) to implied probability (0.0–1.0).
 - Network hiccups degrade gracefully — a failed request logs a warning and the
   loop keeps going.

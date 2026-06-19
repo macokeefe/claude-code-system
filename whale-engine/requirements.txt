@@ -1,0 +1,10 @@
+# Whale Engine has NO required dependencies — it runs on the Python stdlib.
+#
+# The ONLY optional dependency is for *authenticated* Kalshi access, which
+# needs RSA request signing:
+#
+#   pip install cryptography
+#
+# You don't need it for the synthetic demo or for unauthenticated public
+# Kalshi access.
+cryptography>=41.0

@@ -36,20 +36,32 @@ def _iso_to_ms(iso: str) -> int:
 class KalshiSource:
     name = "kalshi"
 
-    def __init__(self, base_url: str, market_limit: int, timeout: int = 15) -> None:
+    def __init__(self, base_url: str, market_limit: int, timeout: int = 15,
+                 auth=None) -> None:
         self.base_url = base_url.rstrip("/")
         self.market_limit = market_limit
         self.timeout = timeout
+        self.auth = auth  # optional KalshiAuth; None = unauthenticated public access
 
     def _get(self, path: str, params: dict) -> dict:
         qs = urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
         url = f"{self.base_url}/{path.lstrip('/')}"
+        # Kalshi signs the path only (no query string), e.g. /trade-api/v2/markets
+        sign_path = urllib.parse.urlsplit(url).path
         if qs:
             url += f"?{qs}"
-        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        headers = {"Accept": "application/json"}
+        if self.auth is not None:
+            headers.update(self.auth.headers("GET", sign_path))
+        req = urllib.request.Request(url, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            hint = (" — check KALSHI_API_KEY_ID / private key" if exc.code in (401, 403)
+                    else "")
+            log.warning("Kalshi request failed (%s): HTTP %s%s", path, exc.code, hint)
+            return {}
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
             log.warning("Kalshi request failed (%s): %s", path, exc)
             return {}
