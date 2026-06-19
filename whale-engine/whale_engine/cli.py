@@ -109,57 +109,65 @@ def _cmd_serve(args) -> int:
 
 
 def _cmd_probe(args) -> int:
-    """Dump raw Kalshi market data so we can see the true field names/values."""
+    """Dump raw Kalshi market data so we can see how to reach real markets."""
     from collections import Counter
     config = _build_config(args)
     config.source = "kalshi"
     src = make_source("kalshi", config)
     print("auth:", "ON (authenticated)" if getattr(src, "auth", None) else "OFF (public)")
 
-    # Scan several pages, splitting multivariate (KXMVE*) from real single markets.
-    kxmve = 0
-    others: list[dict] = []
-    cursor = None
-    pages = 0
-    for _ in range(8):
+    def vol_fields(m):
+        return {k: m.get(k) for k in ("volume", "volume_24h", "open_interest",
+                                      "liquidity", "last_price")}
+
+    # --- Strategy A: the /events endpoint with nested markets ---
+    print("\n=== Strategy A: /events?status=open&with_nested_markets=true ===")
+    ev = src._get("events", {"limit": 200, "status": "open",
+                             "with_nested_markets": "true"})
+    events = ev.get("events") or []
+    real_ev = [e for e in events
+               if not e.get("event_ticker", "").startswith("KXMVE")
+               and not (e.get("series_ticker", "") or "").startswith("KXMVE")]
+    nested = [m for e in real_ev for m in (e.get("markets") or [])]
+    print(f"events returned: {len(events)} | non-KXMVE events: {len(real_ev)} "
+          f"| their nested markets: {len(nested)}")
+    if nested:
+        nested.sort(key=lambda m: (m.get("volume") or 0), reverse=True)
+        top = nested[0]
+        print(f"sample real market: {top.get('ticker')}")
+        print(f"  vol fields: {vol_fields(top)}")
+        print("  top nested markets by volume:")
+        for m in nested[:8]:
+            print(f"    {m.get('ticker',''):40} vol={m.get('volume')} "
+                  f"oi={m.get('open_interest')} last={m.get('last_price')}")
+        print("  event series prefixes:",
+              dict(Counter((e.get('series_ticker') or e.get('event_ticker','')).split('-')[0]
+                           for e in real_ev).most_common(12)))
+
+    # --- Strategy B: deep scan of /markets, skipping KXMVE ---
+    print("\n=== Strategy B: deep /markets scan (skip KXMVE), up to 30 pages ===")
+    others, kxmve, cursor, pages = [], 0, None, 0
+    for _ in range(30):
         page = src.raw_page({"limit": 1000, "status": "open", "cursor": cursor})
         ms = page.get("markets") or []
         if not ms:
             break
         pages += 1
         for m in ms:
+            (others if not m.get("ticker", "").startswith("KXMVE") else None)
             if m.get("ticker", "").startswith("KXMVE"):
                 kxmve += 1
             else:
                 others.append(m)
-        if len(others) >= 20:
+        if len(others) >= 10:
             break
         cursor = page.get("cursor")
         if not cursor:
             break
-
-    print(f"\nscanned {pages} page(s) (~{pages*1000} markets): "
-          f"{kxmve} multivariate KXMVE*, {len(others)} real single markets")
-
-    if not others:
-        print("\nNo non-KXMVE markets found in the scan — the listing is all "
-              "multivariate combos. We'll need to fetch via events/series instead.")
-        return 0
-
-    m = others[0]
-    print(f"\nfirst REAL market: {m.get('ticker')}  (status={m.get('status')})")
-    print("all field names:", sorted(m.keys()))
-    print("volume/interest/price-ish fields:")
-    for k, v in sorted(m.items()):
-        if any(s in k.lower() for s in ("vol", "interest", "price", "liquid")):
-            print(f"   {k} = {v!r}")
-    print("\nnext few real markets:")
-    for x in others[:8]:
-        print(f"   {x.get('ticker',''):42} vol={x.get('volume')} "
-              f"vol24={x.get('volume_24h')} oi={x.get('open_interest')} "
-              f"liq={x.get('liquidity')}")
-    print("\nreal-market ticker prefixes:",
-          dict(Counter(x.get('ticker', '').split('-')[0] for x in others).most_common(15)))
+    print(f"scanned {pages} pages: {kxmve} KXMVE, {len(others)} real")
+    if others:
+        m = others[0]
+        print(f"first real: {m.get('ticker')} | vol fields: {vol_fields(m)}")
     return 0
 
 
