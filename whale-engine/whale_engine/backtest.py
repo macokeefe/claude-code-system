@@ -31,9 +31,10 @@ def _category(ticker: str) -> str:
 
 
 def run(source, days: int = 3, min_dollars: float = 500.0,
-        max_markets: int = 150) -> dict:
+        max_markets: int = 150, max_price: float = 1.0) -> dict:
     """Grade whale trades on markets resolved within the last `days`.
-    Returns a report dict. Kalshi-only (needs settled markets + trade history)."""
+    `max_price` excludes near-certain "parking" trades (e.g. 0.95 drops
+    anything bought above 95c). Returns a report dict. Kalshi-only."""
     if not hasattr(source, "settled_real_tickers"):
         return {"error": "backtest needs the Kalshi source"}
 
@@ -66,6 +67,8 @@ def run(source, days: int = 3, min_dollars: float = 500.0,
                 continue
             # money the taker staked, and what they paid per contract
             paid = t.price if t.taker_side == "yes" else (1.0 - t.price)
+            if paid > max_price:
+                continue  # near-certain 'parking' trade — not a real prediction
             cost = t.count * paid
             if cost < min_dollars:
                 continue  # not a whale
@@ -78,7 +81,9 @@ def run(source, days: int = 3, min_dollars: float = 500.0,
             log.info("backtest: %d/%d markets, %d whale trades so far",
                      i, len(markets), len(graded))
 
-    return _summarize(graded, markets, days, min_dollars)
+    rep = _summarize(graded, markets, days, min_dollars)
+    rep["max_price"] = max_price
+    return rep
 
 
 def _agg(rows: list) -> dict:
@@ -86,13 +91,17 @@ def _agg(rows: list) -> dict:
     cost = sum(r["cost"] for r in rows)
     pnl = sum(r["pnl"] for r in rows)
     wins = sum(1 for r in rows if r["won"])
+    win_rate = (wins / n) if n else 0.0
+    avg_price = (sum(r["paid"] for r in rows) / n) if n else 0.0
     return {
         "trades": n,
-        "win_rate": (wins / n) if n else 0.0,
+        "win_rate": win_rate,
         "staked": cost,
         "pnl": pnl,
         "roi": (pnl / cost) if cost else 0.0,
-        "avg_price_paid": (sum(r["paid"] for r in rows) / n) if n else 0.0,
+        "avg_price_paid": avg_price,
+        # the real edge: how much more often they won than the price implied
+        "edge": win_rate - avg_price,
     }
 
 
