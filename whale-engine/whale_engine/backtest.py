@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 from .adapters.kalshi import _iso_to_ms
 
@@ -31,10 +31,14 @@ def _category(ticker: str) -> str:
 
 
 def run(source, days: int = 3, min_dollars: float = 500.0,
-        max_markets: int = 150, max_price: float = 1.0) -> dict:
+        max_markets: int = 150, max_price: float = 1.0,
+        max_per_event: int = 3) -> dict:
     """Grade whale trades on markets resolved within the last `days`.
     `max_price` excludes near-certain "parking" trades (e.g. 0.95 drops
-    anything bought above 95c). Returns a report dict. Kalshi-only."""
+    anything bought above 95c). `max_per_event` drops multi-candidate fields
+    (events with more than this many resolved markets — candidate races where
+    most legs lose by construction), keeping standalone yes/no event markets.
+    Returns a report dict. Kalshi-only."""
     if not hasattr(source, "settled_real_tickers"):
         return {"error": "backtest needs the Kalshi source"}
 
@@ -43,16 +47,24 @@ def run(source, days: int = 3, min_dollars: float = 500.0,
     log.info("backtest: %d candidate resolved tickers", len(tickers))
     raw = source.fetch_markets_raw(tickers)
 
-    markets = []
+    resolved = []
     for m in raw:
         if m.get("result") not in ("yes", "no"):
             continue  # void / undetermined — no ground truth
         settled = _iso_to_ms(m.get("settlement_ts") or m.get("close_time") or "")
         if settled and settled < cutoff:
             continue
-        markets.append(m)
+        resolved.append(m)
+
+    # drop multi-candidate fields: events with many sub-markets (one winner,
+    # rest lose by design) — keep standalone yes/no event markets
+    ev_counts = Counter(m.get("event_ticker", "") for m in resolved)
+    markets = [m for m in resolved if ev_counts[m.get("event_ticker", "")] <= max_per_event]
+    excluded_multi = len(resolved) - len(markets)
     markets = markets[:max_markets]
-    log.info("backtest: grading %d resolved markets from the last %dd", len(markets), days)
+    log.info("backtest: %d resolved markets in last %dd; dropped %d multi-candidate "
+             "legs; grading %d standalone markets",
+             len(resolved), days, excluded_multi, len(markets))
 
     graded = []
     for i, m in enumerate(markets, 1):
@@ -83,6 +95,7 @@ def run(source, days: int = 3, min_dollars: float = 500.0,
 
     rep = _summarize(graded, markets, days, min_dollars)
     rep["max_price"] = max_price
+    rep["excluded_multi"] = excluded_multi
     return rep
 
 

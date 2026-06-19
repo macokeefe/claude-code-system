@@ -141,7 +141,8 @@ def _cmd_backtest(args) -> int:
           f"(min ${args.min_dollars:,.0f} staked)…\n"
           f"This pulls trade history per market — give it a few minutes.\n")
     rep = backtest.run(src, days=args.days, min_dollars=args.min_dollars,
-                       max_markets=args.max_markets, max_price=args.max_price)
+                       max_markets=args.max_markets, max_price=args.max_price,
+                       max_per_event=args.max_per_event)
     if rep.get("error"):
         print("error:", rep["error"])
         return 1
@@ -149,7 +150,8 @@ def _cmd_backtest(args) -> int:
     o = rep["overall"]
     print("=" * 64)
     print(f"RESOLVED MARKETS GRADED: {rep['markets']}   "
-          f"(excluding trades above {args.max_price*100:.0f}c)")
+          f"(<{args.max_price*100:.0f}c; dropped {rep.get('excluded_multi', 0)} "
+          f"multi-candidate legs)")
     print(f"WHALE TRADES (>= ${rep['min_dollars']:,.0f}): {o['trades']:,}")
     if not o["trades"]:
         print("\nNo whale trades found in scope. Try --days 14, a lower "
@@ -282,6 +284,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="cap markets analyzed (bounds API calls)")
     bt.add_argument("--max-price", type=float, default=1.0, dest="max_price",
                     help="exclude trades above this price (e.g. 0.9 drops near-locks)")
+    bt.add_argument("--max-per-event", type=int, default=3, dest="max_per_event",
+                    help="drop events with more than N markets (multi-candidate fields)")
     bt.add_argument("--quiet", action="store_true")
     bt.set_defaults(func=_cmd_backtest)
 
