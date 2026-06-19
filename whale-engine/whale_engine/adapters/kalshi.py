@@ -37,11 +37,13 @@ class KalshiSource:
     name = "kalshi"
 
     def __init__(self, base_url: str, market_limit: int, timeout: int = 15,
-                 auth=None) -> None:
+                 auth=None, scan_pages: int = 12, active_only: bool = True) -> None:
         self.base_url = base_url.rstrip("/")
         self.market_limit = market_limit
         self.timeout = timeout
         self.auth = auth  # optional KalshiAuth; None = unauthenticated public access
+        self.scan_pages = scan_pages
+        self.active_only = active_only
 
     def _get(self, path: str, params: dict) -> dict:
         qs = urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
@@ -67,23 +69,35 @@ class KalshiSource:
             return {}
 
     def fetch_markets(self) -> list[MarketSnapshot]:
-        out: list[MarketSnapshot] = []
+        # Kalshi has thousands of markets, most of them dead auto-generated
+        # parlays. Scan several pages, keep the ones with real activity, and
+        # return the most-liquid ones so the whales aren't buried in noise.
+        active: list[MarketSnapshot] = []
+        seen_any: list[MarketSnapshot] = []
         cursor = None
-        while len(out) < self.market_limit:
-            page = self._get("markets", {
-                "limit": min(1000, self.market_limit - len(out)),
-                "status": "open",
-                "cursor": cursor,
-            })
+        for _ in range(self.scan_pages):
+            page = self._get("markets", {"limit": 1000, "status": "open",
+                                         "cursor": cursor})
             markets = page.get("markets") or []
             if not markets:
                 break
             for m in markets:
-                out.append(self._to_snapshot(m))
+                snap = self._to_snapshot(m)
+                seen_any.append(snap)
+                if snap.volume > 0 or snap.open_interest > 0:
+                    active.append(snap)
+            if len(active) >= self.market_limit:
+                break
             cursor = page.get("cursor")
             if not cursor:
                 break
-        return out[: self.market_limit]
+        # Prefer active markets; fall back to whatever we saw if the filter
+        # somehow emptied everything (e.g. an off-hours quiet period).
+        chosen = active if (active or not self.active_only) else seen_any
+        if not chosen:
+            chosen = seen_any
+        chosen.sort(key=lambda s: s.volume, reverse=True)
+        return chosen[: self.market_limit]
 
     def _to_snapshot(self, m: dict) -> MarketSnapshot:
         # Prefer the bid/ask midpoint; fall back to last price. All in cents.

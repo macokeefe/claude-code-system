@@ -2,7 +2,9 @@
   "db_path": "whales.db",
   "source": "synthetic",
   "poll_interval_sec": 30,
-  "market_limit": 200,
+  "market_limit": 150,
+  "scan_pages": 12,
+  "active_only": true,
   "kalshi_base_url": "https://api.elections.kalshi.com/trade-api/v2",
   "thresholds": {
     "size_spike_mult": 5.0,
