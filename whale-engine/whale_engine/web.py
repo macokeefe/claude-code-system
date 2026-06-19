@@ -247,6 +247,8 @@ _PAGE = """<!doctype html>
   .act-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
   @media (max-width: 820px) { .act-grid { grid-template-columns: 1fr; } }
   .up { color: #3fb950; } .down { color: #f85149; }
+  #biggest-trades tr, #recent-trades tr { cursor: pointer; }
+  #biggest-trades tr:hover td, #recent-trades tr:hover td { background: #1c2333; }
   .tabs { display: flex; gap: 8px; margin: 8px 0 6px; }
   .tab { background: #161b22; border: 1px solid #21262d; color: #8b949e;
          padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; }
@@ -300,8 +302,8 @@ _PAGE = """<!doctype html>
     </div>
     <div>
       <h3>Biggest trades (this session, by $)</h3>
-      <table><thead><tr><th>Market</th><th>Side</th><th>$</th><th>Contracts</th></tr></thead>
-        <tbody id="biggest-trades"><tr><td class="empty" colspan="4">…</td></tr></tbody></table>
+      <table><thead><tr><th>Market</th><th>Side</th><th>Price</th><th>$</th><th>Contracts</th></tr></thead>
+        <tbody id="biggest-trades"><tr><td class="empty" colspan="5">…</td></tr></tbody></table>
     </div>
   </div>
   <h3>Top movers (last ~30 min)</h3>
@@ -428,25 +430,46 @@ function pts(d) {
   return `<span class="${v > 0 ? 'up' : 'down'}">${v > 0 ? '+' : ''}${v} pts</span>`;
 }
 function tradeDollars(t) { return money(t.dollars || 0); }
+function execPrice(t) { const p = t.price || 0; return t.taker_side === 'no' ? 1 - p : p; }
+
+let ACT = {};
+function showTrade(list, i) {
+  const t = (ACT[list] || [])[i];
+  if (!t) return;
+  const side = t.taker_side === 'no' ? 'NO' : (t.taker_side === 'yes' ? 'YES' : '?');
+  document.getElementById('modal-title').textContent = t.question || t.market_id;
+  const b = document.getElementById('modal-body');
+  b.className = 'modal-body';
+  b.innerHTML = `
+    <div style="font-size:16px;margin-bottom:10px;"><b>Bought ${side}</b>
+      @ ${Math.round(execPrice(t) * 100)}¢ per contract</div>
+    <div>Size: <b>${(t.count || 0).toLocaleString()}</b> contracts (~${money(t.dollars || 0)})</div>
+    <div>Time: ${new Date(t.ts).toLocaleString()}</div>
+    <div class="q" style="margin-top:10px;">Market ticker: ${esc(t.market_id)}</div>
+    <div class="q">Market's YES price at the time: ${Math.round((t.price || 0) * 100)}%</div>`;
+  document.getElementById('modal').classList.remove('hidden');
+}
 
 async function refreshActivity() {
   try {
     const d = await (await fetch('/api/activity')).json();
+    ACT = d;
     const rt = d.recent_trades || [];
-    document.getElementById('recent-trades').innerHTML = rt.length ? rt.map(t => `
-      <tr><td>${fmtTime(t.ts)}</td>
+    document.getElementById('recent-trades').innerHTML = rt.length ? rt.map((t, i) => `
+      <tr onclick="showTrade('recent_trades', ${i})"><td>${fmtTime(t.ts)}</td>
       <td>${esc(t.question || t.market_id)}</td>
       <td>${sideBadge(t.taker_side)}</td>
       <td class="money">${tradeDollars(t)}</td></tr>`).join('')
       : '<tr><td class="empty" colspan="4">no trades recorded yet</td></tr>';
 
     const bt = d.biggest_trades || [];
-    document.getElementById('biggest-trades').innerHTML = bt.length ? bt.map(t => `
-      <tr><td>${esc(t.question || t.market_id)}</td>
+    document.getElementById('biggest-trades').innerHTML = bt.length ? bt.map((t, i) => `
+      <tr onclick="showTrade('biggest_trades', ${i})"><td>${esc(t.question || t.market_id)}</td>
       <td>${sideBadge(t.taker_side)}</td>
+      <td>${Math.round(execPrice(t) * 100)}¢</td>
       <td class="money">${tradeDollars(t)}</td>
       <td>${(t.count || 0).toLocaleString()}</td></tr>`).join('')
-      : '<tr><td class="empty" colspan="4">—</td></tr>';
+      : '<tr><td class="empty" colspan="5">—</td></tr>';
 
     const tm = d.top_movers || [];
     document.getElementById('top-movers').innerHTML = tm.length ? tm.map(m => `
