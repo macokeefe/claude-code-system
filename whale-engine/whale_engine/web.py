@@ -13,14 +13,17 @@ from __future__ import annotations
 
 import json
 import logging
+import urllib.parse
 from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from . import explain
 from .storage import Storage
 
 log = logging.getLogger("whale_engine.web")
 
 _ICON = {"size_spike": "🐋", "volume_surge": "📈", "oi_jump": "🧱", "sharp_move": "⚡"}
+_EXPLAIN_CACHE: dict[str, str] = {}  # AI rundowns, keyed by signal, so re-clicks are free
 
 
 def _state(db_path: str) -> dict:
@@ -40,6 +43,23 @@ def _state(db_path: str) -> dict:
         store.close()
 
 
+def _explain(db_path: str, market_id: str, ts: int, sig_type: str) -> dict:
+    cache_key = f"{market_id}:{ts}:{sig_type}"
+    if cache_key in _EXPLAIN_CACHE:
+        return {"text": _EXPLAIN_CACHE[cache_key], "cached": True}
+    store = Storage(db_path)
+    try:
+        row = store.get_signal(market_id, ts, sig_type)
+        if row is None:
+            return {"text": "Signal not found (it may have scrolled out of the recent window)."}
+        snaps = [dict(r) for r in store.recent_snapshots(market_id, 12)]
+    finally:
+        store.close()
+    text = explain.explain(dict(row), snaps)
+    _EXPLAIN_CACHE[cache_key] = text
+    return {"text": text}
+
+
 class _Handler(BaseHTTPRequestHandler):
     db_path: str = "whales.db"
 
@@ -54,7 +74,8 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self) -> None:
-        path = self.path.split("?", 1)[0]
+        parts = urllib.parse.urlsplit(self.path)
+        path = parts.path
         if path == "/" or path == "/index.html":
             self._send(200, _PAGE.encode("utf-8"), "text/html; charset=utf-8")
         elif path == "/api/state":
@@ -64,6 +85,19 @@ class _Handler(BaseHTTPRequestHandler):
             except Exception as exc:  # never 500 the page; report cleanly
                 log.exception("state failed")
                 self._send(500, json.dumps({"error": str(exc)}).encode(), "application/json")
+        elif path == "/api/explain":
+            try:
+                q = urllib.parse.parse_qs(parts.query)
+                result = _explain(
+                    self.db_path,
+                    q.get("market_id", [""])[0],
+                    int(q.get("ts", ["0"])[0] or 0),
+                    q.get("type", [""])[0],
+                )
+                self._send(200, json.dumps(result).encode("utf-8"), "application/json")
+            except Exception as exc:
+                log.exception("explain failed")
+                self._send(500, json.dumps({"text": f"error: {exc}"}).encode(), "application/json")
         else:
             self._send(404, b"not found", "text/plain")
 
@@ -140,6 +174,20 @@ _PAGE = """<!doctype html>
          padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; }
   .tab.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
   .soon { color: #f0883e; font-weight: 600; }
+  #signals tr { cursor: pointer; }
+  #signals tr:hover td { background: #1c2333; }
+  .ask { font-size: 11px; color: #58a6ff; }
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.6);
+           display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 50; }
+  .modal.hidden { display: none; }
+  .modal-card { background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+                max-width: 640px; width: 100%; max-height: 85vh; overflow: auto; }
+  .modal-head { display: flex; justify-content: space-between; align-items: flex-start;
+                gap: 12px; padding: 16px 18px; border-bottom: 1px solid #21262d; }
+  .modal-head b { font-size: 15px; }
+  .modal-head button { background: none; border: none; color: #8b949e; font-size: 18px; cursor: pointer; }
+  .modal-body { padding: 16px 18px; white-space: pre-wrap; line-height: 1.6; }
+  .modal-body.loading { color: #8b949e; }
 </style>
 </head>
 <body>
@@ -164,7 +212,7 @@ _PAGE = """<!doctype html>
     </ul>
   </details>
 
-  <h2>Recent signals</h2>
+  <h2>Recent signals <span class="ask">— click any row for an AI rundown</span></h2>
   <table>
     <thead><tr><th>Time</th><th>Signal</th><th>Market</th><th>Side</th>
       <th>$ Size</th><th>vs normal</th><th>Detail</th></tr></thead>
@@ -183,6 +231,16 @@ _PAGE = """<!doctype html>
       <th>Open interest</th><th>Closes</th></tr></thead>
     <tbody id="markets"></tbody>
   </table>
+</div>
+
+<div id="modal" class="modal hidden" onclick="if(event.target===this)closeModal()">
+  <div class="modal-card">
+    <div class="modal-head">
+      <b id="modal-title"></b>
+      <button onclick="closeModal()" aria-label="close">✕</button>
+    </div>
+    <div id="modal-body" class="modal-body"></div>
+  </div>
 </div>
 <script>
 const fmtTime = ms => new Date(ms).toLocaleTimeString();
@@ -247,7 +305,8 @@ async function refresh() {
 
     const sig = d.signals || [];
     document.getElementById('signals').innerHTML = sig.length ? sig.map(s => `
-      <tr><td>${fmtTime(s.ts)}</td>
+      <tr data-market="${esc(s.market_id)}" data-ts="${s.ts}" data-type="${esc(s.type)}"
+          data-q="${esc(s.question || s.market_id)}" onclick="explainSignal(this)"><td>${fmtTime(s.ts)}</td>
       <td>${LABEL[s.type] || esc(s.type)}</td>
       <td><b>${esc(s.question || s.market_id)}</b>
           <div class="q">${esc(s.market_id)} · ${Math.round(s.price*100)}% chance</div></td>
@@ -267,6 +326,28 @@ async function refresh() {
     document.getElementById('live').textContent = '● disconnected';
   }
 }
+function closeModal() { document.getElementById('modal').classList.add('hidden'); }
+
+async function explainSignal(row) {
+  const m = row.dataset.market, ts = row.dataset.ts, type = row.dataset.type;
+  document.getElementById('modal-title').textContent = row.dataset.q;
+  const body = document.getElementById('modal-body');
+  body.className = 'modal-body loading';
+  body.textContent = 'Analyzing this signal…';
+  document.getElementById('modal').classList.remove('hidden');
+  try {
+    const r = await fetch(`/api/explain?market_id=${encodeURIComponent(m)}`
+      + `&ts=${encodeURIComponent(ts)}&type=${encodeURIComponent(type)}`);
+    const d = await r.json();
+    body.className = 'modal-body';
+    body.textContent = d.text || '(no explanation)';
+  } catch (e) {
+    body.className = 'modal-body';
+    body.textContent = 'Could not load explanation: ' + e;
+  }
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
 refresh();
 setInterval(refresh, 3000);
 </script>

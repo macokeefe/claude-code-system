@@ -68,6 +68,21 @@ python -m whale_engine.cli serve --source kalshi --backfill 6 --closing-soon 3
 
 `--closing-soon 3` keeps only markets closing within 3 days.
 
+### AI rundown of a signal
+
+Click any row in **Recent signals** to get a plain-English AI explanation of
+what it means, why it might matter, what could be driving it, and what to watch.
+
+This calls Claude's API, so it needs a key — add to `.env`:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...      # from https://console.anthropic.com
+# ANTHROPIC_MODEL=claude-haiku-4-5   # optional; default is claude-opus-4-8
+```
+
+No key? The feature degrades to a friendly hint; everything else still works.
+Explanations are cached per signal, so re-clicking is instant and free.
+
 ### What counts as a "whale"
 
 A move must clear all of: a minimum number of contracts, a minimum dollar

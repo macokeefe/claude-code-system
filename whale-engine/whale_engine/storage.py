@@ -141,6 +141,13 @@ class Storage:
         )
         return list(cur.fetchall())
 
+    def get_signal(self, market_id: str, ts: int, sig_type: str) -> sqlite3.Row | None:
+        cur = self.conn.execute(
+            "SELECT * FROM signals WHERE market_id=? AND ts=? AND type=? LIMIT 1",
+            (market_id, ts, sig_type),
+        )
+        return cur.fetchone()
+
     def latest_markets(self, limit: int = 200) -> list[sqlite3.Row]:
         """Most-recent snapshot for each market, busiest first."""
         cur = self.conn.execute(
