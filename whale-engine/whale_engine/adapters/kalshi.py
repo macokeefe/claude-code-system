@@ -36,14 +36,22 @@ def _iso_to_ms(iso: str) -> int:
 class KalshiSource:
     name = "kalshi"
 
+    # Kalshi auto-generates tens of thousands of dead "cross category" parlay
+    # combos. They have no liquidity and just bury the real markets — skip them.
+    EXCLUDE_PREFIXES = ("KXMVECROSSCATEGORY",)
+
     def __init__(self, base_url: str, market_limit: int, timeout: int = 15,
-                 auth=None, scan_pages: int = 12, active_only: bool = True) -> None:
+                 auth=None, scan_pages: int = 120, active_only: bool = True,
+                 discovery_every: int = 40) -> None:
         self.base_url = base_url.rstrip("/")
         self.market_limit = market_limit
         self.timeout = timeout
         self.auth = auth  # optional KalshiAuth; None = unauthenticated public access
         self.scan_pages = scan_pages
         self.active_only = active_only
+        self.discovery_every = discovery_every
+        self._liquid: list[MarketSnapshot] = []   # cached most-liquid markets
+        self._cycle = 0
 
     def _get(self, path: str, params: dict) -> dict:
         qs = urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
@@ -69,11 +77,32 @@ class KalshiSource:
             return {}
 
     def fetch_markets(self) -> list[MarketSnapshot]:
-        # Kalshi has thousands of markets, most of them dead auto-generated
-        # parlays. Scan several pages, keep the ones with real activity, and
-        # return the most-liquid ones so the whales aren't buried in noise.
-        active: list[MarketSnapshot] = []
-        seen_any: list[MarketSnapshot] = []
+        # Expensive full scan to *discover* the liquid markets, then cheap
+        # refreshes of just those until it's time to rediscover.
+        self._cycle += 1
+        if not self._liquid or self._cycle % self.discovery_every == 0:
+            discovered = self._discover_liquid()
+            if discovered:
+                self._liquid = discovered
+            return self._liquid
+
+        refreshed = self._fetch_by_tickers([s.market_id for s in self._liquid])
+        if refreshed:
+            self._liquid = refreshed
+            return self._liquid
+        # Refresh came back empty (e.g. the `tickers` filter isn't honored) —
+        # fall back to a full rediscovery so we never go stale or blank.
+        discovered = self._discover_liquid()
+        if discovered:
+            self._liquid = discovered
+        return self._liquid
+
+    def _discover_liquid(self) -> list[MarketSnapshot]:
+        """Page through open markets, skip parlay junk, keep ones with real
+        volume/open-interest, and return the most-liquid `market_limit`."""
+        found: list[MarketSnapshot] = []
+        scanned = 0
+        pages = 0
         cursor = None
         for _ in range(self.scan_pages):
             page = self._get("markets", {"limit": 1000, "status": "open",
@@ -81,23 +110,35 @@ class KalshiSource:
             markets = page.get("markets") or []
             if not markets:
                 break
+            pages += 1
+            scanned += len(markets)
             for m in markets:
+                if m.get("ticker", "").startswith(self.EXCLUDE_PREFIXES):
+                    continue
                 snap = self._to_snapshot(m)
-                seen_any.append(snap)
-                if snap.volume > 0 or snap.open_interest > 0:
-                    active.append(snap)
-            if len(active) >= self.market_limit:
+                if not self.active_only or snap.volume > 0 or snap.open_interest > 0:
+                    found.append(snap)
+            if len(found) >= self.market_limit * 3:  # plenty to rank from
                 break
             cursor = page.get("cursor")
             if not cursor:
                 break
-        # Prefer active markets; fall back to whatever we saw if the filter
-        # somehow emptied everything (e.g. an off-hours quiet period).
-        chosen = active if (active or not self.active_only) else seen_any
-        if not chosen:
-            chosen = seen_any
-        chosen.sort(key=lambda s: s.volume, reverse=True)
-        return chosen[: self.market_limit]
+        found.sort(key=lambda s: s.volume, reverse=True)
+        top = found[: self.market_limit]
+        log.info("Kalshi discovery: scanned %d markets over %d pages, kept %d active; "
+                 "top: %s", scanned, pages, len(top),
+                 ", ".join(f"{s.market_id}({s.volume})" for s in top[:5]) or "none")
+        return top
+
+    def _fetch_by_tickers(self, tickers: list[str]) -> list[MarketSnapshot]:
+        out: list[MarketSnapshot] = []
+        for i in range(0, len(tickers), 100):
+            batch = tickers[i:i + 100]
+            page = self._get("markets", {"tickers": ",".join(batch), "limit": 1000})
+            for m in page.get("markets") or []:
+                out.append(self._to_snapshot(m))
+        out.sort(key=lambda s: s.volume, reverse=True)
+        return out
 
     def _to_snapshot(self, m: dict) -> MarketSnapshot:
         # Prefer the bid/ask midpoint; fall back to last price. All in cents.

@@ -23,7 +23,8 @@ def make_source(name: str, config) -> Source:
         else:
             log.info("Kalshi: no credentials found — using public (unauthenticated) access")
         return KalshiSource(config.kalshi_base_url, config.market_limit, auth=auth,
-                            scan_pages=config.scan_pages, active_only=config.active_only)
+                            scan_pages=config.scan_pages, active_only=config.active_only,
+                            discovery_every=config.discovery_every)
     if name == "synthetic":
         return SyntheticSource(config.market_limit)
     raise ValueError(f"unknown source: {name!r} (expected 'kalshi' or 'synthetic')")

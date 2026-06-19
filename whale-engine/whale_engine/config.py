@@ -41,9 +41,10 @@ class Config:
     db_path: str = "whales.db"
     source: str = "synthetic"         # "kalshi" | "synthetic"
     poll_interval_sec: int = 30
-    market_limit: int = 150           # how many (most-liquid) markets to keep
-    scan_pages: int = 12              # Kalshi pages (x1000) to scan for liquid markets
+    market_limit: int = 60            # how many (most-liquid) markets to keep
+    scan_pages: int = 120             # max Kalshi pages (x1000) to scan during discovery
     active_only: bool = True          # drop dead markets (0 volume AND 0 open interest)
+    discovery_every: int = 40         # re-run the full liquid-market discovery every N cycles
     kalshi_base_url: str = "https://api.elections.kalshi.com/trade-api/v2"
     thresholds: Thresholds = None     # type: ignore[assignment]
 
