@@ -235,7 +235,7 @@ class KalshiSource:
                 price = self._num(t, "yes_price") / 100.0
             if price > 1.0:
                 price /= 100.0
-            count = int(self._num(t, "count"))
+            count = int(self._num(t, "count_fp", "count"))
             out.append(TradeEvent(
                 platform=self.name,
                 market_id=market_id,
