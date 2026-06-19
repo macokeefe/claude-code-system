@@ -1,0 +1,167 @@
+"""Polymarket adapter — the attributed-trade venue.
+
+Unlike Kalshi (anonymous flow), every Polymarket trade is tied to a public
+wallet, so we can build a real, gradeable track record per trader. This
+adapter pulls three things from Polymarket's public APIs (no auth):
+
+  * leaderboard()      -> top wallets by realized P&L      (lb-api)
+  * wallet_trades()    -> a wallet's full trade history     (data-api)
+  * resolve_markets()  -> outcome of each market, for grading (gamma-api)
+
+Confirmed field shapes (June 2026):
+  leaderboard row: proxyWallet, amount (lifetime $ P&L), name, pseudonym
+  trade row:       proxyWallet, side(BUY/SELL), conditionId, size(shares),
+                   price(0..1), timestamp(unix s), title, outcome, outcomeIndex
+  gamma market:    conditionId, question, closed(bool),
+                   outcomes (JSON str), outcomePrices (JSON str; "1"=winner)
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import time
+import urllib.parse
+import urllib.request
+from dataclasses import dataclass
+
+log = logging.getLogger("whale_engine.adapters.polymarket")
+
+DATA_API = "https://data-api.polymarket.com"
+LB_API = "https://lb-api.polymarket.com"
+GAMMA_API = "https://gamma-api.polymarket.com"
+UA = "whale-engine/0.1 (+https://github.com/macokeefe/claude-code-system)"
+
+
+@dataclass
+class PolyTrade:
+    """One executed Polymarket trade (attributed to a wallet)."""
+    wallet: str
+    side: str            # BUY | SELL
+    condition_id: str    # the market
+    outcome_index: int   # which outcome they took (aligns with market outcomes)
+    outcome: str         # human label ("Yes" / candidate name / ...)
+    size: float          # shares
+    price: float         # 0..1 (USDC paid per share)
+    ts: int              # unix seconds
+    title: str = ""
+
+
+@dataclass
+class PolyTrader:
+    wallet: str
+    name: str
+    pnl: float           # lifetime realized P&L in USD (per the leaderboard)
+
+
+def _get(url: str, params: dict | None = None, retries: int = 3):
+    """GET JSON with a browser-ish UA and simple backoff. Raises on failure."""
+    if params:
+        # repeatable params (lists) -> doseq so condition_ids=a&condition_ids=b
+        url += "?" + urllib.parse.urlencode(params, doseq=True)
+    last = None
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(
+                url, headers={"User-Agent": UA, "Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=25) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except Exception as e:  # transient network / rate limit — back off
+            last = e
+            time.sleep(2 ** attempt)
+    raise last
+
+
+class PolymarketSource:
+    """Read-only Polymarket access. No orders, no money."""
+
+    name = "polymarket"
+
+    def leaderboard(self, window: str = "all", limit: int = 20) -> list[PolyTrader]:
+        """Top wallets by realized P&L. `window` in {all, month, week, day}."""
+        rows = _get(LB_API + "/profit", {"window": window, "limit": limit})
+        if isinstance(rows, dict):  # some hosts wrap in {data: [...]}
+            rows = rows.get("data") or rows.get("results") or []
+        out = []
+        for r in rows:
+            w = r.get("proxyWallet") or r.get("wallet")
+            if not w:
+                continue
+            out.append(PolyTrader(
+                wallet=w,
+                name=r.get("name") or r.get("pseudonym") or w[:10],
+                pnl=float(r.get("amount", 0) or 0),
+            ))
+        return out
+
+    def wallet_trades(self, wallet: str, max_trades: int = 2000) -> list[PolyTrade]:
+        """A wallet's trade history, newest first, paginated (page size 500)."""
+        out: list[PolyTrade] = []
+        offset, page = 0, 500
+        while len(out) < max_trades:
+            rows = _get(DATA_API + "/trades",
+                        {"user": wallet, "limit": page, "offset": offset})
+            if isinstance(rows, dict):
+                rows = rows.get("data") or rows.get("results") or []
+            if not rows:
+                break
+            for r in rows:
+                try:
+                    out.append(PolyTrade(
+                        wallet=r.get("proxyWallet", wallet),
+                        side=(r.get("side") or "").upper(),
+                        condition_id=r.get("conditionId", ""),
+                        outcome_index=int(r.get("outcomeIndex", -1)),
+                        outcome=r.get("outcome", ""),
+                        size=float(r.get("size", 0) or 0),
+                        price=float(r.get("price", 0) or 0),
+                        ts=int(r.get("timestamp", 0) or 0),
+                        title=r.get("title", ""),
+                    ))
+                except (TypeError, ValueError):
+                    continue
+            if len(rows) < page:
+                break  # last page
+            offset += page
+        return out[:max_trades]
+
+    def resolve_markets(self, condition_ids: list[str]) -> dict[str, dict]:
+        """Map conditionId -> {question, closed, winning_index} via Gamma.
+        winning_index is None unless the market is closed with a clear winner."""
+        out: dict[str, dict] = {}
+        uniq = [c for c in dict.fromkeys(condition_ids) if c]
+        for i in range(0, len(uniq), 20):  # batch to keep URLs sane
+            chunk = uniq[i:i + 20]
+            try:
+                rows = _get(GAMMA_API + "/markets",
+                            {"condition_ids": chunk, "limit": len(chunk)})
+            except Exception:
+                log.debug("gamma fetch failed for a chunk", exc_info=True)
+                continue
+            if isinstance(rows, dict):
+                rows = rows.get("data") or rows.get("markets") or []
+            for m in rows:
+                cid = m.get("conditionId")
+                if not cid:
+                    continue
+                out[cid] = {
+                    "question": m.get("question", ""),
+                    "closed": bool(m.get("closed")),
+                    "winning_index": _winning_index(m),
+                }
+        return out
+
+
+def _winning_index(market: dict):
+    """Index of the winning outcome (price == 1) for a closed market, else None."""
+    if not market.get("closed"):
+        return None
+    raw = market.get("outcomePrices")
+    try:
+        prices = json.loads(raw) if isinstance(raw, str) else raw
+        for idx, p in enumerate(prices or []):
+            if float(p) >= 0.99:
+                return idx
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    return None

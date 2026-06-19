@@ -192,6 +192,72 @@ def _cmd_backtest(args) -> int:
     return 0
 
 
+def _cmd_poly(args) -> int:
+    """Grade Polymarket wallets by REAL edge (attributed, gradeable history).
+    Either one --wallet, or the top-N leaderboard wallets."""
+    from .adapters.polymarket import PolymarketSource
+    from . import poly_backtest as pb
+
+    pm = PolymarketSource()
+    if args.wallet:
+        print(f"\nGrading wallet {args.wallet} (min ${args.min_dollars:,.0f} "
+              f"per trade, up to {args.max_trades} trades)…\n")
+        rep = pb.grade_wallet(pm, args.wallet, max_trades=args.max_trades,
+                              min_dollars=args.min_dollars)
+        _print_wallet(rep, detailed=True)
+        return 0
+
+    print(f"\nGrading the top {args.top} Polymarket wallets by lifetime P&L "
+          f"({args.window}); min ${args.min_dollars:,.0f}/trade.\n"
+          f"This pulls each wallet's history + resolves their markets — "
+          f"give it a few minutes.\n")
+    rep = pb.grade_top(pm, top=args.top, window=args.window,
+                       max_trades=args.max_trades, min_dollars=args.min_dollars)
+    print("=" * 78)
+    print(f"{'WALLET':<16}{'lifetime$':>12}{'graded':>7}{'win%':>6}"
+          f"{'price':>7}{'EDGE':>7}{'ROI%':>8}")
+    print("-" * 78)
+    for w in rep["wallets"]:
+        if w["graded_trades"] == 0:
+            continue
+        print(f"{w['name'][:15]:<16}{w['lifetime_pnl']:>12,.0f}"
+              f"{w['graded_trades']:>7}{w['win_rate']*100:>5.0f}%"
+              f"{w['avg_price_paid']*100:>6.0f}c{w['edge']*100:>+6.0f}{w['roi']*100:>+7.0f}%")
+    print("=" * 78)
+    print("EDGE = win% - avg price paid. Positive edge across many graded trades")
+    print("= a wallet whose ENTRIES beat the market price. That's who to follow.")
+    print("(Polymarket charges ~no trading fee; P&L is gross of tiny gas costs.)")
+    return 0
+
+
+def _print_wallet(w: dict, detailed: bool = False) -> None:
+    print("=" * 64)
+    print(f"WALLET: {w['name']}  ({w['wallet']})")
+    print(f"  history pulled:   {w['total_trades']:,} trades "
+          f"({w['resolved_markets']} resolved markets)")
+    print(f"  graded entries:   {w['graded_trades']:,} BUYs across "
+          f"{w['distinct_markets_graded']} distinct markets")
+    if not w["graded_trades"]:
+        print("\n  Nothing to grade (no resolved markets above the $ threshold).")
+        print("  Try a lower --min-dollars or a higher --max-trades.")
+        return
+    print(f"\n  Win rate:        {w['win_rate']*100:5.1f}%")
+    print(f"  Avg price paid:  {w['avg_price_paid']*100:5.1f}c  (= break-even)")
+    print(f"  EDGE:            {w['edge']*100:+5.1f} pts")
+    print(f"  Total staked:    ${w['staked']:,.0f}")
+    print(f"  Net P&L:         ${w['pnl']:,.0f}")
+    print(f"  ROI:             {w['roi']*100:+.1f}%")
+    if detailed and w.get("by_price_band"):
+        print(f"\n  By price band:")
+        print(f"  {'band':<10}{'trades':>7}{'win%':>6}{'edge':>7}{'ROI%':>7}")
+        for band in ("0-30c", "30-50c", "50-70c", "70-90c", "90c+"):
+            a = w["by_price_band"].get(band)
+            if a:
+                print(f"  {band:<10}{a['graded_trades']:>7}{a['win_rate']*100:>5.0f}%"
+                      f"{a['edge']*100:>+6.0f}{a['roi']*100:>+6.0f}%")
+    print("=" * 64)
+
+
 def _cmd_probe(args) -> int:
     """Confirm we can backtest whales on RESOLVED markets: settled-market list,
     the `result` field, and per-market trade-history depth."""
@@ -288,6 +354,22 @@ def main(argv: list[str] | None = None) -> int:
                     help="drop events with more than N markets (multi-candidate fields)")
     bt.add_argument("--quiet", action="store_true")
     bt.set_defaults(func=_cmd_backtest)
+
+    poly = sub.add_parser("poly", help="grade Polymarket wallets by real edge")
+    poly.add_argument("--config", default="config.json", help="config JSON path")
+    poly.add_argument("--wallet", default=None,
+                      help="grade one wallet (0x...) instead of the leaderboard")
+    poly.add_argument("--top", type=int, default=10,
+                      help="grade the top-N leaderboard wallets")
+    poly.add_argument("--window", default="all",
+                      choices=["all", "month", "week", "day"],
+                      help="leaderboard time window")
+    poly.add_argument("--min-dollars", type=float, default=100.0, dest="min_dollars",
+                      help="minimum $ staked per trade to grade")
+    poly.add_argument("--max-trades", type=int, default=2000, dest="max_trades",
+                      help="cap trades pulled per wallet")
+    poly.add_argument("--quiet", action="store_true")
+    poly.set_defaults(func=_cmd_poly)
 
     probe = sub.add_parser("probe", help="dump raw Kalshi market data (diagnostics)")
     probe.add_argument("--config", default="config.json", help="config JSON path")
