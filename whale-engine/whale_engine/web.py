@@ -135,6 +135,11 @@ _PAGE = """<!doctype html>
   .legend ul { margin: 10px 0 4px; padding-left: 18px; }
   .legend li { margin: 4px 0; color: #c9d1d9; }
   .cap { font-size: 12px; color: #8b949e; margin: -4px 0 8px; }
+  .tabs { display: flex; gap: 8px; margin: 8px 0 6px; }
+  .tab { background: #161b22; border: 1px solid #21262d; color: #8b949e;
+         padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+  .tab.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .soon { color: #f0883e; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -167,10 +172,15 @@ _PAGE = """<!doctype html>
   </table>
 
   <h2>Markets tracked</h2>
-  <div class="cap">Price = market's estimated chance · Volume = total contracts ever traded ·
-    Open interest = live positions held now</div>
+  <div class="tabs">
+    <button class="tab active" data-tab="all" id="tab-all">All markets</button>
+    <button class="tab" data-tab="soon" id="tab-soon">Closing soon</button>
+  </div>
+  <div class="cap">Chance = market's estimated probability · Volume = total contracts ever
+    traded · Open interest = live positions held now · Closes = time until the market resolves</div>
   <table>
-    <thead><tr><th>Market</th><th>Chance</th><th>Volume</th><th>Open interest</th></tr></thead>
+    <thead><tr><th>Market</th><th>Chance</th><th>Volume</th>
+      <th>Open interest</th><th>Closes</th></tr></thead>
     <tbody id="markets"></tbody>
   </table>
 </div>
@@ -187,6 +197,40 @@ function sideBadge(side) {
   const cls = buy.includes(side) ? 'buy' : sell.includes(side) ? 'sell' : 'flat';
   return `<span class="side ${cls}">${esc(side)}</span>`;
 }
+function fmtCloses(ms) {
+  if (!ms) return '<span class="q">—</span>';
+  const d = ms - Date.now();
+  if (d <= 0) return '<span class="soon">closing</span>';
+  const h = d / 3600000;
+  let txt = h < 1 ? 'in ' + Math.round(d/60000) + 'm'
+          : h < 48 ? 'in ' + Math.round(h) + 'h'
+          : 'in ' + Math.round(h/24) + 'd';
+  return h < 72 ? `<span class="soon">${txt}</span>` : `<span class="q">${txt}</span>`;
+}
+
+let MARKETS = [], TAB = 'all';
+function renderMarkets() {
+  let rows = MARKETS.slice();
+  if (TAB === 'soon') {
+    const horizon = Date.now() + 7 * 86400000;
+    rows = rows.filter(m => m.close_ts > 0 && m.close_ts <= horizon)
+               .sort((a, b) => a.close_ts - b.close_ts);
+  }
+  document.getElementById('markets').innerHTML = rows.length ? rows.map(m => `
+    <tr><td><b>${esc(m.question || m.market_id)}</b><div class="q">${esc(m.market_id)}</div></td>
+    <td>${Math.round(m.yes_price*100)}%</td>
+    <td>${(m.volume||0).toLocaleString()}</td>
+    <td>${(m.open_interest||0).toLocaleString()}</td>
+    <td>${fmtCloses(m.close_ts)}</td></tr>`).join('')
+    : `<tr><td class="empty" colspan="5">${TAB === 'soon'
+        ? 'no tracked markets close within 7 days yet'
+        : 'no markets yet'}</td></tr>`;
+}
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
+  TAB = b.dataset.tab;
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === b));
+  renderMarkets();
+});
 
 async function refresh() {
   try {
@@ -214,12 +258,11 @@ async function refresh() {
       <td class="q">${esc(s.reason)}</td></tr>`).join('')
       : '<tr><td class="empty" colspan="7">no signals yet — the watcher is learning each market\\'s normal first</td></tr>';
 
-    const mk = d.markets || [];
-    document.getElementById('markets').innerHTML = mk.map(m => `
-      <tr><td><b>${esc(m.question || m.market_id)}</b><div class="q">${esc(m.market_id)}</div></td>
-      <td>${Math.round(m.yes_price*100)}%</td>
-      <td>${(m.volume||0).toLocaleString()}</td>
-      <td>${(m.open_interest||0).toLocaleString()}</td></tr>`).join('');
+    MARKETS = d.markets || [];
+    const soonCount = MARKETS.filter(m =>
+      m.close_ts > 0 && m.close_ts <= Date.now() + 7*86400000).length;
+    document.getElementById('tab-soon').textContent = `Closing soon (${soonCount})`;
+    renderMarkets();
   } catch (e) {
     document.getElementById('live').textContent = '● disconnected';
   }

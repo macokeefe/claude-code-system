@@ -29,6 +29,9 @@ class _MarketState:
         self.price = self.rng.uniform(0.25, 0.75)
         self.volume = self.rng.randint(1_000, 5_000)
         self.open_interest = self.rng.randint(500, 3_000)
+        # spread close times so the "closing soon" view has variety
+        days = self.rng.choice([0.1, 1, 3, 12, 90])
+        self.close_ts = now_ms() + int(days * 86_400_000)
         self._pending_trades: list[TradeEvent] = []
 
     def step(self) -> MarketSnapshot:
@@ -70,7 +73,7 @@ class _MarketState:
             platform="synthetic", market_id=self.ticker, question=self.question,
             status="open", ts=ts, yes_price=round(self.price, 3),
             volume=self.volume, open_interest=self.open_interest,
-            liquidity=float(self.open_interest * 10),
+            liquidity=float(self.open_interest * 10), close_ts=self.close_ts,
         )
 
 

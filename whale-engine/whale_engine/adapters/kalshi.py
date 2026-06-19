@@ -142,17 +142,31 @@ class KalshiSource:
     def _discover_liquid(self) -> list[MarketSnapshot]:
         """Find real markets via events, fetch their full data (with volume),
         keep the ones with real activity, and return the most-liquid ones."""
+        import time as _t
         tickers, ev_pages = self._discover_real_tickers()
         snaps = self._fetch_by_tickers(tickers)
         if self.active_only:
             snaps = [s for s in snaps if s.volume > 0 or s.open_interest > 0]
-        if self.max_close_days > 0:
-            import time as _t
-            horizon = int(_t.time() * 1000) + self.max_close_days * 86_400_000
-            snaps = [s for s in snaps if 0 < s.close_ts <= horizon]
         snaps.sort(key=lambda s: s.volume, reverse=True)
-        top = snaps[: self.market_limit]
-        log.info("Kalshi discovery: %d real tickers over %d event pages, %d active; "
+
+        if self.max_close_days > 0:
+            # Hard focus: only markets closing within the window.
+            horizon = int(_t.time() * 1000) + self.max_close_days * 86_400_000
+            top = [s for s in snaps if 0 < s.close_ts <= horizon][: self.market_limit]
+        else:
+            # Top by volume, blended with markets closing within a week so the
+            # "closing soon" view always has something (they're rarely the
+            # highest-volume markets, so they need to be added explicitly).
+            top = snaps[: self.market_limit]
+            seen = {s.market_id for s in top}
+            week = int(_t.time() * 1000) + 7 * 86_400_000
+            soon = [s for s in snaps if 0 < s.close_ts <= week]
+            for s in soon[: self.market_limit // 2]:
+                if s.market_id not in seen:
+                    top.append(s)
+                    seen.add(s.market_id)
+
+        log.info("Kalshi discovery: %d real tickers over %d event pages, %d tracked; "
                  "top: %s", len(tickers), ev_pages, len(top),
                  ", ".join(f"{s.market_id}({s.volume})" for s in top[:5]) or "none")
         return top

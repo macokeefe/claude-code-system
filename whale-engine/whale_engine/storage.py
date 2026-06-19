@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS snapshots (
     yes_price     REAL,
     volume        INTEGER,
     open_interest INTEGER,
-    liquidity     REAL
+    liquidity     REAL,
+    close_ts      INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_snap_market_ts ON snapshots(market_id, ts);
 
@@ -63,13 +64,16 @@ class Storage:
         self.conn.commit()
 
     def _migrate(self) -> None:
-        """Add newer columns to a signals table created by an older version."""
-        existing = {r["name"] for r in self.conn.execute("PRAGMA table_info(signals)")}
+        """Add newer columns to tables created by an older version."""
+        sig_cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(signals)")}
         for col, decl in (("contracts", "REAL DEFAULT 0"),
                           ("notional", "REAL DEFAULT 0"),
                           ("side", "TEXT DEFAULT ''")):
-            if col not in existing:
+            if col not in sig_cols:
                 self.conn.execute(f"ALTER TABLE signals ADD COLUMN {col} {decl}")
+        snap_cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(snapshots)")}
+        if "close_ts" not in snap_cols:
+            self.conn.execute("ALTER TABLE snapshots ADD COLUMN close_ts INTEGER DEFAULT 0")
 
     def close(self) -> None:
         self.conn.close()
@@ -77,9 +81,11 @@ class Storage:
     # --- writes ---
     def insert_snapshot(self, s: MarketSnapshot) -> None:
         self.conn.execute(
-            "INSERT INTO snapshots VALUES (?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO snapshots (platform, market_id, ts, question, status, "
+            "yes_price, volume, open_interest, liquidity, close_ts) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
             (s.platform, s.market_id, s.ts, s.question, s.status,
-             s.yes_price, s.volume, s.open_interest, s.liquidity),
+             s.yes_price, s.volume, s.open_interest, s.liquidity, s.close_ts),
         )
         self.conn.commit()
 
