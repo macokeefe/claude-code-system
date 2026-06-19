@@ -131,6 +131,47 @@ def _cmd_backfill(args) -> int:
     return 0
 
 
+def _cmd_backtest(args) -> int:
+    """Grade whale trades on recently-resolved markets and print a scoreboard."""
+    from . import backtest
+    config = _build_config(args)
+    config.source = "kalshi"
+    src = make_source("kalshi", config)
+    print(f"\nBacktesting whale trades on markets resolved in the last {args.days}d "
+          f"(min ${args.min_dollars:,.0f} staked)…\n"
+          f"This pulls trade history per market — give it a few minutes.\n")
+    rep = backtest.run(src, days=args.days, min_dollars=args.min_dollars,
+                       max_markets=args.max_markets)
+    if rep.get("error"):
+        print("error:", rep["error"])
+        return 1
+
+    o = rep["overall"]
+    print("=" * 60)
+    print(f"RESOLVED MARKETS GRADED: {rep['markets']}")
+    print(f"WHALE TRADES (>= ${rep['min_dollars']:,.0f}): {o['trades']:,}")
+    if not o["trades"]:
+        print("\nNo whale trades found in scope. Try --days 14 or a lower "
+              "--min-dollars, or run during/after an active trading period.")
+        return 0
+    print(f"\nIf you had copied every whale trade:")
+    print(f"  Win rate:        {o['win_rate']*100:5.1f}%   "
+          f"(avg price paid {o['avg_price_paid']*100:.0f}c -> "
+          f"break-even win rate ~{o['avg_price_paid']*100:.0f}%)")
+    print(f"  Total staked:    ${o['staked']:,.0f}")
+    print(f"  Net P&L (a/fees):${o['pnl']:,.0f}")
+    print(f"  ROI:             {o['roi']*100:+.1f}%")
+    print(f"\nBy category (most-traded first):")
+    print(f"  {'category':<26}{'trades':>7}{'win%':>7}{'ROI%':>8}")
+    for cat, a in list(rep["by_category"].items())[:15]:
+        if a["trades"] >= 3:
+            print(f"  {cat[:26]:<26}{a['trades']:>7}{a['win_rate']*100:>6.0f}%"
+                  f"{a['roi']*100:>+7.0f}%")
+    print("=" * 60)
+    print("Note: P&L is after an approximate fee; this is research, not advice.")
+    return 0
+
+
 def _cmd_probe(args) -> int:
     """Confirm we can backtest whales on RESOLVED markets: settled-market list,
     the `result` field, and per-market trade-history depth."""
@@ -213,6 +254,16 @@ def main(argv: list[str] | None = None) -> int:
     bf.add_argument("--hours", type=int, default=6, help="hours of history to pull")
     bf.add_argument("--quiet", action="store_true")
     bf.set_defaults(func=_cmd_backfill)
+
+    bt = sub.add_parser("backtest", help="grade whale trades on resolved markets")
+    bt.add_argument("--config", default="config.json", help="config JSON path")
+    bt.add_argument("--days", type=int, default=3, help="resolved within the last N days")
+    bt.add_argument("--min-dollars", type=float, default=500.0, dest="min_dollars",
+                    help="minimum $ staked to count as a whale trade")
+    bt.add_argument("--max-markets", type=int, default=150, dest="max_markets",
+                    help="cap markets analyzed (bounds API calls)")
+    bt.add_argument("--quiet", action="store_true")
+    bt.set_defaults(func=_cmd_backtest)
 
     probe = sub.add_parser("probe", help="dump raw Kalshi market data (diagnostics)")
     probe.add_argument("--config", default="config.json", help="config JSON path")

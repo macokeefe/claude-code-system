@@ -270,6 +270,59 @@ class KalshiSource:
                 break
         return out
 
+    def fetch_all_trades(self, ticker: str, max_pages: int = 12) -> list[TradeEvent]:
+        """Full trade history for one market (paginated) — for backtesting."""
+        out: list[TradeEvent] = []
+        cursor = None
+        for _ in range(max_pages):
+            params = {"ticker": ticker, "limit": 1000}
+            if cursor:
+                params["cursor"] = cursor
+            page = self._get("markets/trades", params)
+            trades = page.get("trades") or []
+            if not trades:
+                break
+            out.extend(self._to_trade(t, ticker) for t in trades)
+            cursor = page.get("cursor")
+            if not cursor:
+                break
+        return out
+
+    def settled_real_tickers(self, event_pages: int = 12, cap: int = 600) -> list[str]:
+        """Resolved (non-KXMVE) market tickers, via the events endpoint to
+        dodge the parlay flood."""
+        tickers: list[str] = []
+        cursor = None
+        for _ in range(event_pages):
+            page = self._get("events", {"limit": 200, "status": "settled",
+                                        "with_nested_markets": "true", "cursor": cursor})
+            events = page.get("events") or []
+            if not events:
+                break
+            for e in events:
+                if e.get("event_ticker", "").startswith("KXMVE"):
+                    continue
+                if (e.get("series_ticker") or "").startswith("KXMVE"):
+                    continue
+                for m in e.get("markets") or []:
+                    if m.get("ticker"):
+                        tickers.append(m["ticker"])
+            if len(tickers) >= cap:
+                break
+            cursor = page.get("cursor")
+            if not cursor:
+                break
+        return tickers[:cap]
+
+    def fetch_markets_raw(self, tickers: list[str]) -> list[dict]:
+        """Full raw market dicts for tickers (carries result, settlement_ts, …)."""
+        out: list[dict] = []
+        for i in range(0, len(tickers), 100):
+            page = self._get("markets", {"tickers": ",".join(tickers[i:i + 100]),
+                                         "limit": 1000})
+            out.extend(page.get("markets") or [])
+        return out
+
     def resolve_titles(self, tickers: list[str]) -> dict:
         """Look up human-readable titles for market tickers (batched)."""
         out: dict = {}
