@@ -134,7 +134,8 @@ class PolymarketSource:
             chunk = uniq[i:i + 20]
             try:
                 rows = _get(GAMMA_API + "/markets",
-                            {"condition_ids": chunk, "limit": len(chunk)})
+                            {"condition_ids": chunk, "closed": "true",
+                             "limit": len(chunk)})
             except Exception:
                 log.debug("gamma fetch failed for a chunk", exc_info=True)
                 continue
