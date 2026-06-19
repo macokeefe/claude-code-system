@@ -199,6 +199,45 @@ def _cmd_poly(args) -> int:
     from . import poly_backtest as pb
 
     pm = PolymarketSource()
+    if getattr(args, "forward", 0):
+        print(f"\nFORWARD TEST — qualify wallets on edge BEFORE {args.forward}d ago,\n"
+              f"then grade what copying their LATER entries would return\n"
+              f"(slippage {args.slippage*100:.0f}c, min ${args.min_dollars:,.0f}/trade, "
+              f"top {args.top} wallets). This pulls a lot of history — be patient.\n")
+        rep = pb.forward_test(pm, top=args.top, window=args.window,
+                              cutoff_days=args.forward, min_dollars=args.min_dollars,
+                              slippage=args.slippage, max_trades=args.max_trades)
+        f = rep["followed"]
+        print("=" * 78)
+        print(f"{'WALLET':<16}{'pre-edge':>9}{'pre-n':>7}{'qual?':>6}"
+              f"{'post-n':>7}{'post-edge':>10}{'post-ROI%':>10}")
+        print("-" * 78)
+        for w in rep["wallets"]:
+            if w["pre"]["graded_trades"] == 0 and w["post"]["graded_trades"] == 0:
+                continue
+            print(f"{w['name'][:15]:<16}{w['pre']['edge']*100:>+8.0f}"
+                  f"{w['pre']['graded_trades']:>7}{'yes' if w['qualified'] else 'no':>6}"
+                  f"{w['post']['graded_trades']:>7}{w['post']['edge']*100:>+9.0f}"
+                  f"{w['post']['roi']*100:>+9.0f}%")
+        print("=" * 78)
+        print(f"FOLLOWING THE {rep['qualified_wallets']} QUALIFIED WALLETS "
+              f"(of {rep['candidate_wallets']}), copying every entry they made "
+              f"in the last {args.forward}d:")
+        if f["graded_trades"]:
+            print(f"  Copied trades:   {f['graded_trades']:,}")
+            print(f"  Win rate:        {f['win_rate']*100:5.1f}%")
+            print(f"  Avg price paid:  {f['avg_price_paid']*100:5.1f}c  (incl. slippage)")
+            print(f"  EDGE:            {f['edge']*100:+5.1f} pts")
+            print(f"  Total staked:    ${f['staked']:,.0f}")
+            print(f"  Net P&L:         ${f['pnl']:,.0f}")
+            print(f"  ROI:             {f['roi']*100:+.1f}%")
+            print("\nThis is the real number: out-of-sample, priced as a copier, losers")
+            print("included. Positive here = a followable edge. ~0 or negative = the")
+            print("track record was survivorship, and copying forward doesn't pay.")
+        else:
+            print("  No qualified wallets with gradeable forward trades. Try a longer")
+            print("  --forward window, lower --min-dollars, or loosen --min-pre-trades.")
+        return 0
     if args.wallet:
         print(f"\nGrading wallet {args.wallet} (min ${args.min_dollars:,.0f} "
               f"per trade, up to {args.max_trades} trades)…\n")
@@ -368,6 +407,11 @@ def main(argv: list[str] | None = None) -> int:
                       help="minimum $ staked per trade to grade")
     poly.add_argument("--max-trades", type=int, default=2000, dest="max_trades",
                       help="cap trades pulled per wallet")
+    poly.add_argument("--forward", type=int, default=0,
+                      help="out-of-sample test: qualify wallets on edge before "
+                           "N days ago, grade copying their entries since")
+    poly.add_argument("--slippage", type=float, default=0.02,
+                      help="price haircut a copier pays vs the whale's fill")
     poly.add_argument("--quiet", action="store_true")
     poly.set_defaults(func=_cmd_poly)
 
