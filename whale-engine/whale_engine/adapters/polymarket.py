@@ -154,29 +154,33 @@ class PolymarketSource:
 
     def open_markets(self, max_markets: int = 4000) -> list[dict]:
         """All tradeable (open) markets with their current YES price, deadline,
-        and liquidity — the raw material for structural-mispricing scans."""
+        and liquidity — the raw material for structural-mispricing scans.
+        Ordered by liquidity so the most tradeable markets come first."""
         out: list[dict] = []
-        offset, page = 0, 500
+        offset, page = 0, 100  # Gamma caps page size at 100
+        order = {"order": "liquidityNum", "ascending": "false"}
         while len(out) < max_markets:
+            params = {"closed": "false", "active": "true",
+                      "limit": page, "offset": offset, **order}
             try:
-                rows = _get(GAMMA_API + "/markets",
-                            {"closed": "false", "active": "true",
-                             "limit": page, "offset": offset})
+                rows = _get(GAMMA_API + "/markets", params)
             except Exception:
+                if order:  # ordering param may be unsupported — retry without it
+                    log.debug("gamma open-markets: dropping order param", exc_info=True)
+                    order = {}
+                    continue
                 log.debug("gamma open-markets page failed at offset %d", offset,
                           exc_info=True)
                 break
             if isinstance(rows, dict):
                 rows = rows.get("data") or rows.get("markets") or []
             if not rows:
-                break
+                break  # past the last page
             for m in rows:
                 rec = _open_record(m)
                 if rec:
                     out.append(rec)
-            if len(rows) < page:
-                break
-            offset += page
+            offset += len(rows)
         return out[:max_markets]
 
 
