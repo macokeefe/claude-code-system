@@ -366,7 +366,8 @@ def _cmd_drift(args) -> int:
         series_set = []
         for i, m in enumerate(markets, 1):
             try:
-                s = pm.price_history(m["yes_token"], fidelity_min=args.fidelity)
+                s = pm.price_history(m["yes_token"], fidelity_min=args.fidelity,
+                                     interval=args.interval)
             except Exception:
                 continue
             if len(s) > args.lookback + args.horizon + 2:
@@ -550,6 +551,8 @@ def main(argv: list[str] | None = None) -> int:
                        dest="min_liquidity", help="min market liquidity ($)")
     drift.add_argument("--fidelity", type=int, default=60,
                        help="price bar size in minutes")
+    drift.add_argument("--interval", default="max",
+                       help="history window: max | 1m | 1w | 1d | 6h | 1h")
     drift.add_argument("--jump", type=float, default=0.05,
                        help="sharp-move threshold (e.g. 0.05 = 5c)")
     drift.add_argument("--lookback", type=int, default=1,
