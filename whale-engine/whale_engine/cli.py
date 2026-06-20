@@ -313,8 +313,8 @@ def _cmd_arb(args) -> int:
                                   min_liquidity=args.min_liquidity)
     vs = rep["violations"]
     print("=" * 78)
-    print(f"scanned {rep['scanned']} markets · {rep['ladder_groups']} time-ladders · "
-          f"{len(vs)} mispricings")
+    print(f"scanned {rep['scanned']} markets · {rep.get('eligible', 0)} cumulative "
+          f"'by-date' · {rep['ladder_groups']} time-ladders · {len(vs)} mispricings")
     print("=" * 78)
     if not vs:
         print("No ladder violations above thresholds. Try --min-gap 0.01 or a lower")
