@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections import defaultdict
 
 log = logging.getLogger("whale_engine.drift")
@@ -26,6 +27,9 @@ log = logging.getLogger("whale_engine.drift")
 
 def save(path: str, series_set: list[dict]) -> None:
     """Persist captured price series: [{question, token, series:[[t,p],...]}]."""
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(series_set, fh)
 
