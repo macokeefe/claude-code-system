@@ -382,12 +382,12 @@ def _cmd_drift(args) -> int:
             return 0
 
     rep = drift.run(series_set, jump=args.jump, back=args.lookback,
-                    fwd=args.horizon, cost=args.cost)
+                    fwd=args.horizon, cost=args.cost, lag=args.lag)
     o = rep
     print("=" * 70)
     print(f"DRIFT TEST · {rep['series']} markets · sharp move = "
-          f"{args.jump*100:.0f}c over {args.lookback} bar(s) · "
-          f"forward {args.horizon} bar(s) · bar={args.fidelity}m")
+          f"{args.jump*100:.0f}c over {args.lookback} bar(s) · enter +{args.lag} bar · "
+          f"hold {args.horizon} bar(s) · bar={args.fidelity}m")
     print("=" * 70)
     if not o["events"]:
         print("No sharp moves found. Lower --jump or pull more markets/history.")
@@ -559,6 +559,8 @@ def main(argv: list[str] | None = None) -> int:
                        help="bars over which the sharp move is measured")
     drift.add_argument("--horizon", type=int, default=1,
                        help="bars forward to measure continuation")
+    drift.add_argument("--lag", type=int, default=1,
+                       help="entry delay in bars (>=1 realistic; 0 = untradeable spike price)")
     drift.add_argument("--cost", type=float, default=0.01,
                        help="assumed round-trip friction subtracted from edge")
     drift.add_argument("--dump", default=None,

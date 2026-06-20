@@ -42,34 +42,42 @@ def load(path: str) -> list[dict]:
     return data
 
 
-def _events(series: list, jump: float, back: int, fwd: int) -> list[dict]:
-    """Sharp moves and their forward continuation on one series."""
+def _events(series: list, jump: float, back: int, fwd: int,
+            lag: int = 1) -> list[dict]:
+    """Sharp moves and their forward continuation on one series.
+
+    `lag` is the realistic entry delay: the spike is only known once bar i
+    closes, so we enter at bar i+lag (not at the untradeable spike price).
+    lag=0 measures the illusion; lag>=1 measures what's actually capturable.
+    """
     out, n = [], len(series)
-    for i in range(back, n - fwd):
-        p0, p1, p2 = series[i - back][1], series[i][1], series[i + fwd][1]
-        move = p1 - p0
+    for i in range(back, n - fwd - lag):
+        p0, entry, exit_ = series[i - back][1], series[i + lag][1], series[i + lag + fwd][1]
+        move = series[i][1] - p0
         if abs(move) < jump:
             continue
         d = 1.0 if move > 0 else -1.0
         out.append({
             "mag": abs(move),
-            "cont": (p2 - p1) * d,   # forward return in the move's direction
-            "entry": p1,
+            "cont": (exit_ - entry) * d,   # forward return in the move's direction
+            "entry": entry,
         })
     return out
 
 
 def run(series_set: list[dict], jump: float = 0.05, back: int = 1,
-        fwd: int = 1, cost: float = 0.01) -> dict:
+        fwd: int = 1, cost: float = 0.01, lag: int = 1) -> dict:
     """Aggregate continuation across every series. `cost` is the assumed
-    round-trip friction (spread+fees) subtracted from the edge."""
+    round-trip friction (spread+fees); `lag` is the entry delay in bars
+    (>=1 = realistic; the edge must survive not entering at the spike price)."""
     rows = []
     for item in series_set:
-        rows.extend(_events(item["series"], jump, back, fwd))
+        rows.extend(_events(item["series"], jump, back, fwd, lag))
 
     rep = _agg(rows, cost)
     rep["jump"] = jump
     rep["fwd_bars"] = fwd
+    rep["lag"] = lag
     rep["cost"] = cost
     rep["series"] = len(series_set)
     # by move-size band — small moves may drift differently than big ones
