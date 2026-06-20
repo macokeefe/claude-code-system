@@ -297,6 +297,53 @@ def _print_wallet(w: dict, detailed: bool = False) -> None:
     print("=" * 64)
 
 
+def _cmd_arb(args) -> int:
+    """Scan open Polymarket markets for structural mispricings (time-ladders):
+    earlier-deadline rungs priced above later ones — a locked gap, no view
+    on the world required."""
+    from .adapters.polymarket import PolymarketSource
+    from . import mispricing
+
+    pm = PolymarketSource()
+    print(f"\nPulling open Polymarket markets (up to {args.max_markets})…")
+    markets = pm.open_markets(max_markets=args.max_markets)
+    print(f"got {len(markets)} priced open markets. Scanning time-ladders "
+          f"(min gap {args.min_gap*100:.0f}c, min liquidity ${args.min_liquidity:,.0f})…\n")
+    rep = mispricing.find_ladders(markets, min_gap=args.min_gap,
+                                  min_liquidity=args.min_liquidity)
+    vs = rep["violations"]
+    print("=" * 78)
+    print(f"scanned {rep['scanned']} markets · {rep['ladder_groups']} time-ladders · "
+          f"{len(vs)} mispricings")
+    print("=" * 78)
+    if not vs:
+        print("No ladder violations above thresholds. Try --min-gap 0.01 or a lower")
+        print("--min-liquidity. Use --show-ladders to inspect how markets grouped.")
+    for v in vs[:args.limit]:
+        e, l = v["early"], v["late"]
+        print(f"\n  LOCKED GAP {v['gap']*100:.1f}c   (min liquidity ${v['liquidity']:,.0f})")
+        print(f"    {e['question']}")
+        print(f"      deadline {e['end'][:10]}  YES {e['yes']*100:.0f}c   <- SELL (overpriced)")
+        print(f"    {l['question']}")
+        print(f"      deadline {l['end'][:10]}  YES {l['yes']*100:.0f}c   <- BUY  (underpriced)")
+        print(f"    trade: buy YES@later {l['yes']*100:.0f}c + buy NO@earlier "
+              f"{(1-e['yes'])*100:.0f}c  ->  lock ~{v['gap']*100:.1f}c, can't lose")
+
+    if args.show_ladders:
+        print("\n" + "-" * 78)
+        print("LADDER GROUPS (for tuning the grouping heuristic):")
+        for key, ms in rep["ladders"][:args.limit]:
+            print(f"\n  [{key}]  ({len(ms)} rungs)")
+            for m in ms:
+                print(f"    {m['end'][:10]}  YES {m['yes']*100:4.0f}c  "
+                      f"liq ${m['liquidity']:>8,.0f}  {m['question'][:60]}")
+    print("\n" + "=" * 78)
+    print("Detection is on the mid price; before trading, confirm the gap survives")
+    print("the bid/ask spread and Polymarket fees. No event prediction needed —")
+    print("this only flags prices that violate arithmetic the market must obey.")
+    return 0
+
+
 def _cmd_probe(args) -> int:
     """Confirm we can backtest whales on RESOLVED markets: settled-market list,
     the `result` field, and per-market trade-history depth."""
@@ -414,6 +461,20 @@ def main(argv: list[str] | None = None) -> int:
                       help="price haircut a copier pays vs the whale's fill")
     poly.add_argument("--quiet", action="store_true")
     poly.set_defaults(func=_cmd_poly)
+
+    arb = sub.add_parser("arb", help="scan open markets for structural mispricings")
+    arb.add_argument("--config", default="config.json", help="config JSON path")
+    arb.add_argument("--max-markets", type=int, default=4000, dest="max_markets",
+                     help="cap open markets pulled")
+    arb.add_argument("--min-gap", type=float, default=0.03, dest="min_gap",
+                     help="minimum locked gap to flag (e.g. 0.03 = 3c)")
+    arb.add_argument("--min-liquidity", type=float, default=500.0,
+                     dest="min_liquidity", help="minimum per-rung liquidity ($)")
+    arb.add_argument("--limit", type=int, default=25, help="max rows to print")
+    arb.add_argument("--show-ladders", action="store_true",
+                     help="also print the ladder groups (to tune grouping)")
+    arb.add_argument("--quiet", action="store_true")
+    arb.set_defaults(func=_cmd_arb)
 
     probe = sub.add_parser("probe", help="dump raw Kalshi market data (diagnostics)")
     probe.add_argument("--config", default="config.json", help="config JSON path")

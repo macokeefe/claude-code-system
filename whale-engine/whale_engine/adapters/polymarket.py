@@ -152,6 +152,70 @@ class PolymarketSource:
                 }
         return out
 
+    def open_markets(self, max_markets: int = 4000) -> list[dict]:
+        """All tradeable (open) markets with their current YES price, deadline,
+        and liquidity — the raw material for structural-mispricing scans."""
+        out: list[dict] = []
+        offset, page = 0, 500
+        while len(out) < max_markets:
+            try:
+                rows = _get(GAMMA_API + "/markets",
+                            {"closed": "false", "active": "true",
+                             "limit": page, "offset": offset})
+            except Exception:
+                log.debug("gamma open-markets page failed at offset %d", offset,
+                          exc_info=True)
+                break
+            if isinstance(rows, dict):
+                rows = rows.get("data") or rows.get("markets") or []
+            if not rows:
+                break
+            for m in rows:
+                rec = _open_record(m)
+                if rec:
+                    out.append(rec)
+            if len(rows) < page:
+                break
+            offset += page
+        return out[:max_markets]
+
+
+def _open_record(m: dict):
+    """Normalize a Gamma open-market row to the fields the scanner needs."""
+    q, cid = m.get("question"), m.get("conditionId")
+    end = m.get("endDate") or m.get("endDateIso")
+    if not (q and cid and end):
+        return None
+    try:
+        outcomes = m.get("outcomes")
+        prices = m.get("outcomePrices")
+        outcomes = json.loads(outcomes) if isinstance(outcomes, str) else outcomes
+        prices = json.loads(prices) if isinstance(prices, str) else prices
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not outcomes or not prices:
+        return None
+    yes_i = next((i for i, o in enumerate(outcomes)
+                  if str(o).strip().lower() == "yes"), None)
+    if yes_i is None:
+        return None
+    try:
+        yes = float(prices[yes_i])
+    except (TypeError, ValueError, IndexError):
+        return None
+    if not (0.0 < yes < 1.0):  # skip resolved-ish / untraded
+        return None
+    events = m.get("events") or []
+    return {
+        "condition_id": cid, "question": q, "yes": yes, "end": str(end),
+        "liquidity": float(m.get("liquidityNum") or 0),
+        "volume": float(m.get("volumeNum") or 0),
+        "best_bid": float(m.get("bestBid") or 0),
+        "best_ask": float(m.get("bestAsk") or 0),
+        "slug": m.get("slug", ""),
+        "event_slug": events[0].get("slug", "") if events else "",
+    }
+
 
 def _winning_index(market: dict):
     """Index of the winning outcome (price == 1) for a closed market, else None."""
