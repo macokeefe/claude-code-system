@@ -30,6 +30,7 @@ log = logging.getLogger("whale_engine.adapters.polymarket")
 DATA_API = "https://data-api.polymarket.com"
 LB_API = "https://lb-api.polymarket.com"
 GAMMA_API = "https://gamma-api.polymarket.com"
+CLOB_API = "https://clob.polymarket.com"
 UA = "whale-engine/0.1 (+https://github.com/macokeefe/claude-code-system)"
 
 
@@ -183,6 +184,23 @@ class PolymarketSource:
             offset += len(rows)
         return out[:max_markets]
 
+    def price_history(self, token_id: str, fidelity_min: int = 60,
+                      interval: str = "max") -> list[tuple[int, float]]:
+        """The price tape for one CLOB token: list of (unix_seconds, price),
+        oldest first. `fidelity_min` is the bar size in minutes."""
+        data = _get(CLOB_API + "/prices-history",
+                    {"market": token_id, "interval": interval,
+                     "fidelity": fidelity_min})
+        hist = data.get("history") if isinstance(data, dict) else data
+        out = []
+        for pt in hist or []:
+            try:
+                out.append((int(pt["t"]), float(pt["p"])))
+            except (TypeError, ValueError, KeyError):
+                continue
+        out.sort(key=lambda x: x[0])
+        return out
+
 
 def _open_record(m: dict):
     """Normalize a Gamma open-market row to the fields the scanner needs."""
@@ -210,8 +228,15 @@ def _open_record(m: dict):
     if not (0.0 < yes < 1.0):  # skip resolved-ish / untraded
         return None
     events = m.get("events") or []
+    toks = m.get("clobTokenIds")
+    try:
+        toks = json.loads(toks) if isinstance(toks, str) else toks
+    except (TypeError, ValueError, json.JSONDecodeError):
+        toks = None
+    yes_token = toks[yes_i] if toks and yes_i < len(toks) else ""
     return {
         "condition_id": cid, "question": q, "yes": yes, "end": str(end),
+        "yes_token": yes_token,  # CLOB token id for the YES outcome (price history)
         "liquidity": float(m.get("liquidityNum") or 0),
         "volume": float(m.get("volumeNum") or 0),
         "best_bid": float(m.get("bestBid") or 0),

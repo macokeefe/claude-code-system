@@ -344,6 +344,71 @@ def _cmd_arb(args) -> int:
     return 0
 
 
+def _cmd_drift(args) -> int:
+    """Measure post-move drift on Polymarket's price tape: after a sharp move,
+    does price keep going (tradeable) or snap back? --dump captures real series
+    to a file once; --from-file replays them offline (no API)."""
+    from . import drift
+
+    if args.from_file:
+        print(f"\nLoading price series from {args.from_file}…")
+        series_set = drift.load(args.from_file)
+        print(f"loaded {len(series_set)} series.")
+    else:
+        from .adapters.polymarket import PolymarketSource
+        pm = PolymarketSource()
+        print(f"\nPulling open markets (scan {args.scan})…")
+        markets = [m for m in pm.open_markets(max_markets=args.scan)
+                   if m["liquidity"] >= args.min_liquidity and m.get("yes_token")]
+        markets = markets[:args.markets]
+        print(f"fetching price history for {len(markets)} liquid markets "
+              f"(fidelity {args.fidelity}m)…")
+        series_set = []
+        for i, m in enumerate(markets, 1):
+            try:
+                s = pm.price_history(m["yes_token"], fidelity_min=args.fidelity)
+            except Exception:
+                continue
+            if len(s) > args.lookback + args.horizon + 2:
+                series_set.append({"question": m["question"],
+                                   "token": m["yes_token"], "series": s})
+            if i % 25 == 0:
+                print(f"  {i}/{len(markets)} pulled…")
+        if args.dump:
+            drift.save(args.dump, series_set)
+            print(f"\nsaved {len(series_set)} series to {args.dump} — commit it and "
+                  f"I can iterate the backtest offline.")
+            return 0
+
+    rep = drift.run(series_set, jump=args.jump, back=args.lookback,
+                    fwd=args.horizon, cost=args.cost)
+    o = rep
+    print("=" * 70)
+    print(f"DRIFT TEST · {rep['series']} markets · sharp move = "
+          f"{args.jump*100:.0f}c over {args.lookback} bar(s) · "
+          f"forward {args.horizon} bar(s) · bar={args.fidelity}m")
+    print("=" * 70)
+    if not o["events"]:
+        print("No sharp moves found. Lower --jump or pull more markets/history.")
+        return 0
+    print(f"  sharp-move events:  {o['events']:,}")
+    print(f"  mean continuation:  {o['mean_cont']*100:+.2f}c  "
+          f"(forward move in the trade's direction)")
+    print(f"  hit rate:           {o['hit_rate']*100:.1f}%  (continued at all)")
+    print(f"  net of {args.cost*100:.0f}c cost:    {o['net']*100:+.2f}c per trade")
+    print(f"\n  by move size:")
+    print(f"  {'band':<8}{'events':>8}{'mean_cont':>11}{'hit%':>7}{'net':>8}")
+    for b in ("5-10c", "10-20c", "20c+"):
+        a = rep["by_band"].get(b)
+        if a:
+            print(f"  {b:<8}{a['events']:>8}{a['mean_cont']*100:>+10.2f}c"
+                  f"{a['hit_rate']*100:>6.0f}%{a['net']*100:>+7.2f}c")
+    print("=" * 70)
+    print("mean continuation > 0 (and > cost) = the tape under-reacts and drifts:")
+    print("a real wave to surf. <= 0 = moves reverse or are random; thesis dead.")
+    return 0
+
+
 def _cmd_probe(args) -> int:
     """Confirm we can backtest whales on RESOLVED markets: settled-market list,
     the `result` field, and per-market trade-history depth."""
@@ -475,6 +540,30 @@ def main(argv: list[str] | None = None) -> int:
                      help="also print the ladder groups (to tune grouping)")
     arb.add_argument("--quiet", action="store_true")
     arb.set_defaults(func=_cmd_arb)
+
+    drift = sub.add_parser("drift", help="measure post-move price drift (trading thesis)")
+    drift.add_argument("--config", default="config.json", help="config JSON path")
+    drift.add_argument("--scan", type=int, default=1500, help="open markets to scan")
+    drift.add_argument("--markets", type=int, default=300,
+                       help="liquid markets to pull price history for")
+    drift.add_argument("--min-liquidity", type=float, default=10000.0,
+                       dest="min_liquidity", help="min market liquidity ($)")
+    drift.add_argument("--fidelity", type=int, default=60,
+                       help="price bar size in minutes")
+    drift.add_argument("--jump", type=float, default=0.05,
+                       help="sharp-move threshold (e.g. 0.05 = 5c)")
+    drift.add_argument("--lookback", type=int, default=1,
+                       help="bars over which the sharp move is measured")
+    drift.add_argument("--horizon", type=int, default=1,
+                       help="bars forward to measure continuation")
+    drift.add_argument("--cost", type=float, default=0.01,
+                       help="assumed round-trip friction subtracted from edge")
+    drift.add_argument("--dump", default=None,
+                       help="save fetched price series to this file and exit")
+    drift.add_argument("--from-file", default=None, dest="from_file",
+                       help="replay price series from a saved file (offline)")
+    drift.add_argument("--quiet", action="store_true")
+    drift.set_defaults(func=_cmd_drift)
 
     probe = sub.add_parser("probe", help="dump raw Kalshi market data (diagnostics)")
     probe.add_argument("--config", default="config.json", help="config JSON path")
