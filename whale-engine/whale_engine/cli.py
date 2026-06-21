@@ -462,6 +462,65 @@ def _cmd_drift(args) -> int:
     return 0
 
 
+def _cmd_analyst(args) -> int:
+    """The comprehension edge: Claude forecasts a market's probability, then we
+    grade its calibration against resolved outcomes (post knowledge-cutoff, so
+    it can't be reciting memorized answers)."""
+    from . import analyst, calibration
+    if not analyst.available():
+        print("Set ANTHROPIC_API_KEY (in .env or env) to run the analyst.")
+        return 1
+
+    if args.question:  # one-off estimate
+        est = analyst.estimate(args.question)
+        print(f"\nQ: {args.question}")
+        print(f"  probability YES: {est['probability']*100:.1f}%   "
+              f"(confidence {est['confidence']*100:.0f}%)")
+        print(f"  rationale: {est['rationale']}")
+        return 0
+
+    from .adapters.polymarket import PolymarketSource
+    pm = PolymarketSource()
+    print(f"\nCALIBRATION TEST — markets resolved on/after {args.cutoff} "
+          f"(after the model's knowledge cutoff, so outcomes can't be memorized).")
+    print(f"Pulling up to {args.markets} resolved yes/no markets…")
+    markets = pm.resolved_markets(args.cutoff, max_markets=args.markets)
+    if not markets:
+        print("No resolved post-cutoff yes/no markets found. Try an earlier --cutoff.")
+        return 0
+    print(f"got {len(markets)}. Asking the analyst for each (this costs API tokens)…\n")
+
+    items = []
+    for i, m in enumerate(markets, 1):
+        try:
+            est = analyst.estimate(m["question"])
+        except Exception as e:
+            print(f"  [{i}] estimate failed: {str(e)[:60]}")
+            continue
+        items.append({"prob": est["probability"], "outcome": m["outcome"]})
+        if i % 10 == 0:
+            print(f"  {i}/{len(markets)} forecast…")
+
+    rep = calibration.summarize(items)
+    print("\n" + "=" * 64)
+    print(f"CALIBRATION · {rep['n']} markets · base rate (YES) "
+          f"{rep['base_rate']*100:.0f}%")
+    print("=" * 64)
+    print(f"  Brier score:        {rep['brier']:.3f}   (lower better; 0.25 = coin flip)")
+    print(f"  Baseline Brier:     {rep['brier_baseline']:.3f}   (always predict base rate)")
+    print(f"  Skill vs baseline:  {rep['skill_vs_baseline']:+.3f}   (>0 = adds signal)")
+    print(f"  ECE:                {rep['ece']:.3f}   (calibration error; lower better)")
+    print(f"\n  Reliability (predicted vs what actually happened):")
+    print(f"  {'band':<10}{'n':>4}{'predicted':>11}{'observed':>10}")
+    for b in rep["reliability"]:
+        print(f"  {b['band']:<10}{b['n']:>4}{b['predicted']*100:>10.0f}%{b['observed']*100:>9.0f}%")
+    print("=" * 64)
+    print("Calibrated + beats baseline = a real forecasting signal we can build on.")
+    print("Miscalibrated = the analyst doesn't trade until it's fixed. (Next: feed it")
+    print("public sources per market; then compare its Brier to the market's own price.)")
+    return 0
+
+
 def _cmd_probe(args) -> int:
     """Confirm we can backtest whales on RESOLVED markets: settled-market list,
     the `result` field, and per-market trade-history depth."""
@@ -625,6 +684,15 @@ def main(argv: list[str] | None = None) -> int:
                        help="replay price series from a saved file (offline)")
     drift.add_argument("--quiet", action="store_true")
     drift.set_defaults(func=_cmd_drift)
+
+    an = sub.add_parser("analyst", help="Claude forecasts markets; grade its calibration")
+    an.add_argument("--config", default="config.json", help="config JSON path")
+    an.add_argument("--question", default=None, help="one-off: estimate this yes/no question")
+    an.add_argument("--markets", type=int, default=40, help="resolved markets to grade")
+    an.add_argument("--cutoff", default="2026-02-01",
+                    help="only grade markets resolved on/after this date (leakage guard)")
+    an.add_argument("--quiet", action="store_true")
+    an.set_defaults(func=_cmd_analyst)
 
     probe = sub.add_parser("probe", help="dump raw Kalshi market data (diagnostics)")
     probe.add_argument("--config", default="config.json", help="config JSON path")

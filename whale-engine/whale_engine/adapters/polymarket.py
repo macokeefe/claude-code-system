@@ -201,6 +201,34 @@ class PolymarketSource:
         out.sort(key=lambda x: x[0])
         return out
 
+    def resolved_markets(self, after_iso: str, max_markets: int = 60) -> list[dict]:
+        """Resolved yes/no markets that closed on/after `after_iso` (e.g.
+        "2026-02-01"). Restricting to AFTER the model's knowledge cutoff keeps
+        the calibration test honest — the model can't have memorized outcomes.
+        Returns [{question, outcome(1 if YES won else 0), end, condition_id}]."""
+        out: list[dict] = []
+        offset, page = 0, 100
+        order = {"order": "endDate", "ascending": "false"}
+        while len(out) < max_markets and offset < 4000:
+            params = {"closed": "true", "limit": page, "offset": offset, **order}
+            try:
+                rows = _get(GAMMA_API + "/markets", params)
+            except Exception:
+                if order:
+                    order = {}
+                    continue
+                break
+            if isinstance(rows, dict):
+                rows = rows.get("data") or rows.get("markets") or []
+            if not rows:
+                break
+            for m in rows:
+                rec = _resolved_record(m, after_iso)
+                if rec:
+                    out.append(rec)
+            offset += len(rows)
+        return out[:max_markets]
+
 
 def _open_record(m: dict):
     """Normalize a Gamma open-market row to the fields the scanner needs."""
@@ -244,6 +272,28 @@ def _open_record(m: dict):
         "slug": m.get("slug", ""),
         "event_slug": events[0].get("slug", "") if events else "",
     }
+
+
+def _resolved_record(m: dict, after_iso: str):
+    """A resolved yes/no market on/after after_iso, with the YES outcome (0/1)."""
+    q = m.get("question")
+    end = m.get("endDate") or m.get("endDateIso")
+    cid = m.get("conditionId")
+    if not (q and end and cid) or str(end) < after_iso:
+        return None
+    try:
+        outcomes = m.get("outcomes")
+        outcomes = json.loads(outcomes) if isinstance(outcomes, str) else outcomes
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    labels = [str(o).strip().lower() for o in (outcomes or [])]
+    if sorted(labels) != ["no", "yes"]:  # binary yes/no only
+        return None
+    wi = _winning_index(m)
+    if wi is None or wi >= len(labels):
+        return None
+    return {"question": q, "outcome": 1 if labels[wi] == "yes" else 0,
+            "end": str(end)[:10], "condition_id": cid}
 
 
 def _winning_index(market: dict):
