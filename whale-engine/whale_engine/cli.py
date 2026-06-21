@@ -480,11 +480,26 @@ def _cmd_analyst(args) -> int:
         return 0
 
     from .adapters.polymarket import PolymarketSource
-    pm = PolymarketSource()
-    print(f"\nCALIBRATION TEST — markets resolved on/after {args.cutoff} "
-          f"(after the model's knowledge cutoff, so outcomes can't be memorized).")
-    print(f"Pulling up to {args.markets} resolved yes/no markets…")
-    markets = pm.resolved_markets(args.cutoff, max_markets=args.markets)
+    import json as _json
+    import os as _os
+    if args.from_file:
+        with open(args.from_file, encoding="utf-8") as fh:
+            markets = _json.load(fh)
+        print(f"\nLoaded {len(markets)} resolved markets from {args.from_file}.")
+    else:
+        pm = PolymarketSource()
+        print(f"\nCALIBRATION TEST — markets resolved on/after {args.cutoff} "
+              f"(after the model's knowledge cutoff, so outcomes can't be memorized).")
+        print(f"Pulling up to {args.markets} resolved yes/no markets…")
+        markets = pm.resolved_markets(args.cutoff, max_markets=args.markets)
+        if args.dump:
+            if _os.path.dirname(args.dump):
+                _os.makedirs(_os.path.dirname(args.dump), exist_ok=True)
+            with open(args.dump, "w", encoding="utf-8") as fh:
+                _json.dump(markets, fh)
+            print(f"saved {len(markets)} resolved markets to {args.dump} — commit it "
+                  f"and (with ANTHROPIC_API_KEY set) I can run the calibration myself.")
+            return 0
     if not markets:
         print("No resolved post-cutoff yes/no markets found. Try an earlier --cutoff.")
         return 0
@@ -691,6 +706,10 @@ def main(argv: list[str] | None = None) -> int:
     an.add_argument("--markets", type=int, default=40, help="resolved markets to grade")
     an.add_argument("--cutoff", default="2026-02-01",
                     help="only grade markets resolved on/after this date (leakage guard)")
+    an.add_argument("--dump", default=None,
+                    help="save resolved markets to a file and exit (capture once)")
+    an.add_argument("--from-file", default=None, dest="from_file",
+                    help="grade markets loaded from a saved file (offline market data)")
     an.add_argument("--quiet", action="store_true")
     an.set_defaults(func=_cmd_analyst)
 
