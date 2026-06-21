@@ -350,6 +350,31 @@ def _cmd_drift(args) -> int:
     to a file once; --from-file replays them offline (no API)."""
     from . import drift
 
+    if getattr(args, "probe_history", False):
+        from .adapters.polymarket import PolymarketSource
+        pm = PolymarketSource()
+        mks = [m for m in pm.open_markets(max_markets=400)
+               if m.get("yes_token") and m["liquidity"] >= 10000]
+        if not mks:
+            print("no liquid market with a token found")
+            return 1
+        tok = mks[0]["yes_token"]
+        print(f"\nprobing price-history combos on: {mks[0]['question'][:60]}")
+        print(f"{'interval':>8}{'fidelity':>10}   result")
+        for interval, fid in (("max", 60), ("1w", 60), ("1w", 10), ("1w", 5),
+                              ("1w", 1), ("1d", 1), ("1d", 5), ("6h", 1),
+                              ("max", 5), ("max", 1)):
+            try:
+                s = pm.price_history(tok, fidelity_min=fid, interval=interval)
+                if s:
+                    span_h = (s[-1][0] - s[0][0]) / 3600
+                    print(f"{interval:>8}{fid:>10}   {len(s):>5} pts, {span_h:.0f}h span")
+                else:
+                    print(f"{interval:>8}{fid:>10}   EMPTY")
+            except Exception as e:
+                print(f"{interval:>8}{fid:>10}   ERR {str(e)[:40]}")
+        return 0
+
     if args.from_file:
         print(f"\nLoading price series from {args.from_file}…")
         series_set = drift.load(args.from_file)
@@ -590,6 +615,8 @@ def main(argv: list[str] | None = None) -> int:
                        help="entry delay in bars (>=1 realistic; 0 = untradeable spike price)")
     drift.add_argument("--profile", action="store_true",
                        help="repricing-speed profile by market category (find the slow buckets)")
+    drift.add_argument("--probe-history", action="store_true", dest="probe_history",
+                       help="diagnose which interval/fidelity combos the CLOB returns")
     drift.add_argument("--cost", type=float, default=0.01,
                        help="assumed round-trip friction subtracted from edge")
     drift.add_argument("--dump", default=None,
