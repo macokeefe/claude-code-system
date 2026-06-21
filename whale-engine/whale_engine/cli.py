@@ -372,7 +372,11 @@ def _cmd_drift(args) -> int:
                 continue
             if len(s) > args.lookback + args.horizon + 2:
                 series_set.append({"question": m["question"],
-                                   "token": m["yes_token"], "series": s})
+                                   "token": m["yes_token"],
+                                   "liquidity": m.get("liquidity", 0),
+                                   "slug": m.get("slug", ""),
+                                   "category": drift.category(m["question"]),
+                                   "series": s})
             if i % 25 == 0:
                 print(f"  {i}/{len(markets)} pulled…")
         if args.dump:
@@ -380,6 +384,29 @@ def _cmd_drift(args) -> int:
             print(f"\nsaved {len(series_set)} series to {args.dump} — commit it and "
                   f"I can iterate the backtest offline.")
             return 0
+
+    if args.profile:
+        prof = drift.profile(series_set, jump=args.jump, lag=args.lag,
+                             back=args.lookback)
+        hs = prof["horizons"]
+        print("=" * 78)
+        print(f"REPRICING-SPEED PROFILE · move {args.jump*100:.0f}c · enter +{args.lag} bar "
+              f"· bar={args.fidelity}m")
+        print("mean continuation (c) by bars-after-entry — rising = slow repricing "
+              "= a window")
+        print("=" * 78)
+        print(f"  {'category':<13}{'events':>7}   " + "".join(f"+{h}b".rjust(8) for h in hs))
+        rows = sorted(prof["by_category"].items(),
+                      key=lambda kv: kv[1]["events"], reverse=True)
+        for cat, b in rows:
+            if not b["events"]:
+                continue
+            curve = "".join(f"{b['curve'][h]*100:>+7.1f}c" for h in hs)
+            print(f"  {cat:<13}{b['events']:>7}   {curve}")
+        print("=" * 78)
+        print("flat/negative curve = repricing already done (no edge); a curve that")
+        print("keeps rising over the first bars = a real window to ride after detection.")
+        return 0
 
     rep = drift.run(series_set, jump=args.jump, back=args.lookback,
                     fwd=args.horizon, cost=args.cost, lag=args.lag)
@@ -561,6 +588,8 @@ def main(argv: list[str] | None = None) -> int:
                        help="bars forward to measure continuation")
     drift.add_argument("--lag", type=int, default=1,
                        help="entry delay in bars (>=1 realistic; 0 = untradeable spike price)")
+    drift.add_argument("--profile", action="store_true",
+                       help="repricing-speed profile by market category (find the slow buckets)")
     drift.add_argument("--cost", type=float, default=0.01,
                        help="assumed round-trip friction subtracted from edge")
     drift.add_argument("--dump", default=None,

@@ -102,3 +102,63 @@ def _agg(rows: list, cost: float) -> dict:
         "net": mean - cost,         # after assumed round-trip friction
         "hit_rate": hit,            # fraction that continued at all
     }
+
+
+# --- repricing-speed profiler ---------------------------------------------
+# After a sharp move is DETECTED (entry at +lag), how much more does price
+# travel over the next h bars? A curve that keeps rising = slow repricing =
+# a tradeable window. A flat/zero curve = the move was already over = no edge.
+
+_CATS = [
+    ("sports", ("win on", " vs ", " beat ", "match", "to win the", "advance to")),
+    ("crypto", ("bitcoin", "btc", "ethereum", " eth ", "solana", "crypto",
+                "$100k", "$150k", "all time high")),
+    ("econ", ("fed ", "rate cut", "rate hike", "interest rate", "inflation",
+              "cpi", "gdp", "recession", "jobs report", "bps")),
+    ("geopolitics", ("iran", "israel", "russia", "ukraine", "gaza", "china",
+                     "taiwan", "nato", "sanction", "strike", "ceasefire",
+                     "regime", "nuclear", "missile", "hamas", "hezbollah",
+                     "syria", "venezuela", "airspace", "hormuz")),
+    ("politics", ("election", "president", "senate", "governor", "primary",
+                  "nominee", "impeach", "parliament", "prime minister",
+                  "out as", "out by", "out before", "resign")),
+]
+
+
+def category(question: str) -> str:
+    q = question.lower()
+    for name, keys in _CATS:
+        if any(k in q for k in keys):
+            return name
+    return "other"
+
+
+def profile(series_set: list[dict], jump: float = 0.05, lag: int = 1,
+            back: int = 1, horizons=(1, 2, 3, 5, 10)) -> dict:
+    """Per-category repricing curve: mean continuation at each forward horizon,
+    measured from a realistic entry (+lag). Reveals where the window lives."""
+    horizons = tuple(horizons)
+    maxh = max(horizons)
+    buckets: dict[str, dict] = {}
+    for item in series_set:
+        cat = item.get("category") or category(item.get("question", ""))
+        s = item["series"]
+        n = len(s)
+        b = buckets.setdefault(cat, {"events": 0, **{h: [] for h in horizons}})
+        for i in range(back, n - lag - maxh):
+            move = s[i][1] - s[i - back][1]
+            if abs(move) < jump:
+                continue
+            d = 1.0 if move > 0 else -1.0
+            entry = s[i + lag][1]
+            b["events"] += 1
+            for h in horizons:
+                b[h].append((s[i + lag + h][1] - entry) * d)
+    out = {}
+    for cat, b in buckets.items():
+        out[cat] = {
+            "events": b["events"],
+            "curve": {h: (sum(b[h]) / len(b[h]) if b[h] else 0.0)
+                      for h in horizons},
+        }
+    return {"horizons": horizons, "by_category": out}
