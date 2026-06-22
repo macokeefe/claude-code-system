@@ -126,6 +126,81 @@ def _explain(db_path: str, market_id: str, ts: int, sig_type: str) -> dict:
     return {"text": text}
 
 
+def _side_price(yes_price: float, side: str) -> float:
+    """Price per contract of the side being bought (YES = p, NO = 1-p)."""
+    return yes_price if side == "yes" else 1.0 - yes_price
+
+
+def _paper_state(db_path: str) -> dict:
+    """Open positions marked to the latest market price, plus closed P&L."""
+    store = Storage(db_path)
+    try:
+        opens = [dict(r) for r in store.paper_rows("open")]
+        closed = [dict(r) for r in store.paper_rows("closed")]
+        realized = unrealized = staked = 0.0
+        for t in opens:
+            yp = store.latest_price(t["market_id"])
+            cur = _side_price(yp, t["side"]) if yp is not None else t["entry_price"]
+            t["current"] = cur
+            t["cost"] = t["contracts"] * t["entry_price"]
+            t["value"] = t["contracts"] * cur
+            t["pnl"] = t["value"] - t["cost"]
+            unrealized += t["pnl"]
+            staked += t["cost"]
+        for t in closed:
+            t["cost"] = t["contracts"] * t["entry_price"]
+            exit_p = t["exit_price"] if t["exit_price"] is not None else t["entry_price"]
+            t["pnl"] = t["contracts"] * exit_p - t["cost"]
+            realized += t["pnl"]
+        return {
+            "open": opens, "closed": closed,
+            "totals": {"realized": realized, "unrealized": unrealized,
+                       "total": realized + unrealized, "staked": staked,
+                       "open_count": len(opens)},
+        }
+    finally:
+        store.close()
+
+
+def _paper_open(db_path: str, body: dict) -> dict:
+    market_id = (body.get("market_id") or "").strip()
+    side = (body.get("side") or "yes").strip().lower()
+    contracts = float(body.get("contracts") or 0)
+    if not market_id or side not in ("yes", "no") or contracts <= 0:
+        return {"error": "need market_id, side (yes/no), and contracts > 0"}
+    store = Storage(db_path)
+    try:
+        yp = store.latest_price(market_id)
+        price = body.get("price")
+        entry = float(price) if price not in (None, "") else (
+            _side_price(yp, side) if yp is not None else None)
+        if entry is None or not (0.0 < entry < 1.0):
+            return {"error": "no current price for that market — pick a tracked one"}
+        tid = store.paper_open(market_id, body.get("question") or market_id,
+                               side, contracts, entry)
+        return {"ok": True, "id": tid, "entry_price": entry}
+    finally:
+        store.close()
+
+
+def _paper_close(db_path: str, body: dict) -> dict:
+    try:
+        tid = int(body.get("id"))
+    except (TypeError, ValueError):
+        return {"error": "need a numeric trade id"}
+    store = Storage(db_path)
+    try:
+        row = store.paper_one(tid)
+        if row is None or row["status"] != "open":
+            return {"error": "trade not found or already closed"}
+        yp = store.latest_price(row["market_id"])
+        exit_p = _side_price(yp, row["side"]) if yp is not None else row["entry_price"]
+        store.paper_close(tid, exit_p)
+        return {"ok": True, "exit_price": exit_p}
+    finally:
+        store.close()
+
+
 class _Handler(BaseHTTPRequestHandler):
     db_path: str = "whales.db"
 
@@ -158,6 +233,13 @@ class _Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 log.exception("activity failed")
                 self._send(500, json.dumps({"error": str(exc)}).encode(), "application/json")
+        elif path == "/api/paper":
+            try:
+                self._send(200, json.dumps(_paper_state(self.db_path)).encode("utf-8"),
+                           "application/json")
+            except Exception as exc:
+                log.exception("paper state failed")
+                self._send(500, json.dumps({"error": str(exc)}).encode(), "application/json")
         elif path == "/api/explain":
             try:
                 q = urllib.parse.parse_qs(parts.query)
@@ -173,6 +255,24 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send(500, json.dumps({"text": f"error: {exc}"}).encode(), "application/json")
         else:
             self._send(404, b"not found", "text/plain")
+
+    def do_POST(self) -> None:
+        parts = urllib.parse.urlsplit(self.path)
+        try:
+            length = int(self.headers.get("Content-Length", "0") or 0)
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, json.JSONDecodeError):
+            self._send(400, json.dumps({"error": "bad JSON"}).encode(), "application/json")
+            return
+        if parts.path == "/api/paper/open":
+            result = _paper_open(self.db_path, body)
+        elif parts.path == "/api/paper/close":
+            result = _paper_close(self.db_path, body)
+        else:
+            self._send(404, b"not found", "text/plain")
+            return
+        code = 400 if result.get("error") else 200
+        self._send(code, json.dumps(result).encode("utf-8"), "application/json")
 
 
 def serve(db_path: str, host: str = "127.0.0.1", port: int = 8765,
@@ -268,15 +368,46 @@ _PAGE = """<!doctype html>
   .modal-head button { background: none; border: none; color: #8b949e; font-size: 18px; cursor: pointer; }
   .modal-body { padding: 16px 18px; white-space: pre-wrap; line-height: 1.6; }
   .modal-body.loading { color: #8b949e; }
+  .viewnav { display: flex; gap: 6px; }
+  .vbtn { background: #161b22; border: 1px solid #21262d; color: #8b949e;
+          padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+  .vbtn.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .hidden { display: none; }
+  .pform { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+           background: #161b22; border: 1px solid #21262d; border-radius: 10px;
+           padding: 14px; margin-bottom: 6px; }
+  .pform select, .pform input { background: #0d1117; border: 1px solid #30363d;
+           color: #e6edf3; border-radius: 8px; padding: 8px 10px; font: inherit; }
+  .pform select { min-width: 280px; max-width: 440px; }
+  .pform input { width: 120px; }
+  .seg { display: flex; }
+  .segbtn { background: #0d1117; border: 1px solid #30363d; color: #8b949e;
+            padding: 8px 14px; cursor: pointer; font-weight: 600; }
+  .segbtn:first-child { border-radius: 8px 0 0 8px; }
+  .segbtn:last-child { border-radius: 0 8px 8px 0; border-left: none; }
+  .segbtn.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .phint { color: #8b949e; font-size: 13px; }
+  button.primary { background: #238636; border: 1px solid #2ea043; color: #fff;
+            padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+  button.primary:hover { background: #2ea043; }
+  .perr { color: #f85149; font-size: 13px; min-height: 18px; margin: 4px 0 10px; }
+  .closebtn { background: #21262d; border: 1px solid #30363d; color: #e6edf3;
+            padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  .pnl-pos { color: #3fb950; font-weight: 600; }
+  .pnl-neg { color: #f85149; font-weight: 600; }
 </style>
 </head>
 <body>
 <header>
   <h1>Whale Engine 🐋</h1>
-  <span class="tag">watch-only · no trading</span>
+  <span class="tag">paper only · no real money</span>
+  <nav class="viewnav">
+    <button class="vbtn active" data-view="monitor">📊 Monitor</button>
+    <button class="vbtn" data-view="paper">📝 Paper trading</button>
+  </nav>
   <span class="live" id="live">● connecting…</span>
 </header>
-<div class="wrap">
+<div class="wrap" id="view-monitor">
   <div class="stats" id="stats"></div>
 
   <details class="legend">
@@ -329,6 +460,32 @@ _PAGE = """<!doctype html>
       <th>Open interest</th><th>Closes</th></tr></thead>
     <tbody id="markets"></tbody>
   </table>
+</div>
+
+<div class="wrap hidden" id="view-paper">
+  <h2>Paper trading <span class="ask">— practice positions, no real money</span></h2>
+  <div class="cap">Open at the market's current price; positions mark to the live price as it moves.
+    This is where a strategy runs once it's proven — before any real capital.</div>
+  <div class="stats" id="paper-stats"></div>
+  <div class="pform">
+    <select id="p-market"><option>loading markets…</option></select>
+    <div class="seg">
+      <button id="p-yes" class="segbtn active" type="button" onclick="setSide('yes')">YES</button>
+      <button id="p-no" class="segbtn" type="button" onclick="setSide('no')">NO</button>
+    </div>
+    <input id="p-contracts" type="number" min="1" step="1" value="100">
+    <span class="phint" id="p-hint">—</span>
+    <button class="primary" type="button" onclick="openPaper()">Open paper trade</button>
+  </div>
+  <div class="perr" id="p-err"></div>
+  <h3>Open positions</h3>
+  <table><thead><tr><th>Market</th><th>Side</th><th>Contracts</th><th>Entry</th>
+    <th>Now</th><th>P&amp;L</th><th></th></tr></thead>
+    <tbody id="paper-open"><tr><td class="empty" colspan="7">no open positions</td></tr></tbody></table>
+  <h3>Closed</h3>
+  <table><thead><tr><th>Market</th><th>Side</th><th>Contracts</th><th>Entry</th>
+    <th>Exit</th><th>P&amp;L</th></tr></thead>
+    <tbody id="paper-closed"><tr><td class="empty" colspan="6">none yet</td></tr></tbody></table>
 </div>
 
 <div id="modal" class="modal hidden" onclick="if(event.target===this)closeModal()">
@@ -503,10 +660,97 @@ async function explainSignal(row) {
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
+// ---- paper trading ----
+let SIDE = 'yes';
+const pnlCls = v => v >= 0 ? 'pnl-pos' : 'pnl-neg';
+const signed = v => (v >= 0 ? '+' : '−') + '$' + Math.abs(Math.round(v)).toLocaleString();
+function paperVisible() { return !document.getElementById('view-paper').classList.contains('hidden'); }
+function selectedMarket() {
+  const id = document.getElementById('p-market').value;
+  return MARKETS.find(x => x.market_id === id) || null;
+}
+function setSide(s) {
+  SIDE = s;
+  document.getElementById('p-yes').classList.toggle('active', s === 'yes');
+  document.getElementById('p-no').classList.toggle('active', s === 'no');
+  updateHint();
+}
+function updateHint() {
+  const m = selectedMarket();
+  const c = parseFloat(document.getElementById('p-contracts').value || '0');
+  const hint = document.getElementById('p-hint');
+  if (!m) { hint.textContent = '—'; return; }
+  const sp = SIDE === 'yes' ? m.yes_price : 1 - m.yes_price;
+  hint.textContent = `@ ${Math.round(sp * 100)}¢ · cost ≈ ${money(c * sp)}`;
+}
+function populateMarketSelect() {
+  const sel = document.getElementById('p-market'), prev = sel.value;
+  sel.innerHTML = (MARKETS || []).map(m =>
+    `<option value="${esc(m.market_id)}">${esc((m.question || m.market_id)).slice(0, 80)}`
+    + ` (${Math.round(m.yes_price * 100)}%)</option>`).join('') || '<option>no markets yet</option>';
+  if (prev) sel.value = prev;
+  updateHint();
+}
+async function openPaper() {
+  const m = selectedMarket();
+  const contracts = parseFloat(document.getElementById('p-contracts').value || '0');
+  const err = document.getElementById('p-err'); err.textContent = '';
+  if (!m || contracts <= 0) { err.textContent = 'pick a market and enter contracts'; return; }
+  const r = await fetch('/api/paper/open', { method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ market_id: m.market_id, question: m.question, side: SIDE, contracts }) });
+  const d = await r.json();
+  if (d.error) { err.textContent = d.error; return; }
+  refreshPaper();
+}
+async function closePaper(tid) {
+  await fetch('/api/paper/close', { method: 'POST',
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: tid }) });
+  refreshPaper();
+}
+async function refreshPaper() {
+  try {
+    const d = await (await fetch('/api/paper')).json();
+    const t = d.totals || {};
+    document.getElementById('paper-stats').innerHTML = [
+      ['Total P&L', signed(t.total || 0), pnlCls(t.total || 0)],
+      ['Realized', signed(t.realized || 0), pnlCls(t.realized || 0)],
+      ['Unrealized', signed(t.unrealized || 0), pnlCls(t.unrealized || 0)],
+      ['Open', (t.open_count || 0), ''], ['Staked', money(t.staked || 0), ''],
+    ].map(([l, n, cls]) => `<div class="stat"><div class="n ${cls}">${n}</div><div class="l">${l}</div></div>`).join('');
+    const op = d.open || [];
+    document.getElementById('paper-open').innerHTML = op.length ? op.map(t => `
+      <tr><td><b>${esc(t.question || t.market_id)}</b><div class="q">${esc(t.market_id)}</div></td>
+      <td>${sideBadge(t.side)}</td><td>${Math.round(t.contracts).toLocaleString()}</td>
+      <td>${Math.round(t.entry_price * 100)}¢</td><td>${Math.round(t.current * 100)}¢</td>
+      <td class="${pnlCls(t.pnl)}">${signed(t.pnl)}</td>
+      <td><button class="closebtn" onclick="closePaper(${t.id})">Close</button></td></tr>`).join('')
+      : '<tr><td class="empty" colspan="7">no open positions — open one above</td></tr>';
+    const cl = d.closed || [];
+    document.getElementById('paper-closed').innerHTML = cl.length ? cl.map(t => `
+      <tr><td><b>${esc(t.question || t.market_id)}</b><div class="q">${esc(t.market_id)}</div></td>
+      <td>${sideBadge(t.side)}</td><td>${Math.round(t.contracts).toLocaleString()}</td>
+      <td>${Math.round(t.entry_price * 100)}¢</td>
+      <td>${t.exit_price != null ? Math.round(t.exit_price * 100) + '¢' : '—'}</td>
+      <td class="${pnlCls(t.pnl)}">${signed(t.pnl)}</td></tr>`).join('')
+      : '<tr><td class="empty" colspan="6">none yet</td></tr>';
+  } catch (e) { /* keep last values */ }
+}
+document.querySelectorAll('.vbtn').forEach(b => b.onclick = () => {
+  const v = b.dataset.view;
+  document.querySelectorAll('.vbtn').forEach(x => x.classList.toggle('active', x === b));
+  document.getElementById('view-monitor').classList.toggle('hidden', v !== 'monitor');
+  document.getElementById('view-paper').classList.toggle('hidden', v !== 'paper');
+  if (v === 'paper') { populateMarketSelect(); refreshPaper(); }
+});
+document.getElementById('p-contracts').addEventListener('input', updateHint);
+document.getElementById('p-market').addEventListener('change', updateHint);
+
 refresh();
 setInterval(refresh, 3000);
 refreshActivity();
 setInterval(refreshActivity, 5000);
+setInterval(() => { if (paperVisible()) refreshPaper(); }, 5000);
 </script>
 </body>
 </html>

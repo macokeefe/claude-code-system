@@ -10,7 +10,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Iterable
 
-from .models import MarketSnapshot, Signal, TradeEvent
+from .models import MarketSnapshot, Signal, TradeEvent, now_ms
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS snapshots (
@@ -57,6 +57,20 @@ CREATE TABLE IF NOT EXISTS titles (
     ticker TEXT PRIMARY KEY,
     title  TEXT
 );
+
+CREATE TABLE IF NOT EXISTS paper_trades (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts          INTEGER NOT NULL,
+    market_id   TEXT NOT NULL,
+    question    TEXT,
+    side        TEXT NOT NULL,        -- 'yes' | 'no'
+    contracts   REAL NOT NULL,
+    entry_price REAL NOT NULL,        -- price of the side bought, 0..1
+    status      TEXT NOT NULL DEFAULT 'open',
+    exit_price  REAL,
+    exit_ts     INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_paper_status ON paper_trades(status);
 """
 
 
@@ -209,6 +223,42 @@ class Storage:
             "SELECT type, COUNT(*) AS n FROM signals GROUP BY type"
         )
         return {row["type"]: row["n"] for row in cur.fetchall()}
+
+    # --- paper trading (no real money; the place a strategy graduates to) ---
+    def latest_price(self, market_id: str):
+        """Most recent YES price for a market, or None if untracked."""
+        cur = self.conn.execute(
+            "SELECT yes_price FROM snapshots WHERE market_id=? ORDER BY ts DESC LIMIT 1",
+            (market_id,))
+        r = cur.fetchone()
+        return r["yes_price"] if r else None
+
+    def paper_open(self, market_id: str, question: str, side: str,
+                   contracts: float, entry_price: float) -> int:
+        cur = self.conn.execute(
+            "INSERT INTO paper_trades (ts, market_id, question, side, contracts, "
+            "entry_price, status) VALUES (?,?,?,?,?,?, 'open')",
+            (now_ms(), market_id, question, side, contracts, entry_price))
+        self.conn.commit()
+        return cur.lastrowid
+
+    def paper_one(self, trade_id: int) -> sqlite3.Row | None:
+        cur = self.conn.execute("SELECT * FROM paper_trades WHERE id=?", (trade_id,))
+        return cur.fetchone()
+
+    def paper_close(self, trade_id: int, exit_price: float) -> None:
+        self.conn.execute(
+            "UPDATE paper_trades SET status='closed', exit_price=?, exit_ts=? "
+            "WHERE id=? AND status='open'", (exit_price, now_ms(), trade_id))
+        self.conn.commit()
+
+    def paper_rows(self, status: str | None = None) -> list[sqlite3.Row]:
+        if status:
+            cur = self.conn.execute(
+                "SELECT * FROM paper_trades WHERE status=? ORDER BY ts DESC", (status,))
+        else:
+            cur = self.conn.execute("SELECT * FROM paper_trades ORDER BY ts DESC")
+        return list(cur.fetchall())
 
     def totals(self) -> dict[str, int]:
         out = {}
