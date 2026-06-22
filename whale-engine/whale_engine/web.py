@@ -295,6 +295,32 @@ def _rec_dismiss(db_path: str, body: dict) -> dict:
         store.close()
 
 
+_SCAN = {"running": False, "found": None, "considered": 0, "error": None}
+
+
+def _scan_start(db_path: str, body: dict) -> dict:
+    """Kick off a news-driven trade scan in the background (it takes a minute)."""
+    if _SCAN["running"]:
+        return {"running": True, "note": "a scan is already in progress"}
+    import threading
+    from . import scan
+
+    def _go() -> None:
+        _SCAN.update(running=True, found=None, error=None)
+        try:
+            res = scan.find_trades(db_path, limit=int(body.get("limit") or 25),
+                                   min_edge=float(body.get("min_edge") or 0.12))
+            _SCAN.update(found=res["found"], considered=res["considered"])
+        except Exception as exc:
+            log.exception("scan failed")
+            _SCAN.update(error=str(exc)[:200])
+        finally:
+            _SCAN["running"] = False
+
+    threading.Thread(target=_go, daemon=True, name="scan").start()
+    return {"started": True}
+
+
 class _Handler(BaseHTTPRequestHandler):
     db_path: str = "whales.db"
 
@@ -341,6 +367,8 @@ class _Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 log.exception("recommendations failed")
                 self._send(500, json.dumps({"error": str(exc)}).encode(), "application/json")
+        elif path == "/api/scan/status":
+            self._send(200, json.dumps(_SCAN).encode("utf-8"), "application/json")
         elif path == "/api/explain":
             try:
                 q = urllib.parse.parse_qs(parts.query)
@@ -370,6 +398,7 @@ class _Handler(BaseHTTPRequestHandler):
             "/api/paper/close": _paper_close,
             "/api/recommendations/take": _rec_take,
             "/api/recommendations/dismiss": _rec_dismiss,
+            "/api/scan": _scan_start,
         }
         fn = routes.get(parts.path)
         if fn is None:
@@ -527,6 +556,15 @@ _PAGE = """<!doctype html>
   .plive { background: #161b22; border: 1px solid #21262d; border-radius: 8px;
            padding: 8px 12px; margin: 4px 0 8px; font-size: 13px; }
   .plive .px { font-weight: 600; } .plive .live-dot { color: #3fb950; font-size: 11px; }
+  .scanbtn { background: #1f6feb; border: 1px solid #1f6feb; color: #fff;
+             padding: 5px 12px; border-radius: 7px; cursor: pointer; font-size: 13px;
+             margin-left: 8px; text-transform: none; letter-spacing: 0; }
+  .scanbtn:disabled { opacity: .6; cursor: default; }
+  .scanstatus { font-size: 12px; color: #8b949e; margin-left: 8px; text-transform: none; }
+  .venue { font-size: 10px; padding: 1px 6px; border-radius: 8px; margin-left: 6px;
+           vertical-align: middle; }
+  .venue.poly { background: #2b2150; color: #b39cff; }
+  .venue.kalshi { background: #103a2a; color: #56d4a0; }
 </style>
 </head>
 <body>
@@ -542,10 +580,12 @@ _PAGE = """<!doctype html>
 <div class="wrap" id="view-monitor">
   <div class="stats" id="stats"></div>
 
-  <h2>Recommended trades <span class="ask">— evidence-backed ideas with a target cash-out</span></h2>
-  <div class="cap">Each is the grounded analyst's read of current public sources diverging from
-    the market price. Review the evidence and target, then one-click it into the $100k paper book.
-    (These are hypotheses graded forward — not guarantees.)</div>
+  <h2>Recommended trades
+    <button class="scanbtn" id="scanbtn" onclick="runScan()">🔎 Scan for trades</button>
+    <span class="scanstatus" id="scanstatus"></span></h2>
+  <div class="cap">Each is the analyst's news-grounded read diverging from the market price.
+    Hit <b>Scan</b> to search breaking articles for fresh mispricings. Review the evidence and
+    target, then one-click into the $100k paper book. (Hypotheses graded forward — not guarantees.)</div>
   <div id="recs"><div class="empty">no live recommendations yet — run the prototype scan to generate some</div></div>
 
   <details class="legend">
@@ -816,6 +856,29 @@ function setSide(s) {
   document.getElementById('p-no').classList.toggle('active', s === 'no');
   updatePaperLive();
 }
+const venue = id => String(id).startsWith('0x') ? 'Polymarket' : 'Kalshi';
+const venueBadge = id => `<span class="venue ${venue(id) === 'Polymarket' ? 'poly' : 'kalshi'}">${venue(id)}</span>`;
+async function runScan() {
+  const btn = document.getElementById('scanbtn'), st = document.getElementById('scanstatus');
+  btn.disabled = true; st.textContent = 'scanning breaking news… (~1 min)';
+  try {
+    await fetch('/api/scan', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ limit: 25 }) });
+  } catch (e) {}
+  pollScan();
+}
+async function pollScan() {
+  const btn = document.getElementById('scanbtn'), st = document.getElementById('scanstatus');
+  try {
+    const s = await (await fetch('/api/scan/status')).json();
+    if (s.running) { st.textContent = 'scanning breaking news…'; btn.disabled = true;
+      setTimeout(pollScan, 2000); return; }
+    btn.disabled = false;
+    st.textContent = s.error ? ('scan error: ' + s.error)
+      : (s.found != null ? `found ${s.found} of ${s.considered} markets with a news edge` : '');
+    refreshRecs();
+  } catch (e) { btn.disabled = false; }
+}
 function divBar(mkt, fair) {
   const lo = Math.min(mkt, fair) * 100, hi = Math.max(mkt, fair) * 100;
   return `<div class="divbar">
@@ -838,7 +901,7 @@ function updatePaperLive() {
   const m = selectedMarket(), live = document.getElementById('p-live');
   if (!m) { live.textContent = 'select a market to see its live price'; updateHint(); return; }
   const yes = Math.round(m.yes_price * 100);
-  live.innerHTML = `<b>${esc((m.question || m.market_id)).slice(0, 76)}</b><br>`
+  live.innerHTML = `<b>${esc((m.question || m.market_id)).slice(0, 76)}</b>${venueBadge(m.market_id)}<br>`
     + `YES <span class="px">${yes}¢</span> &nbsp; NO <span class="px">${100 - yes}¢</span> `
     + `&nbsp;<span class="live-dot">● live</span>`;
   updateHint();
@@ -874,7 +937,7 @@ async function refreshRecs() {
       <div class="rec">
         <div class="top">
           <div><span class="act ${r.side === 'yes' ? 'up' : 'down'}">BUY ${esc(r.side.toUpperCase())}</span>
-            &nbsp;${esc(r.question)}</div>
+            ${venueBadge(r.market_id)}&nbsp;${esc(r.question)}</div>
           <div class="edge">edge ${Math.round(r.edge * 100)} pts</div>
         </div>
         <div class="meta">market ${Math.round(r.market_price * 100)}¢ · fair value
@@ -919,7 +982,7 @@ async function refreshPaper() {
     ].map(([l, n, cls]) => `<div class="stat"><div class="n ${cls}">${n}</div><div class="l">${l}</div></div>`).join('');
     const op = d.open || [];
     document.getElementById('paper-open').innerHTML = op.length ? op.map(t => `
-      <tr><td><b>${esc(t.question || t.market_id)}</b><div class="q">${esc(t.market_id)}</div></td>
+      <tr><td><b>${esc(t.question || t.market_id)}</b>${venueBadge(t.market_id)}<div class="q">${esc(t.market_id)}</div></td>
       <td>${sideBadge(t.side)}</td><td>${Math.round(t.contracts).toLocaleString()}</td>
       <td>${Math.round(t.entry_price * 100)}¢</td><td>${Math.round(t.current * 100)}¢</td>
       <td>${t.target_exit != null ? '<span class="up">' + Math.round(t.target_exit * 100) + '¢</span>' : '<span class="q">—</span>'}</td>
@@ -945,7 +1008,7 @@ document.querySelectorAll('.vbtn').forEach(b => b.onclick = () => {
 });
 document.getElementById('p-contracts').addEventListener('input', updateHint);
 document.getElementById('p-market').addEventListener('change', updatePaperLive);
-setInterval(() => { if (paperVisible()) updatePaperLive(); }, 3000);
+setInterval(() => { if (paperVisible()) updatePaperLive(); }, 2000);
 
 refresh();
 setInterval(refresh, 3000);
@@ -953,7 +1016,8 @@ refreshActivity();
 setInterval(refreshActivity, 5000);
 refreshRecs();
 setInterval(refreshRecs, 6000);
-setInterval(() => { if (paperVisible()) refreshPaper(); }, 5000);
+pollScan();
+setInterval(() => { if (paperVisible()) refreshPaper(); }, 2000);
 </script>
 </body>
 </html>

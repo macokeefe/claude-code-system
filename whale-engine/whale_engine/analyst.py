@@ -152,3 +152,61 @@ def estimate(question: str, context: str = "", model: str | None = None,
         return parse(_text(_converse(body)))
     body["output_config"] = {"format": {"type": "json_schema", "schema": SCHEMA}}
     return parse(_text(_request(body)))
+
+
+NEWS_SYSTEM = (
+    "You are a markets analyst monitoring breaking news. You are given a numbered list of "
+    "live prediction markets and their current YES prices. Use web search to find the most "
+    "recent news (ideally the last 24-72 hours) relevant to these markets. Flag markets where "
+    "a SPECIFIC recent article or development implies the current price is mispriced. Be "
+    "calibrated and skeptical: do NOT overreact to dramatic headlines on low-probability "
+    "events — the market is usually right about base rates, so only flag a market when concrete "
+    "new information genuinely shifts the odds. Cite the actual article/headline."
+)
+
+
+def _parse_array(text: str) -> list:
+    """Extract a JSON array of news findings from the model's reply."""
+    arr = None
+    try:
+        arr = json.loads(text)
+    except json.JSONDecodeError:
+        m = re.search(r"\[.*\]", text, re.S)
+        if m:
+            try:
+                arr = json.loads(m.group(0))
+            except json.JSONDecodeError:
+                arr = None
+    out = []
+    for it in arr if isinstance(arr, list) else []:
+        try:
+            p = float(it["p"])
+            out.append({"i": int(it["i"]), "p": min(1.0, max(0.0, p / 100 if p > 1 else p)),
+                        "headline": str(it.get("headline", ""))[:220],
+                        "source": str(it.get("source", ""))[:200],
+                        "why": str(it.get("why", ""))[:320]})
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
+
+
+def news_recommendations(markets: list, model: str | None = None) -> list:
+    """One web-search pass over many markets: returns news-driven findings
+    [{i, p, headline, source, why}] only where a recent article moves the odds."""
+    if not available():
+        raise RuntimeError("ANTHROPIC_API_KEY not set")
+    model = model or os.environ.get("ANTHROPIC_MODEL", DEFAULT_MODEL)
+    listing = "\n".join(
+        f"{i}. [{round(m['yes']*100)}%] {m['question']}" for i, m in enumerate(markets))
+    user = (
+        "Live markets (number, current YES price, question):\n" + listing
+        + "\n\nSearch the web for breaking news relevant to these markets. Respond with "
+        "ONLY a JSON array. Each element: {\"i\": <market number>, \"p\": <your news-grounded "
+        "YES probability 0..1>, \"headline\": \"<the specific article headline>\", "
+        "\"source\": \"<outlet or url>\", \"why\": \"<one sentence: how this news moves the "
+        "odds>\"}. Include ONLY markets with a concrete, recent news catalyst that makes the "
+        "price look wrong. If nothing qualifies, return [].")
+    body = {"model": model, "max_tokens": 4096, "system": NEWS_SYSTEM,
+            "messages": [{"role": "user", "content": user}],
+            "tools": [{"type": "web_search_20260209", "name": "web_search"}]}
+    return _parse_array(_text(_converse(body)))

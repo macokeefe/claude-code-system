@@ -142,7 +142,7 @@ def _cmd_serve(args) -> int:
                             store.close()
                 except Exception:
                     pass
-                _t.sleep(30)
+                _t.sleep(10)
         threading.Thread(target=_refresh_poly, daemon=True, name="poly-marks").start()
     web.serve(config.db_path, host=args.host, port=args.port,
               open_browser=not args.no_open)
@@ -668,6 +668,22 @@ def _cmd_prototype(args) -> int:
     return 0
 
 
+def _cmd_news(args) -> int:
+    """News-driven scan: find markets a breaking article has mispriced and write
+    them as recommendations (same thing the dashboard's Scan button runs)."""
+    from . import analyst, scan
+    if not analyst.available():
+        print("Set ANTHROPIC_API_KEY to run the news scan.")
+        return 1
+    print(f"\nScanning breaking news across the top {args.limit} geopolitical markets…")
+    res = scan.find_trades(args.db or "whales.db", limit=args.limit,
+                           min_edge=args.min_edge)
+    print(f"Considered {res['considered']} markets; wrote {res['found']} "
+          f"news-driven recommendations (edge ≥ {args.min_edge*100:.0f}pts).")
+    print("Open the dashboard → Recommended trades to review and one-click them.")
+    return 0
+
+
 def _cmd_probe(args) -> int:
     """Confirm we can backtest whales on RESOLVED markets: settled-market list,
     the `result` field, and per-market trade-history depth."""
@@ -860,6 +876,15 @@ def main(argv: list[str] | None = None) -> int:
                        help="open the signals as paper trades in the $100k book")
     proto.add_argument("--quiet", action="store_true")
     proto.set_defaults(func=_cmd_prototype)
+
+    news = sub.add_parser("news", help="news-driven scan -> recommendations")
+    news.add_argument("--config", default="config.json", help="config JSON path")
+    news.add_argument("--db", default=None, help="sqlite path (default whales.db)")
+    news.add_argument("--limit", type=int, default=25, help="markets to scan")
+    news.add_argument("--min-edge", type=float, default=0.12, dest="min_edge",
+                      help="min |news-grounded - market| to recommend")
+    news.add_argument("--quiet", action="store_true")
+    news.set_defaults(func=_cmd_news)
 
     probe = sub.add_parser("probe", help="dump raw Kalshi market data (diagnostics)")
     probe.add_argument("--config", default="config.json", help="config JSON path")
