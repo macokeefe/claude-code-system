@@ -201,15 +201,18 @@ class PolymarketSource:
         out.sort(key=lambda x: x[0])
         return out
 
-    def resolved_markets(self, after_iso: str, max_markets: int = 60) -> list[dict]:
+    def resolved_markets(self, after_iso: str, max_markets: int = 60,
+                         exclude_crypto: bool = True) -> list[dict]:
         """Resolved yes/no markets that closed on/after `after_iso` (e.g.
         "2026-02-01"). Restricting to AFTER the model's knowledge cutoff keeps
         the calibration test honest — the model can't have memorized outcomes.
+        `exclude_crypto` drops token-launch/FDV-valuation markets, which dominate
+        the recent feed but are near-unforecastable blind and unrepresentative.
         Returns [{question, outcome(1 if YES won else 0), end, condition_id}]."""
         out: list[dict] = []
         offset, page = 0, 100
         order = {"order": "endDate", "ascending": "false"}
-        while len(out) < max_markets and offset < 4000:
+        while len(out) < max_markets and offset < 12000:
             params = {"closed": "true", "limit": page, "offset": offset, **order}
             try:
                 rows = _get(GAMMA_API + "/markets", params)
@@ -224,7 +227,7 @@ class PolymarketSource:
                 break
             for m in rows:
                 rec = _resolved_record(m, after_iso)
-                if rec:
+                if rec and not (exclude_crypto and _is_crypto_launch(rec["question"])):
                     out.append(rec)
             offset += len(rows)
         return out[:max_markets]
@@ -272,6 +275,18 @@ def _open_record(m: dict):
         "slug": m.get("slug", ""),
         "event_slug": events[0].get("slug", "") if events else "",
     }
+
+
+_CRYPTO_KEYS = ("fdv", "airdrop", "token launch", "one day after launch",
+                "market cap one day", "fully diluted")
+
+
+def _is_crypto_launch(q: str) -> bool:
+    """Token-launch / FDV-valuation markets — unforecastable blind, drop them."""
+    ql = q.lower()
+    if any(k in ql for k in _CRYPTO_KEYS):
+        return True
+    return ("fdv above" in ql) or ("launch" in ql and "above $" in ql)
 
 
 def _resolved_record(m: dict, after_iso: str):
