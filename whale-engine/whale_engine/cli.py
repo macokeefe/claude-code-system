@@ -112,6 +112,37 @@ def _cmd_serve(args) -> int:
         print(f"Background watcher started (source={config.source}, "
               f"interval={config.poll_interval_sec}s"
               f"{', backfilling ' + str(args.backfill) + 'h' if args.backfill else ''}).")
+
+        # Keep Polymarket paper positions (0x… ids) marked to live prices, so
+        # the paper book's P&L updates even though the Kalshi watcher doesn't
+        # touch them.
+        def _refresh_poly() -> None:
+            import time as _t
+            from .adapters.polymarket import PolymarketSource
+            from .models import MarketSnapshot, now_ms
+            pm = PolymarketSource()
+            while True:
+                try:
+                    store = Storage(config.db_path)
+                    try:
+                        ids = {r["market_id"] for r in store.paper_rows("open")
+                               if str(r["market_id"]).startswith("0x")}
+                    finally:
+                        store.close()
+                    if ids:
+                        prices = pm.current_prices(ids)
+                        store = Storage(config.db_path)
+                        try:
+                            for cid, yp in prices.items():
+                                store.insert_snapshot(MarketSnapshot(
+                                    "polymarket", cid, "", "open", now_ms(),
+                                    yp, 0, 0, 0.0))
+                        finally:
+                            store.close()
+                except Exception:
+                    pass
+                _t.sleep(30)
+        threading.Thread(target=_refresh_poly, daemon=True, name="poly-marks").start()
     web.serve(config.db_path, host=args.host, port=args.port,
               open_browser=not args.no_open)
     return 0

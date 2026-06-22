@@ -201,6 +201,41 @@ class PolymarketSource:
         out.sort(key=lambda x: x[0])
         return out
 
+    def current_prices(self, condition_ids) -> dict:
+        """Map conditionId -> current YES price (mid for open, 1/0 if resolved).
+        Used to mark paper positions to live Polymarket prices."""
+        out: dict = {}
+        uniq = [c for c in dict.fromkeys(condition_ids) if c]
+        for i in range(0, len(uniq), 20):
+            chunk = uniq[i:i + 20]
+            try:
+                rows = _get(GAMMA_API + "/markets",
+                            {"condition_ids": chunk, "limit": len(chunk)})
+            except Exception:
+                continue
+            if isinstance(rows, dict):
+                rows = rows.get("data") or rows.get("markets") or []
+            for m in rows:
+                cid = m.get("conditionId")
+                if not cid:
+                    continue
+                rec = _open_record(m)
+                if rec:
+                    out[cid] = rec["yes"]
+                    continue
+                try:  # resolved/closed: read the settled YES price (1 or 0)
+                    prices = m.get("outcomePrices")
+                    outs = m.get("outcomes")
+                    prices = json.loads(prices) if isinstance(prices, str) else prices
+                    outs = json.loads(outs) if isinstance(outs, str) else outs
+                    yi = next((j for j, o in enumerate(outs or [])
+                               if str(o).strip().lower() == "yes"), None)
+                    if yi is not None and prices:
+                        out[cid] = float(prices[yi])
+                except (TypeError, ValueError, json.JSONDecodeError, IndexError):
+                    pass
+        return out
+
     def resolved_markets(self, after_iso: str, max_markets: int = 60,
                          exclude_crypto: bool = True) -> list[dict]:
         """Resolved yes/no markets that closed on/after `after_iso` (e.g.
