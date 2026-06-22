@@ -514,6 +514,19 @@ _PAGE = """<!doctype html>
   .rec .take:hover { background: #2ea043; }
   .rec .dismiss { background: #21262d; border: 1px solid #30363d; color: #8b949e;
                   padding: 6px 12px; border-radius: 7px; cursor: pointer; }
+  /* divergence bar: where the market prices it vs the grounded fair value */
+  .divbar { position: relative; height: 30px; background: #0d1117;
+            border: 1px solid #30363d; border-radius: 6px; margin: 10px 0 4px; }
+  .divbar .fill { position: absolute; top: 0; bottom: 0; background: rgba(63,185,80,.22); }
+  .divbar .mk { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #8b949e; }
+  .divbar .fv { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #3fb950; }
+  .divbar .lbl { position: absolute; top: 50%; transform: translate(-50%,-50%);
+                 font-size: 10px; white-space: nowrap; padding: 1px 4px; border-radius: 4px;
+                 background: #161b22; }
+  .divbar .lbl.fvl { color: #3fb950; } .divbar .lbl.mkl { color: #c9d1d9; }
+  .plive { background: #161b22; border: 1px solid #21262d; border-radius: 8px;
+           padding: 8px 12px; margin: 4px 0 8px; font-size: 13px; }
+  .plive .px { font-weight: 600; } .plive .live-dot { color: #3fb950; font-size: 11px; }
 </style>
 </head>
 <body>
@@ -604,6 +617,7 @@ _PAGE = """<!doctype html>
     <span class="phint" id="p-hint">—</span>
     <button class="primary" type="button" onclick="openPaper()">Open paper trade</button>
   </div>
+  <div class="plive" id="p-live">select a market to see its live price</div>
   <div class="perr" id="p-err"></div>
   <h3>Open positions</h3>
   <table><thead><tr><th>Market</th><th>Side</th><th>Contracts</th><th>Entry</th>
@@ -800,7 +814,17 @@ function setSide(s) {
   SIDE = s;
   document.getElementById('p-yes').classList.toggle('active', s === 'yes');
   document.getElementById('p-no').classList.toggle('active', s === 'no');
-  updateHint();
+  updatePaperLive();
+}
+function divBar(mkt, fair) {
+  const lo = Math.min(mkt, fair) * 100, hi = Math.max(mkt, fair) * 100;
+  return `<div class="divbar">
+    <div class="fill" style="left:${lo}%;width:${hi - lo}%"></div>
+    <div class="mk" style="left:${mkt * 100}%"></div>
+    <div class="fv" style="left:${fair * 100}%"></div>
+    <div class="lbl mkl" style="left:${Math.max(8, mkt * 100)}%">mkt ${Math.round(mkt * 100)}¢</div>
+    <div class="lbl fvl" style="left:${Math.min(92, fair * 100)}%">fair ${Math.round(fair * 100)}¢</div>
+  </div>`;
 }
 function updateHint() {
   const m = selectedMarket();
@@ -808,15 +832,24 @@ function updateHint() {
   const hint = document.getElementById('p-hint');
   if (!m) { hint.textContent = '—'; return; }
   const sp = SIDE === 'yes' ? m.yes_price : 1 - m.yes_price;
-  hint.textContent = `@ ${Math.round(sp * 100)}¢ · cost ≈ ${money(c * sp)}`;
+  hint.textContent = `buy ${SIDE.toUpperCase()} @ ${Math.round(sp * 100)}¢ · cost ≈ ${money(c * sp)}`;
+}
+function updatePaperLive() {
+  const m = selectedMarket(), live = document.getElementById('p-live');
+  if (!m) { live.textContent = 'select a market to see its live price'; updateHint(); return; }
+  const yes = Math.round(m.yes_price * 100);
+  live.innerHTML = `<b>${esc((m.question || m.market_id)).slice(0, 76)}</b><br>`
+    + `YES <span class="px">${yes}¢</span> &nbsp; NO <span class="px">${100 - yes}¢</span> `
+    + `&nbsp;<span class="live-dot">● live</span>`;
+  updateHint();
 }
 function populateMarketSelect() {
   const sel = document.getElementById('p-market'), prev = sel.value;
   sel.innerHTML = (MARKETS || []).map(m =>
-    `<option value="${esc(m.market_id)}">${esc((m.question || m.market_id)).slice(0, 80)}`
-    + ` (${Math.round(m.yes_price * 100)}%)</option>`).join('') || '<option>no markets yet</option>';
+    `<option value="${esc(m.market_id)}">${esc((m.question || m.market_id)).slice(0, 90)}</option>`
+  ).join('') || '<option>no markets yet</option>';
   if (prev) sel.value = prev;
-  updateHint();
+  updatePaperLive();
 }
 async function openPaper() {
   const m = selectedMarket();
@@ -847,6 +880,7 @@ async function refreshRecs() {
         <div class="meta">market ${Math.round(r.market_price * 100)}¢ · fair value
           ${Math.round(r.model_price * 100)}¢ · target cash-out
           <b>${Math.round(r.target_exit * 100)}¢</b></div>
+        ${divBar(r.market_price, r.model_price)}
         <div class="why">${esc(r.reason)}</div>
         <div class="btns">
           <button class="take" onclick="takeRec(${r.id})">Paper trade this ($3k)</button>
@@ -910,7 +944,8 @@ document.querySelectorAll('.vbtn').forEach(b => b.onclick = () => {
   if (v === 'paper') { populateMarketSelect(); refreshPaper(); }
 });
 document.getElementById('p-contracts').addEventListener('input', updateHint);
-document.getElementById('p-market').addEventListener('change', updateHint);
+document.getElementById('p-market').addEventListener('change', updatePaperLive);
+setInterval(() => { if (paperVisible()) updatePaperLive(); }, 3000);
 
 refresh();
 setInterval(refresh, 3000);
