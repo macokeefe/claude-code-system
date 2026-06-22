@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 
@@ -54,14 +55,37 @@ def available() -> bool:
     return bool(_api_key())
 
 
-def _request(body: dict) -> dict:
-    """POST to the Messages API and return parsed JSON. Separated for testing."""
-    req = urllib.request.Request(
-        API_URL, data=json.dumps(body).encode("utf-8"),
-        headers={"content-type": "application/json", "x-api-key": _api_key(),
-                 "anthropic-version": "2023-06-01"})
-    with urllib.request.urlopen(req, timeout=90) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+def _request(body: dict, retries: int = 2) -> dict:
+    """POST to the Messages API and return parsed JSON. Retries transient
+    connection drops (web search can run long and an idle socket may close)."""
+    data = json.dumps(body).encode("utf-8")
+    last = None
+    for attempt in range(retries + 1):
+        try:
+            req = urllib.request.Request(
+                API_URL, data=data,
+                headers={"content-type": "application/json", "x-api-key": _api_key(),
+                         "anthropic-version": "2023-06-01"})
+            with urllib.request.urlopen(req, timeout=180) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError:
+            raise  # a real API error — don't retry
+        except Exception as exc:  # connection reset / RemoteDisconnected / timeout
+            last = exc
+            time.sleep(2 * (attempt + 1))
+    raise last
+
+
+def _converse(body: dict) -> dict:
+    """Run a request, resuming if a server tool (web search) pauses the turn."""
+    data = _request(body)
+    messages = list(body["messages"])
+    for _ in range(4):
+        if data.get("stop_reason") != "pause_turn":
+            break
+        messages = messages + [{"role": "assistant", "content": data["content"]}]
+        data = _request({**body, "messages": messages})
+    return data
 
 
 def _text(data: dict) -> str:
@@ -102,15 +126,29 @@ def parse(text: str) -> dict:
             "rationale": str(obj.get("rationale", ""))[:500]}
 
 
-def estimate(question: str, context: str = "", model: str | None = None) -> dict:
-    """Claude's calibrated probability that `question` resolves YES."""
+_GROUND = (
+    "\n\nFirst use web search to find the most recent news and official information "
+    "about this question (events, statements, filings as of today). Then, grounded in "
+    "what you found, give your probability. Respond with ONLY a JSON object: "
+    '{"probability": <0..1>, "confidence": <0..1>, "rationale": "<one sentence, cite what you found>"}'
+)
+
+
+def estimate(question: str, context: str = "", model: str | None = None,
+             grounded: bool = False) -> dict:
+    """Claude's calibrated probability that `question` resolves YES.
+    grounded=True lets it web-search current public sources first (the
+    comprehension edge); otherwise it forecasts from priors alone."""
     if not available():
         raise RuntimeError("ANTHROPIC_API_KEY not set")
     model = model or os.environ.get("ANTHROPIC_MODEL", DEFAULT_MODEL)
     user = question if not context else f"{question}\n\nContext you may use:\n{context}"
-    body = {
-        "model": model, "max_tokens": 1024, "system": SYSTEM,
-        "messages": [{"role": "user", "content": user}],
-        "output_config": {"format": {"type": "json_schema", "schema": SCHEMA}},
-    }
+    body = {"model": model, "max_tokens": 2048, "system": SYSTEM,
+            "messages": [{"role": "user", "content": user}]}
+    if grounded:
+        # server-side web search; structured-output format isn't combined with tools
+        body["messages"][0]["content"] += _GROUND
+        body["tools"] = [{"type": "web_search_20260209", "name": "web_search"}]
+        return parse(_text(_converse(body)))
+    body["output_config"] = {"format": {"type": "json_schema", "schema": SCHEMA}}
     return parse(_text(_request(body)))

@@ -472,7 +472,7 @@ def _cmd_analyst(args) -> int:
         return 1
 
     if args.question:  # one-off estimate
-        est = analyst.estimate(args.question)
+        est = analyst.estimate(args.question, grounded=args.grounded)
         print(f"\nQ: {args.question}")
         print(f"  probability YES: {est['probability']*100:.1f}%   "
               f"(confidence {est['confidence']*100:.0f}%)")
@@ -508,7 +508,7 @@ def _cmd_analyst(args) -> int:
     items = []
     for i, m in enumerate(markets, 1):
         try:
-            est = analyst.estimate(m["question"])
+            est = analyst.estimate(m["question"], grounded=args.grounded)
         except Exception as e:
             print(f"  [{i}] estimate failed: {str(e)[:60]}")
             continue
@@ -533,6 +533,90 @@ def _cmd_analyst(args) -> int:
     print("Calibrated + beats baseline = a real forecasting signal we can build on.")
     print("Miscalibrated = the analyst doesn't trade until it's fixed. (Next: feed it")
     print("public sources per market; then compare its Brier to the market's own price.)")
+    return 0
+
+
+_PROTO_GEO = ("ceasefire", "strike", "invade", "missile", "nuclear", "hostage",
+              "airspace", "withdraw troops", "peace deal", "attack", "captured",
+              "occupy", "annex", "recognize", "sanction", "war ", "regime",
+              "iran", "israel", "ukraine", "russia", "gaza", "hezbollah", "hamas")
+_PROTO_DATE = (" by ", " before ", "in 2026", "by 2027", "by december", "by january",
+               "by june", "by july", "by march", "by april", "by may", "by august",
+               "by september", "by october", "by november", "by february")
+
+
+def _cmd_prototype(args) -> int:
+    """THE prototype: grounded (web-searched) forecasts on under-covered
+    geopolitical event markets, fired into the paper book only where the
+    source-grounded estimate diverges sharply from the market's price."""
+    from .adapters.polymarket import PolymarketSource
+    from . import analyst
+    from .storage import Storage
+    from .models import MarketSnapshot, now_ms
+    if not analyst.available():
+        print("Set ANTHROPIC_API_KEY to run the analyst.")
+        return 1
+
+    pm = PolymarketSource()
+    mk = pm.open_markets(max_markets=4000)
+    geo = [m for m in mk
+           if any(k in m["question"].lower() for k in _PROTO_GEO)
+           and any(d in m["question"].lower() for d in _PROTO_DATE)]
+    geo.sort(key=lambda m: m["liquidity"], reverse=True)
+    geo = geo[:args.limit]
+    print(f"\nPROTOTYPE — grounded forecasts on {len(geo)} geopolitical markets "
+          f"(min edge to fire: {args.min_edge*100:.0f}pts).\n"
+          f"Each does a live web search — give it a few minutes.\n")
+
+    rows = []
+    for i, m in enumerate(geo, 1):
+        try:
+            est = analyst.estimate(m["question"], grounded=True)
+        except Exception as e:
+            print(f"  [{i}/{len(geo)}] failed: {str(e)[:50]}")
+            continue
+        model_p, mkt_p = est["probability"], m["yes"]
+        div = model_p - mkt_p
+        rows.append({"m": m, "model": model_p, "mkt": mkt_p, "div": div,
+                     "side": "yes" if div > 0 else "no", "edge": abs(div),
+                     "rat": est["rationale"]})
+        print(f"  [{i}/{len(geo)}] model {model_p*100:>3.0f}% vs mkt {mkt_p*100:>3.0f}% "
+              f"({'＋' if div >= 0 else '－'}{abs(div)*100:>2.0f}) {m['question'][:46]}")
+
+    rows.sort(key=lambda r: r["edge"], reverse=True)
+    signals = [r for r in rows if r["edge"] >= args.min_edge]
+    print("\n" + "=" * 76)
+    print(f"SIGNALS — grounded forecast diverges from price by ≥{args.min_edge*100:.0f}pts "
+          f"({len(signals)} of {len(rows)})")
+    print("=" * 76)
+    for r in signals:
+        m = r["m"]
+        print(f"\n  {'BUY '+r['side'].upper():<7} {m['question'][:62]}")
+        print(f"    market {r['mkt']*100:.0f}%  ·  grounded {r['model']*100:.0f}%  "
+              f"·  edge {r['edge']*100:.0f}pts")
+        print(f"    why: {r['rat'][:200]}")
+
+    if args.paper and signals:
+        store = Storage(args.db or "whales.db")
+        opened = 0
+        for r in signals:
+            m = r["m"]
+            entry = m["yes"] if r["side"] == "yes" else 1.0 - m["yes"]
+            if not (0.0 < entry < 1.0):
+                continue
+            # write a snapshot so the paper book can mark the position
+            store.insert_snapshot(MarketSnapshot(
+                "polymarket", m["condition_id"], m["question"], "open",
+                now_ms(), m["yes"], 0, 0, 0.0))
+            store.paper_open(m["condition_id"], m["question"], r["side"],
+                             round(args.size / entry), entry)
+            opened += 1
+        store.close()
+        print(f"\nOpened {opened} paper trades (~${args.size:,.0f} each) into the "
+              f"$100k book — watch them in the dashboard's Paper tab.")
+    print("\n" + "=" * 76)
+    print("Forward test: these are graded as the markets resolve. Calibration vs the")
+    print("MARKET price (not just outcomes) is the bar — that's the real edge.")
     return 0
 
 
@@ -710,8 +794,24 @@ def main(argv: list[str] | None = None) -> int:
                     help="save resolved markets to a file and exit (capture once)")
     an.add_argument("--from-file", default=None, dest="from_file",
                     help="grade markets loaded from a saved file (offline market data)")
+    an.add_argument("--grounded", action="store_true",
+                    help="let the analyst web-search current sources before forecasting")
     an.add_argument("--quiet", action="store_true")
     an.set_defaults(func=_cmd_analyst)
+
+    proto = sub.add_parser("prototype",
+                           help="grounded forecasts on geopolitics markets -> paper signals")
+    proto.add_argument("--config", default="config.json", help="config JSON path")
+    proto.add_argument("--db", default=None, help="sqlite path (default whales.db)")
+    proto.add_argument("--limit", type=int, default=10, help="markets to scan")
+    proto.add_argument("--min-edge", type=float, default=0.15, dest="min_edge",
+                       help="min |model-market| divergence to fire a signal")
+    proto.add_argument("--size", type=float, default=3000.0,
+                       help="paper $ per signal")
+    proto.add_argument("--paper", action="store_true",
+                       help="open the signals as paper trades in the $100k book")
+    proto.add_argument("--quiet", action="store_true")
+    proto.set_defaults(func=_cmd_prototype)
 
     probe = sub.add_parser("probe", help="dump raw Kalshi market data (diagnostics)")
     probe.add_argument("--config", default="config.json", help="config JSON path")

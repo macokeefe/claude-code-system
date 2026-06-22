@@ -126,38 +126,52 @@ def _explain(db_path: str, market_id: str, ts: int, sig_type: str) -> dict:
     return {"text": text}
 
 
+PAPER_BANKROLL = 100_000.0  # starting paper cash
+
+
 def _side_price(yes_price: float, side: str) -> float:
     """Price per contract of the side being bought (YES = p, NO = 1-p)."""
     return yes_price if side == "yes" else 1.0 - yes_price
 
 
+def _portfolio(store: Storage) -> dict:
+    """Mark the whole paper book to live prices: cash, open cash-out value, equity.
+    Cash-out value = what you'd get selling every open position now at its current
+    price. Equity (estimated value) = cash left + that cash-out value."""
+    opens = [dict(r) for r in store.paper_rows("open")]
+    closed = [dict(r) for r in store.paper_rows("closed")]
+    realized = unrealized = open_cost = open_value = 0.0
+    for t in opens:
+        yp = store.latest_price(t["market_id"])
+        cur = _side_price(yp, t["side"]) if yp is not None else t["entry_price"]
+        t["current"] = cur
+        t["cost"] = t["contracts"] * t["entry_price"]
+        t["value"] = t["contracts"] * cur          # cash-out value now
+        t["pnl"] = t["value"] - t["cost"]
+        unrealized += t["pnl"]
+        open_cost += t["cost"]
+        open_value += t["value"]
+    for t in closed:
+        t["cost"] = t["contracts"] * t["entry_price"]
+        exit_p = t["exit_price"] if t["exit_price"] is not None else t["entry_price"]
+        t["pnl"] = t["contracts"] * exit_p - t["cost"]
+        realized += t["pnl"]
+    cash = PAPER_BANKROLL - open_cost + realized
+    return {
+        "open": opens, "closed": closed,
+        "totals": {
+            "bankroll": PAPER_BANKROLL, "cash": cash, "open_value": open_value,
+            "equity": cash + open_value, "realized": realized,
+            "unrealized": unrealized, "total": realized + unrealized,
+            "staked": open_cost, "open_count": len(opens),
+        },
+    }
+
+
 def _paper_state(db_path: str) -> dict:
-    """Open positions marked to the latest market price, plus closed P&L."""
     store = Storage(db_path)
     try:
-        opens = [dict(r) for r in store.paper_rows("open")]
-        closed = [dict(r) for r in store.paper_rows("closed")]
-        realized = unrealized = staked = 0.0
-        for t in opens:
-            yp = store.latest_price(t["market_id"])
-            cur = _side_price(yp, t["side"]) if yp is not None else t["entry_price"]
-            t["current"] = cur
-            t["cost"] = t["contracts"] * t["entry_price"]
-            t["value"] = t["contracts"] * cur
-            t["pnl"] = t["value"] - t["cost"]
-            unrealized += t["pnl"]
-            staked += t["cost"]
-        for t in closed:
-            t["cost"] = t["contracts"] * t["entry_price"]
-            exit_p = t["exit_price"] if t["exit_price"] is not None else t["entry_price"]
-            t["pnl"] = t["contracts"] * exit_p - t["cost"]
-            realized += t["pnl"]
-        return {
-            "open": opens, "closed": closed,
-            "totals": {"realized": realized, "unrealized": unrealized,
-                       "total": realized + unrealized, "staked": staked,
-                       "open_count": len(opens)},
-        }
+        return _portfolio(store)
     finally:
         store.close()
 
@@ -176,9 +190,13 @@ def _paper_open(db_path: str, body: dict) -> dict:
             _side_price(yp, side) if yp is not None else None)
         if entry is None or not (0.0 < entry < 1.0):
             return {"error": "no current price for that market — pick a tracked one"}
+        cost = contracts * entry
+        cash = _portfolio(store)["totals"]["cash"]
+        if cost > cash + 1e-6:
+            return {"error": f"insufficient cash: need ${cost:,.0f}, have ${cash:,.0f}"}
         tid = store.paper_open(market_id, body.get("question") or market_id,
                                side, contracts, entry)
-        return {"ok": True, "id": tid, "entry_price": entry}
+        return {"ok": True, "id": tid, "entry_price": entry, "cash_left": cash - cost}
     finally:
         store.close()
 
@@ -712,11 +730,13 @@ async function refreshPaper() {
   try {
     const d = await (await fetch('/api/paper')).json();
     const t = d.totals || {};
+    const eqCls = (t.equity || 0) >= (t.bankroll || 100000) ? 'pnl-pos' : 'pnl-neg';
     document.getElementById('paper-stats').innerHTML = [
+      ['Estimated value', money(t.equity || 0), eqCls],
+      ['Cash available', money(t.cash || 0), ''],
+      ['Open positions value', money(t.open_value || 0), ''],
+      ['Open positions', (t.open_count || 0), ''],
       ['Total P&L', signed(t.total || 0), pnlCls(t.total || 0)],
-      ['Realized', signed(t.realized || 0), pnlCls(t.realized || 0)],
-      ['Unrealized', signed(t.unrealized || 0), pnlCls(t.unrealized || 0)],
-      ['Open', (t.open_count || 0), ''], ['Staked', money(t.staked || 0), ''],
     ].map(([l, n, cls]) => `<div class="stat"><div class="n ${cls}">${n}</div><div class="l">${l}</div></div>`).join('');
     const op = d.open || [];
     document.getElementById('paper-open').innerHTML = op.length ? op.map(t => `
