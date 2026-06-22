@@ -168,9 +168,28 @@ def _portfolio(store: Storage) -> dict:
     }
 
 
+def process_take_profits(store: Storage) -> int:
+    """Auto-close any open position whose side price reached its target_exit
+    (the take-profit / 'sell at price' level). Returns how many closed."""
+    closed = 0
+    for r in store.paper_rows("open"):
+        target = r["target_exit"]
+        if target is None:
+            continue
+        yp = store.latest_price(r["market_id"])
+        if yp is None:
+            continue
+        side_now = _side_price(yp, r["side"])
+        if side_now >= float(target) - 1e-9:
+            store.paper_close(r["id"], side_now)
+            closed += 1
+    return closed
+
+
 def _paper_state(db_path: str) -> dict:
     store = Storage(db_path)
     try:
+        process_take_profits(store)   # honor take-profits before reporting
         return _portfolio(store)
     finally:
         store.close()
@@ -194,8 +213,15 @@ def _paper_open(db_path: str, body: dict) -> dict:
         cash = _portfolio(store)["totals"]["cash"]
         if cost > cash + 1e-6:
             return {"error": f"insufficient cash: need ${cost:,.0f}, have ${cash:,.0f}"}
+        target = body.get("target_exit")
+        try:
+            target = float(target) if target not in (None, "") else None
+        except (TypeError, ValueError):
+            target = None
+        if target is not None and not (entry < target <= 1.0):
+            return {"error": f"sell-at price must be above your entry of {entry*100:.0f}¢"}
         tid = store.paper_open(market_id, body.get("question") or market_id,
-                               side, contracts, entry)
+                               side, contracts, entry, target)
         return {"ok": True, "id": tid, "entry_price": entry, "cash_left": cash - cost}
     finally:
         store.close()
@@ -215,6 +241,56 @@ def _paper_close(db_path: str, body: dict) -> dict:
         exit_p = _side_price(yp, row["side"]) if yp is not None else row["entry_price"]
         store.paper_close(tid, exit_p)
         return {"ok": True, "exit_price": exit_p}
+    finally:
+        store.close()
+
+
+def _recommendations(db_path: str) -> dict:
+    store = Storage(db_path)
+    try:
+        return {"recs": [dict(r) for r in store.recommendations("open")]}
+    finally:
+        store.close()
+
+
+def _rec_take(db_path: str, body: dict) -> dict:
+    """Open the recommended trade as a paper position (with its target exit)."""
+    try:
+        rid = int(body.get("id"))
+    except (TypeError, ValueError):
+        return {"error": "need a numeric recommendation id"}
+    size = float(body.get("size") or 3000.0)
+    store = Storage(db_path)
+    try:
+        r = store.rec_one(rid)
+        if r is None or r["status"] != "open":
+            return {"error": "recommendation not found or already actioned"}
+        yp = store.latest_price(r["market_id"])
+        entry = _side_price(yp, r["side"]) if yp is not None else r["market_price"]
+        if entry is None or not (0.0 < entry < 1.0):
+            return {"error": "no live price for that market right now"}
+        cost = size  # size is in dollars; contracts = size/entry
+        cash = _portfolio(store)["totals"]["cash"]
+        if cost > cash + 1e-6:
+            return {"error": f"insufficient cash: need ${cost:,.0f}, have ${cash:,.0f}"}
+        target = r["target_exit"] if (r["target_exit"] and r["target_exit"] > entry) else None
+        store.paper_open(r["market_id"], r["question"], r["side"],
+                         round(size / entry), entry, target)
+        store.set_rec_status(rid, "taken")
+        return {"ok": True}
+    finally:
+        store.close()
+
+
+def _rec_dismiss(db_path: str, body: dict) -> dict:
+    try:
+        rid = int(body.get("id"))
+    except (TypeError, ValueError):
+        return {"error": "need a numeric recommendation id"}
+    store = Storage(db_path)
+    try:
+        store.set_rec_status(rid, "dismissed")
+        return {"ok": True}
     finally:
         store.close()
 
@@ -258,6 +334,13 @@ class _Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 log.exception("paper state failed")
                 self._send(500, json.dumps({"error": str(exc)}).encode(), "application/json")
+        elif path == "/api/recommendations":
+            try:
+                self._send(200, json.dumps(_recommendations(self.db_path)).encode("utf-8"),
+                           "application/json")
+            except Exception as exc:
+                log.exception("recommendations failed")
+                self._send(500, json.dumps({"error": str(exc)}).encode(), "application/json")
         elif path == "/api/explain":
             try:
                 q = urllib.parse.parse_qs(parts.query)
@@ -282,13 +365,17 @@ class _Handler(BaseHTTPRequestHandler):
         except (ValueError, json.JSONDecodeError):
             self._send(400, json.dumps({"error": "bad JSON"}).encode(), "application/json")
             return
-        if parts.path == "/api/paper/open":
-            result = _paper_open(self.db_path, body)
-        elif parts.path == "/api/paper/close":
-            result = _paper_close(self.db_path, body)
-        else:
+        routes = {
+            "/api/paper/open": _paper_open,
+            "/api/paper/close": _paper_close,
+            "/api/recommendations/take": _rec_take,
+            "/api/recommendations/dismiss": _rec_dismiss,
+        }
+        fn = routes.get(parts.path)
+        if fn is None:
             self._send(404, b"not found", "text/plain")
             return
+        result = fn(self.db_path, body)
         code = 400 if result.get("error") else 200
         self._send(code, json.dumps(result).encode("utf-8"), "application/json")
 
@@ -413,6 +500,20 @@ _PAGE = """<!doctype html>
             padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
   .pnl-pos { color: #3fb950; font-weight: 600; }
   .pnl-neg { color: #f85149; font-weight: 600; }
+  .rec { background: #161b22; border: 1px solid #21262d; border-left: 3px solid #1f6feb;
+         border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+  .rec .top { display: flex; justify-content: space-between; align-items: flex-start;
+              gap: 12px; flex-wrap: wrap; }
+  .rec .act { font-weight: 700; }
+  .rec .edge { font-size: 12px; color: #3fb950; font-weight: 600; white-space: nowrap; }
+  .rec .why { color: #c9d1d9; font-size: 13px; margin: 8px 0; line-height: 1.5; }
+  .rec .meta { font-size: 12px; color: #8b949e; margin-top: 2px; }
+  .rec .btns { display: flex; gap: 8px; margin-top: 10px; }
+  .rec .take { background: #238636; border: 1px solid #2ea043; color: #fff;
+               padding: 6px 12px; border-radius: 7px; cursor: pointer; font-weight: 600; }
+  .rec .take:hover { background: #2ea043; }
+  .rec .dismiss { background: #21262d; border: 1px solid #30363d; color: #8b949e;
+                  padding: 6px 12px; border-radius: 7px; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -427,6 +528,12 @@ _PAGE = """<!doctype html>
 </header>
 <div class="wrap" id="view-monitor">
   <div class="stats" id="stats"></div>
+
+  <h2>Recommended trades <span class="ask">— evidence-backed ideas with a target cash-out</span></h2>
+  <div class="cap">Each is the grounded analyst's read of current public sources diverging from
+    the market price. Review the evidence and target, then one-click it into the $100k paper book.
+    (These are hypotheses graded forward — not guarantees.)</div>
+  <div id="recs"><div class="empty">no live recommendations yet — run the prototype scan to generate some</div></div>
 
   <details class="legend">
     <summary>What am I looking at?</summary>
@@ -491,15 +598,17 @@ _PAGE = """<!doctype html>
       <button id="p-yes" class="segbtn active" type="button" onclick="setSide('yes')">YES</button>
       <button id="p-no" class="segbtn" type="button" onclick="setSide('no')">NO</button>
     </div>
-    <input id="p-contracts" type="number" min="1" step="1" value="100">
+    <input id="p-contracts" type="number" min="1" step="1" value="100" title="contracts">
+    <input id="p-target" type="number" min="1" max="99" step="1" placeholder="sell at ¢ (optional)"
+           title="auto-close when this side reaches this price">
     <span class="phint" id="p-hint">—</span>
     <button class="primary" type="button" onclick="openPaper()">Open paper trade</button>
   </div>
   <div class="perr" id="p-err"></div>
   <h3>Open positions</h3>
   <table><thead><tr><th>Market</th><th>Side</th><th>Contracts</th><th>Entry</th>
-    <th>Now</th><th>P&amp;L</th><th></th></tr></thead>
-    <tbody id="paper-open"><tr><td class="empty" colspan="7">no open positions</td></tr></tbody></table>
+    <th>Now</th><th>Sell at</th><th>P&amp;L</th><th></th></tr></thead>
+    <tbody id="paper-open"><tr><td class="empty" colspan="8">no open positions</td></tr></tbody></table>
   <h3>Closed</h3>
   <table><thead><tr><th>Market</th><th>Side</th><th>Contracts</th><th>Entry</th>
     <th>Exit</th><th>P&amp;L</th></tr></thead>
@@ -712,14 +821,50 @@ function populateMarketSelect() {
 async function openPaper() {
   const m = selectedMarket();
   const contracts = parseFloat(document.getElementById('p-contracts').value || '0');
+  const tv = parseFloat(document.getElementById('p-target').value || '0');
+  const target = tv > 0 ? tv / 100 : null;   // ¢ -> side price
   const err = document.getElementById('p-err'); err.textContent = '';
   if (!m || contracts <= 0) { err.textContent = 'pick a market and enter contracts'; return; }
   const r = await fetch('/api/paper/open', { method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ market_id: m.market_id, question: m.question, side: SIDE, contracts }) });
+    body: JSON.stringify({ market_id: m.market_id, question: m.question, side: SIDE,
+                           contracts, target_exit: target }) });
   const d = await r.json();
   if (d.error) { err.textContent = d.error; return; }
+  document.getElementById('p-target').value = '';
   refreshPaper();
+}
+async function refreshRecs() {
+  try {
+    const recs = ((await (await fetch('/api/recommendations')).json()).recs) || [];
+    document.getElementById('recs').innerHTML = recs.length ? recs.map(r => `
+      <div class="rec">
+        <div class="top">
+          <div><span class="act ${r.side === 'yes' ? 'up' : 'down'}">BUY ${esc(r.side.toUpperCase())}</span>
+            &nbsp;${esc(r.question)}</div>
+          <div class="edge">edge ${Math.round(r.edge * 100)} pts</div>
+        </div>
+        <div class="meta">market ${Math.round(r.market_price * 100)}¢ · fair value
+          ${Math.round(r.model_price * 100)}¢ · target cash-out
+          <b>${Math.round(r.target_exit * 100)}¢</b></div>
+        <div class="why">${esc(r.reason)}</div>
+        <div class="btns">
+          <button class="take" onclick="takeRec(${r.id})">Paper trade this ($3k)</button>
+          <button class="dismiss" onclick="dismissRec(${r.id})">Dismiss</button>
+        </div>
+      </div>`).join('')
+      : '<div class="empty">no live recommendations yet — run the prototype scan to generate some</div>';
+  } catch (e) { /* keep last */ }
+}
+async function takeRec(id) {
+  await fetch('/api/recommendations/take', { method: 'POST',
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, size: 3000 }) });
+  refreshRecs(); refreshPaper();
+}
+async function dismissRec(id) {
+  await fetch('/api/recommendations/dismiss', { method: 'POST',
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id }) });
+  refreshRecs();
 }
 async function closePaper(tid) {
   await fetch('/api/paper/close', { method: 'POST',
@@ -743,9 +888,10 @@ async function refreshPaper() {
       <tr><td><b>${esc(t.question || t.market_id)}</b><div class="q">${esc(t.market_id)}</div></td>
       <td>${sideBadge(t.side)}</td><td>${Math.round(t.contracts).toLocaleString()}</td>
       <td>${Math.round(t.entry_price * 100)}¢</td><td>${Math.round(t.current * 100)}¢</td>
+      <td>${t.target_exit != null ? '<span class="up">' + Math.round(t.target_exit * 100) + '¢</span>' : '<span class="q">—</span>'}</td>
       <td class="${pnlCls(t.pnl)}">${signed(t.pnl)}</td>
       <td><button class="closebtn" onclick="closePaper(${t.id})">Close</button></td></tr>`).join('')
-      : '<tr><td class="empty" colspan="7">no open positions — open one above</td></tr>';
+      : '<tr><td class="empty" colspan="8">no open positions — open one above</td></tr>';
     const cl = d.closed || [];
     document.getElementById('paper-closed').innerHTML = cl.length ? cl.map(t => `
       <tr><td><b>${esc(t.question || t.market_id)}</b><div class="q">${esc(t.market_id)}</div></td>
@@ -770,6 +916,8 @@ refresh();
 setInterval(refresh, 3000);
 refreshActivity();
 setInterval(refreshActivity, 5000);
+refreshRecs();
+setInterval(refreshRecs, 6000);
 setInterval(() => { if (paperVisible()) refreshPaper(); }, 5000);
 </script>
 </body>

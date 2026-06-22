@@ -68,9 +68,25 @@ CREATE TABLE IF NOT EXISTS paper_trades (
     entry_price REAL NOT NULL,        -- price of the side bought, 0..1
     status      TEXT NOT NULL DEFAULT 'open',
     exit_price  REAL,
-    exit_ts     INTEGER
+    exit_ts     INTEGER,
+    target_exit REAL                  -- auto-close when side price reaches this (take-profit)
 );
 CREATE INDEX IF NOT EXISTS idx_paper_status ON paper_trades(status);
+
+CREATE TABLE IF NOT EXISTS recommendations (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts           INTEGER NOT NULL,
+    market_id    TEXT NOT NULL,
+    question     TEXT,
+    side         TEXT NOT NULL,       -- 'yes' | 'no'
+    market_price REAL,                -- side price in the market now
+    model_price  REAL,                -- side's grounded fair value
+    edge         REAL,                -- |model - market| in probability
+    target_exit  REAL,               -- side price to cash out at (fair value)
+    reason       TEXT,
+    status       TEXT NOT NULL DEFAULT 'open'   -- open | taken | dismissed
+);
+CREATE INDEX IF NOT EXISTS idx_rec_status ON recommendations(status, edge);
 """
 
 
@@ -93,6 +109,9 @@ class Storage:
         snap_cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(snapshots)")}
         if "close_ts" not in snap_cols:
             self.conn.execute("ALTER TABLE snapshots ADD COLUMN close_ts INTEGER DEFAULT 0")
+        paper_cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(paper_trades)")}
+        if "target_exit" not in paper_cols:
+            self.conn.execute("ALTER TABLE paper_trades ADD COLUMN target_exit REAL")
 
     def close(self) -> None:
         self.conn.close()
@@ -234,13 +253,46 @@ class Storage:
         return r["yes_price"] if r else None
 
     def paper_open(self, market_id: str, question: str, side: str,
-                   contracts: float, entry_price: float) -> int:
+                   contracts: float, entry_price: float,
+                   target_exit: float | None = None) -> int:
         cur = self.conn.execute(
             "INSERT INTO paper_trades (ts, market_id, question, side, contracts, "
-            "entry_price, status) VALUES (?,?,?,?,?,?, 'open')",
-            (now_ms(), market_id, question, side, contracts, entry_price))
+            "entry_price, status, target_exit) VALUES (?,?,?,?,?,?, 'open', ?)",
+            (now_ms(), market_id, question, side, contracts, entry_price, target_exit))
         self.conn.commit()
         return cur.lastrowid
+
+    # --- recommendations (evidence-backed trade ideas with a target cash-out) ---
+    def add_recommendation(self, market_id, question, side, market_price,
+                           model_price, edge, target_exit, reason) -> int:
+        cur = self.conn.execute(
+            "INSERT INTO recommendations (ts, market_id, question, side, "
+            "market_price, model_price, edge, target_exit, reason, status) "
+            "VALUES (?,?,?,?,?,?,?,?,?, 'open')",
+            (now_ms(), market_id, question, side, market_price, model_price,
+             edge, target_exit, reason))
+        self.conn.commit()
+        return cur.lastrowid
+
+    def recommendations(self, status: str = "open") -> list[sqlite3.Row]:
+        cur = self.conn.execute(
+            "SELECT * FROM recommendations WHERE status=? ORDER BY edge DESC", (status,))
+        return list(cur.fetchall())
+
+    def rec_one(self, rec_id: int) -> sqlite3.Row | None:
+        return self.conn.execute(
+            "SELECT * FROM recommendations WHERE id=?", (rec_id,)).fetchone()
+
+    def set_rec_status(self, rec_id: int, status: str) -> None:
+        self.conn.execute("UPDATE recommendations SET status=? WHERE id=?",
+                          (status, rec_id))
+        self.conn.commit()
+
+    def open_recommendation_keys(self) -> set:
+        """(market_id, side) of open recs — to avoid duplicate inserts on re-scan."""
+        cur = self.conn.execute(
+            "SELECT market_id, side FROM recommendations WHERE status='open'")
+        return {(r["market_id"], r["side"]) for r in cur.fetchall()}
 
     def paper_one(self, trade_id: int) -> sqlite3.Row | None:
         cur = self.conn.execute("SELECT * FROM paper_trades WHERE id=?", (trade_id,))

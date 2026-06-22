@@ -137,6 +137,7 @@ def _cmd_serve(args) -> int:
                                 store.insert_snapshot(MarketSnapshot(
                                     "polymarket", cid, "", "open", now_ms(),
                                     yp, 0, 0, 0.0))
+                            web.process_take_profits(store)  # honor sell-at targets
                         finally:
                             store.close()
                 except Exception:
@@ -627,27 +628,43 @@ def _cmd_prototype(args) -> int:
               f"·  edge {r['edge']*100:.0f}pts")
         print(f"    why: {r['rat'][:200]}")
 
-    if args.paper and signals:
-        store = Storage(args.db or "whales.db")
-        opened = 0
+    # Write each signal to the dashboard's Recommendations table (evidence +
+    # a target cash-out), and a snapshot so the market can be marked/traded.
+    store = Storage(args.db or "whales.db")
+    try:
+        existing = store.open_recommendation_keys()
+        written = opened = 0
         for r in signals:
-            m = r["m"]
-            entry = m["yes"] if r["side"] == "yes" else 1.0 - m["yes"]
-            if not (0.0 < entry < 1.0):
+            m, side = r["m"], r["side"]
+            entry = m["yes"] if side == "yes" else 1.0 - m["yes"]   # side price now
+            target = r["model"] if side == "yes" else 1.0 - r["model"]  # side fair value
+            if not (0.0 < entry < 1.0) or target <= entry:
                 continue
-            # write a snapshot so the paper book can mark the position
             store.insert_snapshot(MarketSnapshot(
                 "polymarket", m["condition_id"], m["question"], "open",
                 now_ms(), m["yes"], 0, 0, 0.0))
-            store.paper_open(m["condition_id"], m["question"], r["side"],
-                             round(args.size / entry), entry)
-            opened += 1
+            reason = (
+                f"Market prices {side.upper()} at {entry*100:.0f}¢, but a web-grounded "
+                f"read of current sources implies fair value ~{target*100:.0f}¢ — a "
+                f"{r['edge']*100:.0f}-point gap. Evidence: {r['rat'][:260]} "
+                f"Plan: buy {side.upper()} now, cash out near {target*100:.0f}¢ as the "
+                f"price converges to fair value.")
+            if (m["condition_id"], side) not in existing:
+                store.add_recommendation(m["condition_id"], m["question"], side,
+                                         entry, target, r["edge"], target, reason)
+                written += 1
+            if args.paper:
+                store.paper_open(m["condition_id"], m["question"], side,
+                                 round(args.size / entry), entry, target)
+                opened += 1
+    finally:
         store.close()
-        print(f"\nOpened {opened} paper trades (~${args.size:,.0f} each) into the "
-              f"$100k book — watch them in the dashboard's Paper tab.")
+    print(f"\nWrote {written} recommendations to the dashboard (Recommended trades).")
+    if args.paper:
+        print(f"Also opened {opened} as paper trades (~${args.size:,.0f} each).")
     print("\n" + "=" * 76)
-    print("Forward test: these are graded as the markets resolve. Calibration vs the")
-    print("MARKET price (not just outcomes) is the bar — that's the real edge.")
+    print("Open the dashboard → Recommended trades to review the evidence and one-click")
+    print("them into the $100k paper book. Graded forward vs the MARKET price = real edge.")
     return 0
 
 
