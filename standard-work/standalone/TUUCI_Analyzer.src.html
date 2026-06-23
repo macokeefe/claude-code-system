@@ -192,6 +192,23 @@
   .cutrow .cl{white-space:nowrap}
   .bal-empty{color:#aeb8bd;font-size:11.5px;text-align:center;padding:10px 4px}
 
+  /* layout / floor-plan */
+  .lay-wrap{position:relative;width:100%;height:580px;border:1px solid var(--line);border-radius:12px;background:#fbfaf7;overflow:auto;background-image:radial-gradient(#dfe3df 1px,transparent 1px);background-size:22px 22px}
+  .lay-canvas{position:relative;width:1500px;height:1000px}
+  .lay-svg{position:absolute;left:0;top:0;width:1500px;height:1000px;pointer-events:none;overflow:visible}
+  .lay-node{position:absolute;width:170px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);overflow:hidden}
+  .lay-node .nh{padding:7px 10px;cursor:grab;display:flex;justify-content:space-between;align-items:center;color:#fff;background:var(--navy);touch-action:none;user-select:none}
+  .lay-node.src .nh{background:var(--aqua-dark)} .lay-node.sink .nh{background:var(--good)}
+  .lay-node .nh .t{font-size:13px;font-weight:700} .lay-node .nh .p{font-size:11px;opacity:.9}
+  .lay-node .nb{padding:8px 10px;font-size:11.5px;color:var(--ink);min-height:22px}
+  .lay-node .nb .lab{font-weight:600;color:var(--navy)}
+  .lay-node .nb .stp{color:var(--muted);font-size:11px;margin-top:2px}
+  .lay-node .nf{padding:5px 10px 8px;display:flex;align-items:center;gap:5px;border-top:1px solid #f0f0ec}
+  .lay-node .nf label{font-size:10px;color:var(--muted)} .lay-node .nf input{flex:1;min-width:0;border:1px solid var(--line);border-radius:6px;padding:3px 6px;font-size:11px}
+  .lay-node .nf input:focus{outline:0;border-color:var(--aqua)}
+  .lay-hint{font-size:12.5px;color:var(--muted);margin:0 0 12px}
+  .lay-hint b{color:var(--ink)}
+
   /* operator bars */
   .opbar-row{display:flex;align-items:center;gap:12px;margin-bottom:8px}
   .opbar-row .lab{width:96px;font-size:12.5px;font-weight:600;color:var(--ink);flex-shrink:0}
@@ -226,6 +243,7 @@
   <button data-tab="analysis">Analysis</button>
   <button data-tab="compare">Compare</button>
   <button data-tab="balance">Line Balance</button>
+  <button data-tab="layout">Layout</button>
   <button data-tab="sim">Line Simulation</button>
 </nav>
 
@@ -234,6 +252,7 @@
   <section id="tab-analysis" class="hide"></section>
   <section id="tab-compare" class="hide"></section>
   <section id="tab-balance" class="hide"></section>
+  <section id="tab-layout" class="hide"></section>
   <section id="tab-sim" class="hide"></section>
 </main>
 
@@ -254,6 +273,9 @@ function saveSkus(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(S.skus)); 
 var LS_BAL='tuuci_bal_v1';
 function loadBal(){ try{ return JSON.parse(localStorage.getItem(LS_BAL))||{}; }catch(e){ return {}; } }
 function saveBal(){ try{ localStorage.setItem(LS_BAL, JSON.stringify(S.bal)); }catch(e){} }
+var LS_LAYOUT='tuuci_layout_v1';
+function loadLayout(){ try{ return JSON.parse(localStorage.getItem(LS_LAYOUT))||{}; }catch(e){ return {}; } }
+function saveLayout(){ try{ localStorage.setItem(LS_LAYOUT, JSON.stringify(S.layout)); }catch(e){} }
 
 var S = {
   skus: loadSkus(),
@@ -265,7 +287,9 @@ var S = {
   simId: null,
   sim: { units:3, ops:3, mode:'help', buffer:0.5 },
   bal: loadBal(),          // { skuId: {demand, hours, ops, assign:[opIndex per step]} }
-  balId: null
+  balId: null,
+  layout: loadLayout(),    // { skuId: {pos:{id:{x,y}}, conn:{id:[ids]}} }
+  layId: null, layDrag: null
 };
 
 /* ---------- helpers ---------- */
@@ -493,13 +517,14 @@ function stepBarSVG(steps, bnIdx){
    ============================================================ */
 function setTab(name){
   S.tab=name;
-  ['skus','analysis','compare','balance','sim'].forEach(function(t){ $('tab-'+t).classList.toggle('hide',t!==name); });
+  ['skus','analysis','compare','balance','layout','sim'].forEach(function(t){ $('tab-'+t).classList.toggle('hide',t!==name); });
   Array.prototype.forEach.call($('tabs').children,function(b){ b.classList.toggle('active', b.getAttribute('data-tab')===name); });
   try{
     if(name==='skus') renderSkus();
     if(name==='analysis') renderAnalysis();
     if(name==='compare') renderCompare();
     if(name==='balance') renderBalance();
+    if(name==='layout') renderLayout();
     if(name==='sim') renderSim();
   }catch(err){
     console.error(err);
@@ -956,6 +981,121 @@ function balUp(ev){
   var col=colUnder(ev.clientX, ev.clientY), d=balDrag; balDrag=null;
   if(d.moved && col && curBalC){ var s=+col.getAttribute('data-station'); if(curBalC.assign[d.part]!==s){ curBalC.assign[d.part]=s; saveBal(); } }
   renderBalance();
+}
+
+/* ---------- LAYOUT / FLOOR-PLAN TAB ----------
+   Each Line-Balance station becomes a draggable box; a Cart/Supply source and
+   a Finished-Goods sink bracket the flow. Arrows (editable) show material flow. */
+var layEls={};
+function layNodes(sku,c){
+  var labels=partLabels(sku,c);
+  var nodes=[{id:'src',kind:'src',title:'Cart / Supply',people:null,body:'Painted parts staged'}];
+  for(var s=0;s<c.stations;s++){
+    var steps=[]; c.parts.forEach(function(p,i){ if(Math.min(c.assign[i],c.stations-1)===s) steps.push(labels[i]); });
+    nodes.push({id:'s'+s,kind:'st',title:'S'+(s+1),people:c.people[s],body:'Steps '+steps.join(', ')});
+  }
+  nodes.push({id:'sink',kind:'sink',title:'Finished Goods',people:null,body:'Packed unit'});
+  return nodes;
+}
+function getLayout(sku,c,nodes){
+  var L=S.layout[sku.id];
+  var ids=nodes.map(function(n){return n.id;});
+  if(!L || !L.pos){ L={pos:{},conn:{}}; S.layout[sku.id]=L; }
+  // default positions: src top-left, stations in a grid, sink bottom
+  var need=ids.some(function(id){return !L.pos[id];});
+  if(need){
+    L.pos.src={x:40,y:40};
+    for(var s=0;s<nodes.length-2;s++){ var col=s%4, row=Math.floor(s/4); L.pos['s'+s]={x:40+col*210, y:200+row*150}; }
+    var lastRow=Math.floor((nodes.length-3)/4);
+    L.pos.sink={x:40, y:200+(lastRow+1)*150+20};
+  }
+  // default connections: linear src->s0->...->sink
+  if(!L.conn || !Object.keys(L.conn).length){
+    L.conn={}; var st=ids.filter(function(i){return i!=='src'&&i!=='sink';});
+    L.conn.src= st.length?[st[0]]:['sink'];
+    for(var k=0;k<st.length;k++){ L.conn[st[k]]=[ k<st.length-1?st[k+1]:'sink' ]; }
+  }
+  // prune stale ids
+  Object.keys(L.pos).forEach(function(id){ if(ids.indexOf(id)<0) delete L.pos[id]; });
+  Object.keys(L.conn).forEach(function(id){ if(ids.indexOf(id)<0) delete L.conn[id]; else L.conn[id]=L.conn[id].filter(function(t){return ids.indexOf(t)>=0;}); });
+  return L;
+}
+function connToText(arr){ return (arr||[]).map(function(id){ return id==='sink'?'FG':(id==='src'?'Cart':'S'+(parseInt(id.slice(1),10)+1)); }).join(', '); }
+function textToConn(txt,ids){
+  var out=[]; (txt||'').split(/[,\s]+/).forEach(function(tok){ tok=tok.trim().toUpperCase(); if(!tok)return;
+    if(tok==='FG'||tok==='OUT'||tok==='FINISHED'){ if(ids.indexOf('sink')>=0)out.push('sink'); return; }
+    var m=tok.match(/S?(\d+)/); if(m){ var id='s'+(parseInt(m[1],10)-1); if(ids.indexOf(id)>=0)out.push(id); }
+  });
+  return out;
+}
+function renderLayout(){
+  var host=$('tab-layout'); host.innerHTML='';
+  host.appendChild(headerEl('Layout','A floor-plan view of the line — drag stations to arrange them, set what each feeds into, and see the flow.'));
+  if(!S.skus.length){ host.appendChild(emptyEl('Add a product first','Upload a Standard Work file and balance it, then lay out the floor here.')); return; }
+  if(!skuById(S.layId)) S.layId=(skuById(S.balId)?S.balId:S.skus[0].id);
+  var bar=el('div',{class:'selrow'});
+  bar.appendChild(fld('Product', sel(S.skus.map(function(s){return [s.id,s.name];}), S.layId, function(v){ S.layId=v; renderLayout(); })));
+  var reset=el('button',{class:'btn btn-light'},'Reset layout'); reset.onclick=function(){ delete S.layout[S.layId]; saveLayout(); renderLayout(); };
+  bar.appendChild(reset);
+  host.appendChild(bar);
+  host.appendChild(el('div',{class:'lay-hint'},'<b>Drag</b> a box by its header to move it. In <b>Feeds →</b> type where it goes next (e.g. <b>S6</b>, or <b>S2, S3, S4</b>, or <b>FG</b> for finished goods). Stations &amp; people come from Line Balance.'));
+  var sku=skuById(S.layId), c=getBal(sku), nodes=layNodes(sku,c), L=getLayout(sku,c,nodes), ids=nodes.map(function(n){return n.id;});
+  saveLayout();
+  var wrap=el('div',{class:'lay-wrap'}); var canvas=el('div',{class:'lay-canvas'});
+  var svgNS='http://www.w3.org/2000/svg';
+  var svg=document.createElementNS(svgNS,'svg'); svg.setAttribute('class','lay-svg');
+  svg.innerHTML='<defs><marker id="arrowh" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#7c8079"/></marker></defs>';
+  canvas.appendChild(svg);
+  layEls={};
+  nodes.forEach(function(n){ canvas.appendChild(buildLayNode(sku,c,L,n,ids,svg,nodes)); });
+  wrap.appendChild(canvas); host.appendChild(wrap);
+  // draw arrows after nodes are in DOM
+  setTimeout(function(){ drawLayArrows(L,svg); },0);
+  drawLayArrows(L,svg);
+}
+function buildLayNode(sku,c,L,n,ids,svg,nodes){
+  var pos=L.pos[n.id]||{x:40,y:40};
+  var node=el('div',{class:'lay-node '+(n.kind==='src'?'src':n.kind==='sink'?'sink':'')});
+  node.style.left=pos.x+'px'; node.style.top=pos.y+'px';
+  var h=el('div',{class:'nh'}); h.innerHTML='<span class="t">'+esc(n.title)+'</span>'+(n.people?'<span class="p">'+n.people+(n.people>1?' ppl':' person')+'</span>':'');
+  node.appendChild(h);
+  var b=el('div',{class:'nb'}); b.innerHTML=(n.kind==='st'?'<span class="lab">'+esc(n.body)+'</span>':'<span class="stp">'+esc(n.body)+'</span>'); node.appendChild(b);
+  if(n.id!=='sink'){
+    var f=el('div',{class:'nf'}); f.appendChild(el('label',null,'Feeds →'));
+    var inp=el('input',{type:'text',value:connToText(L.conn[n.id])});
+    inp.onchange=function(){ L.conn[n.id]=textToConn(this.value,ids); saveLayout(); this.value=connToText(L.conn[n.id]); drawLayArrows(L,svg); };
+    f.appendChild(inp); node.appendChild(f);
+  }
+  layEls[n.id]=node;
+  h.addEventListener('pointerdown',function(ev){ startLayDrag(ev,n.id,node,L,svg); });
+  return node;
+}
+function startLayDrag(ev,id,node,L,svg){
+  ev.preventDefault();
+  var sx=ev.clientX, sy=ev.clientY, ox=L.pos[id].x, oy=L.pos[id].y;
+  function mv(e){ var nx=Math.max(0,ox+(e.clientX-sx)), ny=Math.max(0,oy+(e.clientY-sy)); L.pos[id].x=nx; L.pos[id].y=ny; node.style.left=nx+'px'; node.style.top=ny+'px'; drawLayArrows(L,svg); }
+  function up(){ window.removeEventListener('pointermove',mv); window.removeEventListener('pointerup',up); saveLayout(); }
+  window.addEventListener('pointermove',mv); window.addEventListener('pointerup',up);
+}
+function drawLayArrows(L,svg){
+  // remove old paths (keep defs)
+  Array.prototype.slice.call(svg.querySelectorAll('path.arr,line.arr')).forEach(function(p){p.remove();});
+  function rectOf(id){ var e=layEls[id]; if(!e)return null; return {x:e.offsetLeft,y:e.offsetTop,w:e.offsetWidth,h:e.offsetHeight}; }
+  function edge(r,tx,ty){ var cx=r.x+r.w/2, cy=r.y+r.h/2, dx=tx-cx, dy=ty-cy; if(dx===0&&dy===0)return [cx,cy];
+    var sx=Math.abs(dx)<1e-6?1e9:(r.w/2)/Math.abs(dx), sy=Math.abs(dy)<1e-6?1e9:(r.h/2)/Math.abs(dy); var s=Math.min(sx,sy); return [cx+dx*s, cy+dy*s]; }
+  Object.keys(L.conn).forEach(function(srcId){
+    var rs=rectOf(srcId); if(!rs)return;
+    (L.conn[srcId]||[]).forEach(function(tid){
+      var rt=rectOf(tid); if(!rt)return;
+      var cs=[rs.x+rs.w/2,rs.y+rs.h/2], ct=[rt.x+rt.w/2,rt.y+rt.h/2];
+      var p1=edge(rs,ct[0],ct[1]), p2=edge(rt,cs[0],cs[1]);
+      var mx=(p1[0]+p2[0])/2;
+      var d='M'+p1[0].toFixed(1)+','+p1[1].toFixed(1)+' C '+mx.toFixed(1)+','+p1[1].toFixed(1)+' '+mx.toFixed(1)+','+p2[1].toFixed(1)+' '+p2[0].toFixed(1)+','+p2[1].toFixed(1);
+      var path=document.createElementNS('http://www.w3.org/2000/svg','path');
+      path.setAttribute('class','arr'); path.setAttribute('d',d); path.setAttribute('fill','none'); path.setAttribute('stroke','#7c8079'); path.setAttribute('stroke-width','2'); path.setAttribute('marker-end','url(#arrowh)');
+      svg.appendChild(path);
+    });
+  });
 }
 
 /* ---------- SIMULATION TAB ---------- */
