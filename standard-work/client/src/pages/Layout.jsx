@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { api, formatTime } from '@backend';
 import { sizeLabel } from '../sizeLabel.js';
 import { getActiveSku, setActiveSku } from '../activeSku.js';
@@ -124,6 +124,10 @@ export default function Layout() {
   const [pendingSrc, setPendingSrc] = useState(null);
   const [drawCursor, setDrawCursor] = useState({ x: 0, y: 0 });
   const [hoverArrow, setHoverArrow] = useState(null);
+  const [names, setNames] = useState({});        // {i: custom station name}
+  const [ppl, setPpl] = useState({});            // {i: custom people count}
+  const [fgName, setFgName] = useState('');
+  const [fgPpl, setFgPpl] = useState(null);
 
   useEffect(() => { api.get('/api/skus').then(list => { setSkus(list); if (list.length) { const a = getActiveSku(); setSkuId(p => p ?? (list.some(s => s.id === a) ? a : list[0].id)); } }); }, []);
   useEffect(() => { if (skuId == null) return; setActiveSku(skuId); setSize(null); api.get(`/api/skus/${skuId}`).then(setDetail); }, [skuId]);
@@ -133,28 +137,35 @@ export default function Layout() {
   const durOf = s => (activeSize && s.size_times && s.size_times[activeSize] != null) ? s.size_times[activeSize] : (s.effective_seconds || 0);
 
   const groups = useMemo(() => detail ? computeGroups(detail.steps, skuId, durOf) : [], [detail, activeSize]); // eslint-disable-line
-  const n = groups.length;
+  const nBase = groups.length;
+  const n = stations.length || nBase;
 
   // people per station from the Line Designer worker counts (max staffing on its steps)
   const lineWorkers = useMemo(() => { try { return JSON.parse(localStorage.getItem(`sw-line-${skuId}`))?.workers || {}; } catch { return {}; } }, [skuId, detail]);
   const stepName = s => (s.tag_id ? s.tag_name : s.name) || `Step ${s.sequence}`;
   const peopleOf = i => Math.max(1, ...(groups[i] || []).map(s => lineWorkers[s.id] || 1));
   const roleOf = i => { const g = groups[i] || []; if (!g.length) return ''; const top = g.reduce((a, b) => durOf(b) > durOf(a) ? b : a, g[0]); return stepName(top); };
+  const displayName = i => names[i] || roleOf(i) || `Station ${i + 1}`;
+  const displayPeople = i => (ppl[i] != null ? ppl[i] : peopleOf(i));
 
   // load saved positions/connections, else defaults
   useEffect(() => {
-    if (!n) return;
+    if (!nBase) return;
     const savedS = load(skuId, 'stations');
     const savedC = load(skuId, 'carts');
     const savedFg = load(skuId, 'fg');
     const savedConn = load(skuId, 'conn');
-    const st = savedS && savedS.length === n ? savedS : preset('feeders', n);
+    const st = savedS && savedS.length ? savedS : preset('feeders', nBase);
     const ct = savedC && savedC.length ? savedC : [{ x: FW / 2, y: 1.6 }];
     setStations(st); setCarts(ct);
     setFg(savedFg || { x: FW - 3, y: 5 });
-    setConn(savedConn && Object.keys(savedConn).length ? savedConn : defaultConn(n, st, ct));
-  }, [n, skuId]); // eslint-disable-line
-  useEffect(() => { if (stations.length) saveLayout(skuId, { stations, carts, fg, conn }); }, [stations, carts, fg, conn]); // eslint-disable-line
+    setNames(load(skuId, 'names') || {});
+    setPpl(load(skuId, 'ppl') || {});
+    setFgName(load(skuId, 'fgName') || '');
+    setFgPpl(load(skuId, 'fgPpl') ?? null);
+    setConn(savedConn && Object.keys(savedConn).length ? savedConn : defaultConn(st.length, st, ct));
+  }, [nBase, skuId]); // eslint-disable-line
+  useEffect(() => { if (stations.length) saveLayout(skuId, { stations, carts, fg, conn, names, ppl, fgName, fgPpl }); }, [stations, carts, fg, conn, names, ppl, fgName, fgPpl]); // eslint-disable-line
 
   function floorXY(e) {
     const r = svgRef.current.getBoundingClientRect();
@@ -184,6 +195,27 @@ export default function Layout() {
     setPendingSrc(null);
   }
   const onNodeDown = (key, type, idx, e) => { if (mode === 'draw') { e.stopPropagation(); e.preventDefault(); handleDrawClick(key); } else startDrag(type, idx, e); };
+
+  // add / remove station boxes (independent of Line Designer count)
+  const addStation = () => setStations(s => [...s, { x: 4 + (s.length % 6) * 3, y: 12.5 }]);
+  const removeStation = () => {
+    const i = stations.length - 1; if (i < 0) return;
+    setStations(s => s.slice(0, -1));
+    setConn(cn => { const x = { ...cn }; delete x['s' + i]; Object.keys(x).forEach(k => { x[k] = (x[k] || []).filter(t => t !== 's' + i); }); return x; });
+    setNames(nm => { const x = { ...nm }; delete x[i]; return x; });
+    setPpl(pp => { const x = { ...pp }; delete x[i]; return x; });
+  };
+  // one-click: arrange exactly like the Meritage sketch
+  function applySketch() {
+    const lbl = ['Connector station', 'Arms assembly', 'Back frame', 'Trellis', 'Seat frame', 'Full assembly'];
+    const pk = [1, 2, 1, 1, 1, 2];
+    setStations([{ x: 5, y: 4 }, { x: 11, y: 4 }, { x: 17, y: 4 }, { x: 23, y: 4 }, { x: 6, y: 9.5 }, { x: 15, y: 9.5 }]);
+    const nm = {}, pp2 = {}; lbl.forEach((l, i) => { nm[i] = l; pp2[i] = pk[i]; });
+    setNames(nm); setPpl(pp2);
+    setCarts([{ x: 15, y: 1.5 }]);
+    setFg({ x: 15, y: 13.8 }); setFgName('Furniture'); setFgPpl(0);
+    setConn({ c0: ['s0', 's1', 's2', 's3', 's4'], s0: ['s1', 's2', 's3'], s1: ['s5'], s2: ['s5'], s3: ['s5'], s4: ['s5'], s5: ['fg'] });
+  }
 
   // node geometry by key ('s'=station, 'c'=cart, 'fg'=finished goods)
   const nodeC = key => key === 'fg' ? fg : key[0] === 'c' ? carts[parseInt(key.slice(1), 10)] : stations[parseInt(key.slice(1), 10)];
@@ -239,11 +271,19 @@ export default function Layout() {
           <div className="stat" style={{ borderLeftColor: '#d2762a' }}><div className="stat-value">{m(cartTotal)}</div><div className="stat-label">cart→station total</div></div>
           <div className="stat" style={{ borderLeftColor: '#2f7d52' }}><div className="stat-value">{totalPeople}</div><div className="stat-label">operators on the line</div></div>
           <div className="spacer" />
-          <div className="field" style={{ maxWidth: 360 }}>
+          <div className="field" style={{ maxWidth: 420 }}>
             <label>Arrange</label>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button className="small" onClick={applySketch} style={{ background: '#1f4d33', color: '#fff', borderColor: '#1f4d33' }}>★ Meritage sketch</button>
               {[['feeders', 'Feeders→Assembly'], ['row', 'Single row'], ['serpentine', 'Two rows'], ['u', 'U-shape'], ['cell', 'Cell']].map(([k, lbl]) =>
                 <button key={k} className="small" onClick={() => setStations(preset(k, n))}>{lbl}</button>)}
+            </div>
+          </div>
+          <div className="field" style={{ maxWidth: 130 }}>
+            <label>Stations</label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="small" onClick={addStation}>＋ Add</button>
+              <button className="small" disabled={stations.length <= 1} onClick={removeStation}>− Remove</button>
             </div>
           </div>
           <div className="field" style={{ maxWidth: 150 }}>
@@ -304,17 +344,16 @@ export default function Layout() {
           )}
           {/* stations */}
           {stations.map((s, i) => {
-            const ppl = peopleOf(i);
+            const np = displayPeople(i);
             return (
               <g key={i} style={{ cursor: mode === 'draw' ? 'crosshair' : 'grab' }} onPointerDown={e => onNodeDown('s' + i, 'station', i, e)}>
                 <rect x={s.x - SW / 2} y={s.y - SH / 2} width={SW} height={SH} rx="0.18"
                   fill="#ffffff" stroke={pendingSrc === 's' + i ? '#2f7d52' : '#1d3a66'} strokeWidth={pendingSrc === 's' + i ? 0.18 : 0.08} />
                 <rect x={s.x - SW / 2} y={s.y - SH / 2} width={SW} height={0.46} rx="0.18" fill="#1d3a66" />
-                <text x={s.x - SW / 2 + 0.18} y={s.y - SH / 2 + 0.34} fontSize="0.34" fontWeight="700" fill="#fff">STATION {i + 1}</text>
-                <text x={s.x + SW / 2 - 0.18} y={s.y - SH / 2 + 0.34} textAnchor="end" fontSize="0.34" fontWeight="700" fill="#cfe0ff">{ppl}👤</text>
-                <text x={s.x} y={s.y + 0.12} textAnchor="middle" fontSize="0.78" fontWeight="800" fill="#10151d">{i + 1}</text>
-                <text x={s.x} y={s.y + SH / 2 - 0.22} textAnchor="middle" fontSize="0.36" fontWeight="600" fill="#41506a">{roleOf(i).slice(0, 22)}</text>
-                <title>{`Station ${i + 1} — ${ppl} ${ppl > 1 ? 'people' : 'person'}\n${(groups[i] || []).map(stepName).join(', ')}`}</title>
+                <text x={s.x - SW / 2 + 0.16} y={s.y - SH / 2 + 0.34} fontSize="0.32" fontWeight="700" fill="#fff">{i + 1}. {displayName(i).slice(0, 20)}</text>
+                <text x={s.x + SW / 2 - 0.16} y={s.y - SH / 2 + 0.34} textAnchor="end" fontSize="0.34" fontWeight="700" fill="#cfe0ff">{np}👤</text>
+                <text x={s.x} y={s.y + 0.55} textAnchor="middle" fontSize="0.62" fontWeight="800" fill="#16324f">{displayName(i).length > 14 ? displayName(i).slice(0, 18) : displayName(i)}</text>
+                <title>{`${i + 1}. ${displayName(i)} — ${np} ${np === 1 ? 'person' : 'people'}\n${(groups[i] || []).map(stepName).join(', ')}`}</title>
               </g>
             );
           })}
@@ -322,9 +361,10 @@ export default function Layout() {
           <g style={{ cursor: mode === 'draw' ? 'crosshair' : 'grab' }} onPointerDown={e => onNodeDown('fg', 'fg', 0, e)}>
             <rect x={fg.x - SW / 2} y={fg.y - SH / 2} width={SW} height={SH} rx="0.18" fill="#eaf7ef" stroke="#2f7d52" strokeWidth={pendingSrc === 'fg' ? 0.18 : 0.09} />
             <rect x={fg.x - SW / 2} y={fg.y - SH / 2} width={SW} height={0.46} rx="0.18" fill="#2f7d52" />
-            <text x={fg.x} y={fg.y - SH / 2 + 0.34} textAnchor="middle" fontSize="0.34" fontWeight="700" fill="#fff">FINISHED GOODS</text>
-            <text x={fg.x} y={fg.y + 0.3} textAnchor="middle" fontSize="0.5" fontWeight="800" fill="#1f4d33">📦</text>
-            <title>Finished Goods — packed unit leaves the line</title>
+            <text x={fg.x - SW / 2 + 0.16} y={fg.y - SH / 2 + 0.34} fontSize="0.32" fontWeight="700" fill="#fff">{(fgName || 'Finished Goods').slice(0, 18)}</text>
+            {fgPpl != null && <text x={fg.x + SW / 2 - 0.16} y={fg.y - SH / 2 + 0.34} textAnchor="end" fontSize="0.34" fontWeight="700" fill="#d7f0e1">{fgPpl}👤</text>}
+            <text x={fg.x} y={fg.y + 0.5} textAnchor="middle" fontSize="0.5" fontWeight="800" fill="#1f4d33">📦 {(fgName || 'Finished Goods').length > 12 ? '' : (fgName || 'Finished Goods')}</text>
+            <title>{`${fgName || 'Finished Goods'}${fgPpl != null ? ` — ${fgPpl} people` : ''}`}</title>
           </g>
           {/* carts */}
           {carts.map((c, i) => (
@@ -340,19 +380,27 @@ export default function Layout() {
         </p>
       </div>
 
-      {/* flow editor */}
+      {/* stations editor */}
       <div className="card">
-        <h3 style={{ margin: '0 0 8px' }}>Flow — where each station feeds</h3>
-        <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Type target stations (e.g. <b>S6</b>, or <b>S2, S3, S4</b>) or <b>FG</b> for finished goods. This draws the arrows — use it to build sub-assemblies that converge into a final station.</p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 8 }}>
+        <h3 style={{ margin: '0 0 8px' }}>Stations — name, people &amp; flow</h3>
+        <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Name each station, set its crew, and where it feeds (e.g. <b>S6</b>, or <b>S2, S3, S4</b>, or <b>FG</b>). Or just drag &amp; draw on the plan above. The <b>★ Meritage sketch</b> button sets it all up to match the drawing.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: '44px 1.5fr 78px 1.3fr', gap: 8, alignItems: 'center', maxWidth: 760 }}>
+          <div className="muted" style={{ fontSize: 11 }}>#</div><div className="muted" style={{ fontSize: 11 }}>Name</div><div className="muted" style={{ fontSize: 11 }}>People</div><div className="muted" style={{ fontSize: 11 }}>Feeds →</div>
           {stations.map((_, i) => (
-            <div key={i} className="row" style={{ gap: 8, alignItems: 'center' }}>
-              <span style={{ minWidth: 130, fontSize: 13 }}><b>S{i + 1}</b> {roleOf(i).slice(0, 16)} <span className="muted">({peopleOf(i)}👤)</span></span>
-              <span className="muted">→</span>
-              <input type="text" defaultValue={connToLabels(conn['s' + i])} style={{ flex: 1, minWidth: 80 }}
+            <Fragment key={i}>
+              <div style={{ fontWeight: 700, fontSize: 13 }}>S{i + 1}</div>
+              <input type="text" value={names[i] ?? ''} placeholder={roleOf(i) || `Station ${i + 1}`}
+                onChange={e => setNames(m => ({ ...m, [i]: e.target.value }))} />
+              <input type="number" min="0" max="9" value={displayPeople(i)}
+                onChange={e => setPpl(m => ({ ...m, [i]: Math.max(0, parseInt(e.target.value, 10) || 0) }))} />
+              <input key={'f' + i + connToLabels(conn['s' + i])} type="text" defaultValue={connToLabels(conn['s' + i])}
                 onBlur={e => setConn(c => ({ ...c, ['s' + i]: labelsToConn(e.target.value, n) }))} />
-            </div>
+            </Fragment>
           ))}
+          <div style={{ fontWeight: 700, fontSize: 13, color: '#2f7d52' }}>FG</div>
+          <input type="text" value={fgName} placeholder="Finished Goods" onChange={e => setFgName(e.target.value)} />
+          <input type="number" min="0" max="9" value={fgPpl ?? 0} onChange={e => setFgPpl(Math.max(0, parseInt(e.target.value, 10) || 0))} />
+          <div className="muted" style={{ fontSize: 12 }}>— (end of line)</div>
         </div>
       </div>
     </>
