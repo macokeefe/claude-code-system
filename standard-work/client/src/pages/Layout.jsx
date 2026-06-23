@@ -83,9 +83,16 @@ function preset(name, n) {
 }
 
 // connection helpers (node keys: 's0'..'s{n-1}', 'fg')
-function defaultConn(n) {
+function defaultConn(n, stations, carts) {
   const c = {};
   for (let i = 0; i < n; i++) c['s' + i] = [i < n - 1 ? 's' + (i + 1) : 'fg'];
+  if (stations && carts && carts.length) {
+    stations.forEach((s, i) => {
+      let bj = 0, bd = Infinity;
+      carts.forEach((ca, j) => { const d = Math.hypot(s.x - ca.x, s.y - ca.y); if (d < bd) { bd = d; bj = j; } });
+      const k = 'c' + bj; (c[k] = c[k] || []).push('s' + i);
+    });
+  }
   return c;
 }
 function connToLabels(arr) {
@@ -141,10 +148,11 @@ export default function Layout() {
     const savedC = load(skuId, 'carts');
     const savedFg = load(skuId, 'fg');
     const savedConn = load(skuId, 'conn');
-    setStations(savedS && savedS.length === n ? savedS : preset('feeders', n));
-    setCarts(savedC && savedC.length ? savedC : [{ x: FW / 2, y: 1.6 }]);
+    const st = savedS && savedS.length === n ? savedS : preset('feeders', n);
+    const ct = savedC && savedC.length ? savedC : [{ x: FW / 2, y: 1.6 }];
+    setStations(st); setCarts(ct);
     setFg(savedFg || { x: FW - 3, y: 5 });
-    setConn(savedConn && Object.keys(savedConn).length ? savedConn : defaultConn(n));
+    setConn(savedConn && Object.keys(savedConn).length ? savedConn : defaultConn(n, st, ct));
   }, [n, skuId]); // eslint-disable-line
   useEffect(() => { if (stations.length) saveLayout(skuId, { stations, carts, fg, conn }); }, [stations, carts, fg, conn]); // eslint-disable-line
 
@@ -168,15 +176,18 @@ export default function Layout() {
   const addEdge = (a, b) => setConn(c => { const cur = c[a] || []; return cur.includes(b) ? c : { ...c, [a]: [...cur, b] }; });
   const removeEdge = (a, b) => setConn(c => ({ ...c, [a]: (c[a] || []).filter(t => t !== b) }));
   function handleDrawClick(key) {
-    if (!pendingSrc) { setPendingSrc(key); const c = nodeC(key); if (c) setDrawCursor({ x: c.x, y: c.y }); }
-    else if (pendingSrc === key) setPendingSrc(null);
-    else { if (pendingSrc !== 'fg') addEdge(pendingSrc, key); setPendingSrc(null); }
+    if (!pendingSrc) { if (key === 'fg') return; setPendingSrc(key); const c = nodeC(key); if (c) setDrawCursor({ x: c.x, y: c.y }); return; }
+    if (pendingSrc === key) { setPendingSrc(null); return; }
+    const srcCart = pendingSrc[0] === 'c', tgtCart = key[0] === 'c';
+    // valid: station->station, station->FG, cart->station. Not: *->cart, cart->FG.
+    if (!tgtCart && !(srcCart && key === 'fg')) addEdge(pendingSrc, key);
+    setPendingSrc(null);
   }
   const onNodeDown = (key, type, idx, e) => { if (mode === 'draw') { e.stopPropagation(); e.preventDefault(); handleDrawClick(key); } else startDrag(type, idx, e); };
 
-  // node geometry by key
-  const nodeC = key => key === 'fg' ? fg : stations[parseInt(key.slice(1), 10)];
-  const halfOf = key => key === 'fg' ? { hw: SW / 2, hh: SH / 2 } : { hw: SW / 2, hh: SH / 2 };
+  // node geometry by key ('s'=station, 'c'=cart, 'fg'=finished goods)
+  const nodeC = key => key === 'fg' ? fg : key[0] === 'c' ? carts[parseInt(key.slice(1), 10)] : stations[parseInt(key.slice(1), 10)];
+  const halfOf = key => key[0] === 'c' ? { hw: CW / 2, hh: CH / 2 } : { hw: SW / 2, hh: SH / 2 };
   function edge(key, tx, ty) {
     const c = nodeC(key); const { hw, hh } = halfOf(key); if (!c) return null;
     const dx = tx - c.x, dy = ty - c.y; if (dx === 0 && dy === 0) return [c.x, c.y];
@@ -189,18 +200,19 @@ export default function Layout() {
     (conn[src] || []).forEach(tg => {
       const ct = nodeC(tg); if (!ct) return;
       const p1 = edge(src, ct.x, ct.y), p2 = edge(tg, cs.x, cs.y);
-      if (p1 && p2) arrows.push({ key: src + '-' + tg, src, tg, p1, p2 });
+      if (p1 && p2) arrows.push({ key: src + '-' + tg, src, tg, p1, p2, kind: src[0] === 'c' ? 'cart' : 'flow' });
     });
   });
 
-  // metrics (along the flow graph)
-  const flowEdges = arrows.map(a => Math.hypot(a.p1[0] - a.p2[0], a.p1[1] - a.p2[1]));
-  const flowPath = flowEdges.reduce((a, b) => a + b, 0);
-  const longestHop = flowEdges.length ? Math.max(...flowEdges) : 0;
-  const cartFeed = stations.map(s => carts.length ? Math.min(...carts.map(c => dist(s, c))) : 0);
-  const cartTotal = cartFeed.reduce((a, b) => a + b, 0);
-  const farthest = cartFeed.length ? Math.max(...cartFeed) : 0;
-  const farthestIdx = cartFeed.indexOf(farthest);
+  // metrics (flow arrows = parts movement; cart arrows = supply)
+  const elen = a => Math.hypot(a.p1[0] - a.p2[0], a.p1[1] - a.p2[1]);
+  const flowArr = arrows.filter(a => a.kind === 'flow'), cartArr = arrows.filter(a => a.kind === 'cart');
+  const flowPath = flowArr.reduce((s, a) => s + elen(a), 0);
+  const longestHop = flowArr.length ? Math.max(...flowArr.map(elen)) : 0;
+  const cartTotal = cartArr.reduce((s, a) => s + elen(a), 0);
+  const farthestEdge = cartArr.reduce((m2, a) => elen(a) > elen(m2 || a) ? a : (m2 || a), null);
+  const farthest = farthestEdge ? elen(farthestEdge) : 0;
+  const farthestIdx = farthestEdge ? parseInt(farthestEdge.tg.slice(1), 10) : -1;
   const totalPeople = (stations.map((_, i) => peopleOf(i)).reduce((a, b) => a + b, 0));
   const m = v => `${v.toFixed(1)} m`;
 
@@ -238,7 +250,7 @@ export default function Layout() {
             <label>Parts carts</label>
             <div style={{ display: 'flex', gap: 6 }}>
               <button className="small" onClick={() => setCarts(c => [...c, { x: FW / 2 + c.length * 2, y: 1.6 }])}>＋ Add</button>
-              <button className="small" disabled={carts.length <= 0} onClick={() => setCarts(c => c.slice(0, -1))}>− Remove</button>
+              <button className="small" disabled={carts.length <= 0} onClick={() => { const i = carts.length - 1; setCarts(c => c.slice(0, -1)); setConn(cn => { const x = { ...cn }; delete x['c' + i]; return x; }); }}>− Remove</button>
             </div>
           </div>
           <div className="field" style={{ maxWidth: 280 }}>
@@ -247,7 +259,7 @@ export default function Layout() {
               <button className="small" onClick={() => { setMode(m => m === 'draw' ? 'move' : 'draw'); setPendingSrc(null); }}
                 style={mode === 'draw' ? { background: '#1a56b0', color: '#fff', borderColor: '#1a56b0' } : undefined}>
                 {mode === 'draw' ? '✏️ Drawing — click 2 boxes' : '✏️ Draw arrows'}</button>
-              <button className="small" onClick={() => setConn(defaultConn(n))}>Reset</button>
+              <button className="small" onClick={() => setConn(defaultConn(n, stations, carts))}>Reset</button>
             </div>
           </div>
         </div>
@@ -262,28 +274,29 @@ export default function Layout() {
             <marker id="flowArrow" markerWidth="5" markerHeight="5" refX="3.6" refY="2" orient="auto">
               <path d="M0,0 L4,2 L0,4 Z" fill="#1a56b0" />
             </marker>
+            <marker id="cartArrow" markerWidth="5" markerHeight="5" refX="3.6" refY="2" orient="auto">
+              <path d="M0,0 L4,2 L0,4 Z" fill="#d2762a" />
+            </marker>
           </defs>
           {/* aisle guide lines */}
           {[2.6, 14.4].map(y => <line key={y} x1="1" y1={y} x2={FW - 1} y2={y} stroke="#d9c544" strokeWidth="0.08" strokeDasharray="0.6 0.4" />)}
-          {/* cart → nearest station feed lines */}
-          {stations.map((s, i) => {
-            if (!carts.length) return null;
-            let best = carts[0], bd = dist(s, carts[0]);
-            for (const c of carts) { const d = dist(s, c); if (d < bd) { bd = d; best = c; } }
-            return <line key={i} x1={s.x} y1={s.y} x2={best.x} y2={best.y} stroke="#d2762a" strokeWidth="0.05" strokeDasharray="0.4 0.3" opacity="0.65" />;
+          {/* flow + cart-supply arrows — click to delete */}
+          {arrows.map(a => {
+            const isCart = a.kind === 'cart';
+            const col = hoverArrow === a.key ? '#b3261e' : (isCart ? '#d2762a' : '#1a56b0');
+            return (
+              <g key={a.key} style={{ cursor: 'pointer' }}
+                onClick={e => { e.stopPropagation(); removeEdge(a.src, a.tg); }}
+                onPointerEnter={() => setHoverArrow(a.key)} onPointerLeave={() => setHoverArrow(h => h === a.key ? null : h)}>
+                <line x1={a.p1[0]} y1={a.p1[1]} x2={a.p2[0]} y2={a.p2[1]} stroke="transparent" strokeWidth="0.55" />
+                <line x1={a.p1[0]} y1={a.p1[1]} x2={a.p2[0]} y2={a.p2[1]}
+                  stroke={col} strokeWidth={hoverArrow === a.key ? 0.17 : (isCart ? 0.08 : 0.11)}
+                  strokeDasharray={isCart ? '0.4 0.3' : undefined} opacity="0.9"
+                  markerEnd={isCart ? 'url(#cartArrow)' : 'url(#flowArrow)'} />
+                <title>{isCart ? 'Cart supply — click to delete' : 'Parts flow — click to delete'}</title>
+              </g>
+            );
           })}
-          {/* flow arrows between stations / to finished goods — click to delete */}
-          {arrows.map(a => (
-            <g key={a.key} style={{ cursor: 'pointer' }}
-              onClick={e => { e.stopPropagation(); removeEdge(a.src, a.tg); }}
-              onPointerEnter={() => setHoverArrow(a.key)} onPointerLeave={() => setHoverArrow(h => h === a.key ? null : h)}>
-              <line x1={a.p1[0]} y1={a.p1[1]} x2={a.p2[0]} y2={a.p2[1]} stroke="transparent" strokeWidth="0.55" />
-              <line x1={a.p1[0]} y1={a.p1[1]} x2={a.p2[0]} y2={a.p2[1]}
-                stroke={hoverArrow === a.key ? '#b3261e' : '#1a56b0'} strokeWidth={hoverArrow === a.key ? 0.17 : 0.11}
-                opacity="0.9" markerEnd="url(#flowArrow)" />
-              <title>Click to delete this arrow</title>
-            </g>
-          ))}
           {/* ghost line while drawing */}
           {mode === 'draw' && pendingSrc && nodeC(pendingSrc) && (
             <line x1={nodeC(pendingSrc).x} y1={nodeC(pendingSrc).y} x2={drawCursor.x} y2={drawCursor.y}
@@ -315,15 +328,15 @@ export default function Layout() {
           </g>
           {/* carts */}
           {carts.map((c, i) => (
-            <g key={i} style={{ cursor: 'grab' }} onPointerDown={e => startDrag('cart', i, e)}>
-              <rect x={c.x - CW / 2} y={c.y - CH / 2} width={CW} height={CH} rx="0.1" fill="#d2762a" stroke="#9c531f" strokeWidth="0.06" />
+            <g key={i} style={{ cursor: mode === 'draw' ? 'crosshair' : 'grab' }} onPointerDown={e => onNodeDown('c' + i, 'cart', i, e)}>
+              <rect x={c.x - CW / 2} y={c.y - CH / 2} width={CW} height={CH} rx="0.1" fill="#d2762a" stroke={pendingSrc === 'c' + i ? '#2f7d52' : '#9c531f'} strokeWidth={pendingSrc === 'c' + i ? 0.16 : 0.06} />
               <rect x={c.x - CW / 2 + 0.12} y={c.y - CH / 2 + 0.12} width={CW - 0.24} height={CH - 0.24} rx="0.06" fill="#f0b36b" />
-              <title>Parts cart — drag to feed nearby stations</title>
+              <title>Parts cart {i + 1} — drag to move; in Draw mode, click then a station to add a supply arrow</title>
             </g>
           ))}
         </svg>
         <p className="muted" style={{ fontSize: 12, margin: '8px 4px 0' }}>
-          <b>Move mode:</b> drag stations, the cart and Finished Goods. <b>Draw arrows:</b> click the button, then click a box and the box it feeds (click Finished Goods to end there). <b>Delete</b> an arrow by clicking it. Blue arrows = parts movement; orange = each station to its nearest cart. Saved per product on this computer.
+          <b>Move mode:</b> drag stations, carts and Finished Goods. <b>Draw arrows:</b> click the button, then click a box and the box it feeds — <b>station→station/FG</b> draws blue (parts flow), <b>cart→station</b> draws orange (supply). <b>Delete</b> any arrow by clicking it. Saved per product on this computer.
         </p>
       </div>
 
