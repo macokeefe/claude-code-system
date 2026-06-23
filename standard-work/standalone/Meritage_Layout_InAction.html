@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Meritage — Our Layout in Action</title>
+<style>
+  body{margin:0;background:#0e1116;color:#e7ecf1;font-family:"Inter","Segoe UI",Arial,sans-serif;padding:20px}
+  .wrap{max-width:980px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 2px;color:#fff}
+  .sub{color:#9aa7b4;font-size:13px;margin:0 0 14px}
+  .bar{display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:#161b22;border:1px solid #232b35;border-radius:10px;padding:12px 14px;margin-bottom:14px}
+  button{background:#1f6feb;color:#fff;border:0;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer}
+  button.sec{background:#262d36}
+  .stat{font-variant-numeric:tabular-nums}
+  .stat b{font-size:20px;color:#fff} .stat .l{font-size:10px;color:#9aa7b4;text-transform:uppercase;letter-spacing:.05em}
+  input[type=range]{width:160px}
+  svg{width:100%;height:auto;display:block;background:#11161d;border:1px solid #232b35;border-radius:12px}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:#9aa7b4;margin-top:10px}
+  .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  .note{font-size:12px;color:#8b97a4;margin-top:10px;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Meritage 3-Seater — our layout, in action</h1>
+  <p class="sub">Steady-state on a 47-min unit cycle. Watch the feeders fill, Full Assembly start once the kit is ready, then flip to packing — and where the idle sits.</p>
+
+  <div class="bar">
+    <button id="play">▶ Play</button>
+    <button id="reset" class="sec">↺ Reset</button>
+    <div>Speed <input id="speed" type="range" min="2" max="40" value="14"><span id="spd" class="stat" style="font-size:12px;color:#9aa7b4"> </span></div>
+    <div class="spacer" style="flex:1"></div>
+    <div class="stat"><b id="clock">0.0</b><div class="l">min into cycle</div></div>
+    <div class="stat"><b id="units">0</b><div class="l">units done</div></div>
+    <div class="stat"><b id="rate">1.28</b><div class="l">units / hour</div></div>
+  </div>
+
+  <svg id="floor" viewBox="0 0 720 470"></svg>
+
+  <div class="legend">
+    <span><i style="background:#1f6feb"></i>Working</span>
+    <span><i style="background:#d29922"></i>Seat frame (bottleneck)</span>
+    <span><i style="background:#2ea043"></i>Packing</span>
+    <span><i style="background:#30363d"></i>Idle / done — waiting on the cycle</span>
+  </div>
+  <p class="note"><b>What to watch:</b> the fast feeders (Connectors, Trellis, Arms, Back frame) finish early and sit <b>idle</b> until the next cycle, while <b>Seat frame</b> runs the full 47 min — it sets the pace. <b>Full Assembly</b> works the kit (~29 min) then switches to <b>packing</b> the previous unit (~18 min), filling its own gap. One finished unit drops every 47 min ≈ <b>9/day</b> (just over the 42-min takt line is what you'd need to hit 10/day → that needs a 2nd hand on Seat frame).</p>
+</div>
+
+<script>
+"use strict";
+var SVGNS='http://www.w3.org/2000/svg';
+var CYCLE=47, ASM=29, PACK=18; // full assembly: 29 assemble + 18 pack = 47
+var BOXW=128, BOXH=58;
+// stations: x,y = top-left
+var STN=[
+ {id:'cart',name:'Cart / Supply',people:0,x:296,y:14,kind:'cart'},
+ {id:'con', name:'Connectors', people:1, busy:19.25, x:36, y:120, kind:'feed'},
+ {id:'arm', name:'Arms',       people:2, busy:32,    x:196,y:120, kind:'feed'},
+ {id:'bak', name:'Back frame', people:1, busy:43.5,  x:356,y:120, kind:'feed'},
+ {id:'tre', name:'Trellis',    people:1, busy:22.5,  x:516,y:120, kind:'feed'},
+ {id:'sea', name:'Seat frame', people:1, busy:47,    x:36, y:250, kind:'feed', bottleneck:true},
+ {id:'fa',  name:'Full assembly',people:2,busy:47,   x:296,y:250, kind:'fa'},
+ {id:'fur', name:'Furniture',  people:0, busy:0,     x:296,y:390, kind:'fur'},
+];
+var byId={}; STN.forEach(function(s){byId[s.id]=s;});
+var ARROWS=[
+ ['cart','con','feed'],['cart','arm','feed'],['cart','bak','feed'],['cart','tre','feed'],['cart','sea','feed'],
+ ['con','fa','flow'],['arm','fa','flow'],['bak','fa','flow'],['tre','fa','flow'],['sea','fa','flow'],
+ ['fa','fur','flow'],
+];
+function cx(s){return s.x+BOXW/2;} function cy(s){return s.y+BOXH/2;}
+function edge(s,tx,ty){var X=cx(s),Y=cy(s),dx=tx-X,dy=ty-Y;if(!dx&&!dy)return[X,Y];var k=Math.min(Math.abs(dx)<1e-6?1e9:(BOXW/2)/Math.abs(dx),Math.abs(dy)<1e-6?1e9:(BOXH/2)/Math.abs(dy));return[X+dx*k,Y+dy*k];}
+
+var svg=document.getElementById('floor');
+function E(tag,attr){var e=document.createElementNS(SVGNS,tag);for(var k in attr)e.setAttribute(k,attr[k]);return e;}
+// defs (arrowheads)
+var defs=E('defs',{});
+defs.innerHTML='<marker id="ah" markerWidth="6" markerHeight="6" refX="4.5" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 Z" fill="#3d6fb0"/></marker>'+
+ '<marker id="ahf" markerWidth="6" markerHeight="6" refX="4.5" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 Z" fill="#2a323c"/></marker>';
+svg.appendChild(defs);
+
+// arrows
+var arrowEls={};
+ARROWS.forEach(function(a){
+ var s=byId[a[0]],t=byId[a[1]];var p1=edge(s,cx(t),cy(t)),p2=edge(t,cx(s),cy(s));
+ var ln=E('line',{x1:p1[0],y1:p1[1],x2:p2[0],y2:p2[1],stroke:'#2a323c','stroke-width':2,'marker-end':'url(#ahf)'});
+ if(a[2]==='feed')ln.setAttribute('stroke-dasharray','4 3');
+ svg.appendChild(ln); arrowEls[a[0]+'>'+a[1]]=ln;
+});
+
+// boxes
+var ui={};
+STN.forEach(function(s){
+ var g=E('g',{});
+ var bg=E('rect',{x:s.x,y:s.y,width:BOXW,height:BOXH,rx:9,fill:'#1a212a',stroke:'#2c3540','stroke-width':1.5});
+ g.appendChild(bg);
+ // fill (grows up from bottom)
+ var fill=E('rect',{x:s.x,y:s.y+BOXH,width:BOXW,height:0,rx:9,fill:'#1f6feb',opacity:0.85});
+ g.appendChild(fill);
+ // header
+ g.appendChild(E('rect',{x:s.x,y:s.y,width:BOXW,height:18,rx:9,fill:'#222b35'}));
+ var nm=E('text',{x:s.x+8,y:s.y+13,'font-size':11,'font-weight':700,fill:'#e7ecf1'});nm.textContent=s.name;g.appendChild(nm);
+ if(s.people){var pp=E('text',{x:s.x+BOXW-8,y:s.y+13,'text-anchor':'end','font-size':10.5,'font-weight':700,fill:'#9fb6d6'});pp.textContent=s.people+'\u{1F464}';g.appendChild(pp);}
+ var st=E('text',{x:s.x+BOXW/2,y:s.y+40,'text-anchor':'middle','font-size':11,'font-weight':700,fill:'#cdd6df'});g.appendChild(st);
+ svg.appendChild(g);
+ ui[s.id]={bg:bg,fill:fill,status:st};
+});
+
+var t=0, playing=false, speed=14, units=0;
+document.getElementById('rate').textContent=(60/CYCLE).toFixed(2);
+function setFill(id,frac,color){var s=byId[id],f=ui[id].fill;var h=Math.max(0,Math.min(1,frac))*BOXH;f.setAttribute('y',s.y+BOXH-h);f.setAttribute('height',h);f.setAttribute('fill',color);}
+function arrow(srcId,active){['fa'].forEach(function(){});var ln=arrowEls[srcId+'>fa'];if(ln){ln.setAttribute('stroke',active?'#3d6fb0':'#2a323c');ln.setAttribute('marker-end',active?'url(#ah)':'url(#ahf)');}}
+
+function frame(){
+ var u=t%CYCLE;
+ // feeders
+ ['con','arm','bak','tre','sea'].forEach(function(id){
+  var s=byId[id];
+  if(u<s.busy){ setFill(id,u/s.busy, s.bottleneck?'#d29922':'#1f6feb'); ui[id].status.textContent='Working '+Math.round(u/s.busy*100)+'%'; ui[id].bg.setAttribute('stroke', s.bottleneck?'#d29922':'#2c3540'); arrow(id,false);}
+  else { setFill(id,1,'#30363d'); ui[id].status.textContent='✓ idle '+(CYCLE-s.busy).toFixed(0)+'m'; ui[id].bg.setAttribute('stroke','#2c3540'); arrow(id,true); }
+ });
+ // full assembly
+ if(u<ASM){ setFill('fa',u/ASM,'#1f6feb'); ui.fa.status.textContent='Assembling '+Math.round(u/ASM*100)+'%'; arrowEls['fa>fur'].setAttribute('stroke','#2a323c'); }
+ else { setFill('fa',(u-ASM)/PACK,'#2ea043'); ui.fa.status.textContent='Packing '+Math.round((u-ASM)/PACK*100)+'%'; arrowEls['fa>fur'].setAttribute('stroke','#2ea043'); arrowEls['fa>fur'].setAttribute('marker-end','url(#ah)'); }
+ // furniture
+ setFill('fur', (u/CYCLE), '#1d3a2a'); ui.fur.status.textContent= units+' shipped';
+ document.getElementById('clock').textContent=u.toFixed(1);
+ document.getElementById('units').textContent=units;
+}
+var last=0;
+function loop(ts){
+ if(!playing)return;
+ if(!last)last=ts; var dt=(ts-last)/1000; last=ts;
+ var prev=Math.floor(t/CYCLE);
+ t+=dt*speed;
+ if(Math.floor(t/CYCLE)>prev) units+=Math.floor(t/CYCLE)-prev;
+ frame();
+ requestAnimationFrame(loop);
+}
+document.getElementById('play').onclick=function(){ playing=!playing; this.textContent=playing?'⏸ Pause':'▶ Play'; if(playing){last=0;requestAnimationFrame(loop);} };
+document.getElementById('reset').onclick=function(){ t=0;units=0;last=0;frame(); };
+document.getElementById('speed').oninput=function(){ speed=+this.value; document.getElementById('spd').textContent=' '+speed+' min/s'; };
+document.getElementById('spd').textContent=' 14 min/s';
+frame();
+</script>
+</body>
+</html>
