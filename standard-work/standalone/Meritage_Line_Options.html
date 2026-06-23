@@ -47,7 +47,7 @@
 <body>
 <div class="wrap">
   <h1>Meritage 3-Seater — Line Options Comparison</h1>
-  <p class="sub">Edit your current setup and the alternatives. Each option's throughput is set by its busiest station. Times in minutes; a station's work is assumed shareable among its people.</p>
+  <p class="sub">The layout we built — as-built vs. the tweaks that get it over takt. Each option's throughput is set by its busiest station. Times in minutes; a station's work is assumed shareable among its people.</p>
 
   <div class="card">
     <div class="settings">
@@ -72,8 +72,7 @@
 var state = {
   demand: 10, hours: 7,
   options: [
-    { name: 'Current (2-person cell)', stations: [ {name:'Whole chair (assemble + pack)', min:272, people:2} ] },
-    { name: 'Feeder cells (our sketch)', stations: [
+    { name: 'Our layout — as built', stations: [
       {name:'Connectors', min:19.25, people:1},
       {name:'Arms', min:64, people:2},
       {name:'Back frame', min:43.5, people:1},
@@ -81,13 +80,21 @@ var state = {
       {name:'Seat frame', min:47, people:1},
       {name:'Full assembly + pack', min:76, people:2},
     ]},
-    { name: 'Balanced line (7-op)', stations: [
-      {name:'S1 (steps 2-4)', min:33, people:1},
-      {name:'S2 Arms (2-up)', min:64, people:2},
-      {name:'S3 Seat frame pt', min:41, people:1},
-      {name:'S4 Seat+Back', min:39.5, people:1},
-      {name:'S5 Back+attach', min:41, people:1},
-      {name:'S6 Finish+pack', min:41.5, people:1},
+    { name: 'Our layout + Seat frame 2-up', stations: [
+      {name:'Connectors', min:19.25, people:1},
+      {name:'Arms', min:64, people:2},
+      {name:'Back frame', min:43.5, people:1},
+      {name:'Trellis', min:22.5, people:1},
+      {name:'Seat frame (2-up)', min:47, people:2},
+      {name:'Full assembly + pack', min:76, people:2},
+    ]},
+    { name: 'Our layout + Seat & Back 2-up', stations: [
+      {name:'Connectors', min:19.25, people:1},
+      {name:'Arms', min:64, people:2},
+      {name:'Back frame (2-up)', min:43.5, people:2},
+      {name:'Trellis', min:22.5, people:1},
+      {name:'Seat frame (2-up)', min:47, people:2},
+      {name:'Full assembly + pack', min:76, people:2},
     ]},
   ]
 };
