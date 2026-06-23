@@ -113,6 +113,10 @@ export default function Layout() {
   const [fg, setFg] = useState({ x: FW - 3, y: 5 }); // finished goods node
   const [conn, setConn] = useState({});          // {sKey:[targetKeys]}
   const [drag, setDrag] = useState(null);
+  const [mode, setMode] = useState('move');      // 'move' | 'draw'
+  const [pendingSrc, setPendingSrc] = useState(null);
+  const [drawCursor, setDrawCursor] = useState({ x: 0, y: 0 });
+  const [hoverArrow, setHoverArrow] = useState(null);
 
   useEffect(() => { api.get('/api/skus').then(list => { setSkus(list); if (list.length) { const a = getActiveSku(); setSkuId(p => p ?? (list.some(s => s.id === a) ? a : list[0].id)); } }); }, []);
   useEffect(() => { if (skuId == null) return; setActiveSku(skuId); setSize(null); api.get(`/api/skus/${skuId}`).then(setDetail); }, [skuId]);
@@ -149,6 +153,7 @@ export default function Layout() {
     return { x: (e.clientX - r.left) * (FW / r.width), y: (e.clientY - r.top) * (FH / r.height) };
   }
   function onMove(e) {
+    if (mode === 'draw' && pendingSrc) { setDrawCursor(floorXY(e)); return; }
     if (!drag) return;
     const p = floorXY(e);
     const x = Math.max(SW / 2, Math.min(FW - SW / 2, p.x - drag.offX));
@@ -158,6 +163,16 @@ export default function Layout() {
     else setFg({ x, y });
   }
   const startDrag = (type, idx, e) => { e.stopPropagation(); const p = floorXY(e); const cur = type === 'station' ? stations[idx] : type === 'cart' ? carts[idx] : fg; setDrag({ type, idx, offX: p.x - cur.x, offY: p.y - cur.y }); };
+
+  // arrow drawing / deleting
+  const addEdge = (a, b) => setConn(c => { const cur = c[a] || []; return cur.includes(b) ? c : { ...c, [a]: [...cur, b] }; });
+  const removeEdge = (a, b) => setConn(c => ({ ...c, [a]: (c[a] || []).filter(t => t !== b) }));
+  function handleDrawClick(key) {
+    if (!pendingSrc) { setPendingSrc(key); const c = nodeC(key); if (c) setDrawCursor({ x: c.x, y: c.y }); }
+    else if (pendingSrc === key) setPendingSrc(null);
+    else { if (pendingSrc !== 'fg') addEdge(pendingSrc, key); setPendingSrc(null); }
+  }
+  const onNodeDown = (key, type, idx, e) => { if (mode === 'draw') { e.stopPropagation(); e.preventDefault(); handleDrawClick(key); } else startDrag(type, idx, e); };
 
   // node geometry by key
   const nodeC = key => key === 'fg' ? fg : stations[parseInt(key.slice(1), 10)];
@@ -174,7 +189,7 @@ export default function Layout() {
     (conn[src] || []).forEach(tg => {
       const ct = nodeC(tg); if (!ct) return;
       const p1 = edge(src, ct.x, ct.y), p2 = edge(tg, cs.x, cs.y);
-      if (p1 && p2) arrows.push({ key: src + '-' + tg, p1, p2 });
+      if (p1 && p2) arrows.push({ key: src + '-' + tg, src, tg, p1, p2 });
     });
   });
 
@@ -226,17 +241,23 @@ export default function Layout() {
               <button className="small" disabled={carts.length <= 0} onClick={() => setCarts(c => c.slice(0, -1))}>− Remove</button>
             </div>
           </div>
-          <div className="field" style={{ maxWidth: 130 }}>
-            <label>Flow</label>
-            <button className="small" onClick={() => setConn(defaultConn(n))}>Reset arrows</button>
+          <div className="field" style={{ maxWidth: 280 }}>
+            <label>Flow arrows (parts movement)</label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="small" onClick={() => { setMode(m => m === 'draw' ? 'move' : 'draw'); setPendingSrc(null); }}
+                style={mode === 'draw' ? { background: '#1a56b0', color: '#fff', borderColor: '#1a56b0' } : undefined}>
+                {mode === 'draw' ? '✏️ Drawing — click 2 boxes' : '✏️ Draw arrows'}</button>
+              <button className="small" onClick={() => setConn(defaultConn(n))}>Reset</button>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="card" style={{ padding: 8 }}>
         <svg ref={svgRef} viewBox={`0 0 ${FW} ${FH}`} className="layout-svg"
-          style={{ width: '100%', display: 'block', background: '#eef1f5', borderRadius: 8, touchAction: 'none' }}
-          onPointerMove={onMove} onPointerUp={() => setDrag(null)} onPointerLeave={() => setDrag(null)}>
+          style={{ width: '100%', display: 'block', background: '#eef1f5', borderRadius: 8, touchAction: 'none', cursor: mode === 'draw' ? 'crosshair' : 'default' }}
+          onPointerMove={onMove} onPointerUp={() => setDrag(null)} onPointerLeave={() => setDrag(null)}
+          onClick={e => { if (mode === 'draw' && e.target === svgRef.current) setPendingSrc(null); }}>
           <defs>
             <marker id="flowArrow" markerWidth="5" markerHeight="5" refX="3.6" refY="2" orient="auto">
               <path d="M0,0 L4,2 L0,4 Z" fill="#1a56b0" />
@@ -251,18 +272,30 @@ export default function Layout() {
             for (const c of carts) { const d = dist(s, c); if (d < bd) { bd = d; best = c; } }
             return <line key={i} x1={s.x} y1={s.y} x2={best.x} y2={best.y} stroke="#d2762a" strokeWidth="0.05" strokeDasharray="0.4 0.3" opacity="0.65" />;
           })}
-          {/* flow arrows between stations / to finished goods */}
+          {/* flow arrows between stations / to finished goods — click to delete */}
           {arrows.map(a => (
-            <line key={a.key} x1={a.p1[0]} y1={a.p1[1]} x2={a.p2[0]} y2={a.p2[1]}
-              stroke="#1a56b0" strokeWidth="0.11" opacity="0.85" markerEnd="url(#flowArrow)" />
+            <g key={a.key} style={{ cursor: 'pointer' }}
+              onClick={e => { e.stopPropagation(); removeEdge(a.src, a.tg); }}
+              onPointerEnter={() => setHoverArrow(a.key)} onPointerLeave={() => setHoverArrow(h => h === a.key ? null : h)}>
+              <line x1={a.p1[0]} y1={a.p1[1]} x2={a.p2[0]} y2={a.p2[1]} stroke="transparent" strokeWidth="0.55" />
+              <line x1={a.p1[0]} y1={a.p1[1]} x2={a.p2[0]} y2={a.p2[1]}
+                stroke={hoverArrow === a.key ? '#b3261e' : '#1a56b0'} strokeWidth={hoverArrow === a.key ? 0.17 : 0.11}
+                opacity="0.9" markerEnd="url(#flowArrow)" />
+              <title>Click to delete this arrow</title>
+            </g>
           ))}
+          {/* ghost line while drawing */}
+          {mode === 'draw' && pendingSrc && nodeC(pendingSrc) && (
+            <line x1={nodeC(pendingSrc).x} y1={nodeC(pendingSrc).y} x2={drawCursor.x} y2={drawCursor.y}
+              stroke="#2f7d52" strokeWidth="0.1" strokeDasharray="0.3 0.3" markerEnd="url(#flowArrow)" pointerEvents="none" />
+          )}
           {/* stations */}
           {stations.map((s, i) => {
             const ppl = peopleOf(i);
             return (
-              <g key={i} style={{ cursor: 'grab' }} onPointerDown={e => startDrag('station', i, e)}>
+              <g key={i} style={{ cursor: mode === 'draw' ? 'crosshair' : 'grab' }} onPointerDown={e => onNodeDown('s' + i, 'station', i, e)}>
                 <rect x={s.x - SW / 2} y={s.y - SH / 2} width={SW} height={SH} rx="0.18"
-                  fill="#ffffff" stroke="#1d3a66" strokeWidth="0.08" />
+                  fill="#ffffff" stroke={pendingSrc === 's' + i ? '#2f7d52' : '#1d3a66'} strokeWidth={pendingSrc === 's' + i ? 0.18 : 0.08} />
                 <rect x={s.x - SW / 2} y={s.y - SH / 2} width={SW} height={0.46} rx="0.18" fill="#1d3a66" />
                 <text x={s.x - SW / 2 + 0.18} y={s.y - SH / 2 + 0.34} fontSize="0.34" fontWeight="700" fill="#fff">STATION {i + 1}</text>
                 <text x={s.x + SW / 2 - 0.18} y={s.y - SH / 2 + 0.34} textAnchor="end" fontSize="0.34" fontWeight="700" fill="#cfe0ff">{ppl}👤</text>
@@ -273,8 +306,8 @@ export default function Layout() {
             );
           })}
           {/* finished goods */}
-          <g style={{ cursor: 'grab' }} onPointerDown={e => startDrag('fg', 0, e)}>
-            <rect x={fg.x - SW / 2} y={fg.y - SH / 2} width={SW} height={SH} rx="0.18" fill="#eaf7ef" stroke="#2f7d52" strokeWidth="0.09" />
+          <g style={{ cursor: mode === 'draw' ? 'crosshair' : 'grab' }} onPointerDown={e => onNodeDown('fg', 'fg', 0, e)}>
+            <rect x={fg.x - SW / 2} y={fg.y - SH / 2} width={SW} height={SH} rx="0.18" fill="#eaf7ef" stroke="#2f7d52" strokeWidth={pendingSrc === 'fg' ? 0.18 : 0.09} />
             <rect x={fg.x - SW / 2} y={fg.y - SH / 2} width={SW} height={0.46} rx="0.18" fill="#2f7d52" />
             <text x={fg.x} y={fg.y - SH / 2 + 0.34} textAnchor="middle" fontSize="0.34" fontWeight="700" fill="#fff">FINISHED GOODS</text>
             <text x={fg.x} y={fg.y + 0.3} textAnchor="middle" fontSize="0.5" fontWeight="800" fill="#1f4d33">📦</text>
@@ -290,7 +323,7 @@ export default function Layout() {
           ))}
         </svg>
         <p className="muted" style={{ fontSize: 12, margin: '8px 4px 0' }}>
-          Drag stations, the cart and Finished Goods to test arrangements. Blue arrows = material flow (edit below). Orange = each station to its nearest cart. Layout saved per product on this computer.
+          <b>Move mode:</b> drag stations, the cart and Finished Goods. <b>Draw arrows:</b> click the button, then click a box and the box it feeds (click Finished Goods to end there). <b>Delete</b> an arrow by clicking it. Blue arrows = parts movement; orange = each station to its nearest cart. Saved per product on this computer.
         </p>
       </div>
 
