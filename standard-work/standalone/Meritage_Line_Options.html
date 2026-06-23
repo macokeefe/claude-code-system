@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Meritage — Line Options Comparison</title>
+<style>
+  :root{--ink:#16181b;--navy:#15263a;--muted:#5d6b78;--line:#e4e2db;--good:#2f7d52;--bad:#b3502e;--accent:#1a56b0}
+  *{box-sizing:border-box}
+  body{margin:0;background:#f1efe9;color:var(--ink);font-family:"Inter","Segoe UI",Arial,sans-serif;padding:24px}
+  .wrap{max-width:1240px;margin:0 auto}
+  h1{font-size:22px;color:var(--navy);margin:0 0 2px}
+  .sub{color:var(--muted);font-size:13.5px;margin:0 0 18px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.05),0 8px 22px rgba(0,0,0,.05);padding:16px 18px;margin-bottom:18px}
+  label{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px}
+  input{border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:13.5px;font-family:inherit}
+  input:focus{outline:0;border-color:var(--accent)}
+  .settings{display:flex;gap:18px;align-items:flex-end;flex-wrap:wrap}
+  .takt{font-size:14px}.takt b{font-size:22px;color:var(--navy)}
+  .opts{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  @media(max-width:980px){.opts{grid-template-columns:1fr}}
+  .opt{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.05);padding:14px;border-top:3px solid var(--accent)}
+  .opt h3 input{font-size:15px;font-weight:700;color:var(--navy);border:0;border-bottom:1px dashed transparent;width:100%;padding:2px 0}
+  .opt h3 input:hover,.opt h3 input:focus{border-bottom-color:var(--line)}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;margin:8px 0}
+  th{text-align:left;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.04em;padding:3px 4px;border-bottom:1px solid var(--line)}
+  td{padding:2px 4px;border-bottom:1px solid #f1efe9}
+  td input{width:100%;border:1px solid transparent;background:transparent}
+  td input:hover,td input:focus{border-color:var(--line);background:#fff}
+  td.num input{text-align:right}
+  .x{cursor:pointer;color:#c2bdb2;border:0;background:none;font-size:14px}
+  .x:hover{color:var(--bad)}
+  .addbtn{font-size:12px;background:#f4f6f8;border:1px solid var(--line);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--accent)}
+  .metrics{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+  .met{background:#faf9f6;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+  .met .v{font-size:20px;font-weight:800;color:var(--navy);font-variant-numeric:tabular-nums}
+  .met .v .u{font-size:11px;font-weight:600;color:var(--muted)}
+  .met .l{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
+  .badge{display:inline-block;font-size:11px;font-weight:700;border-radius:5px;padding:2px 8px;margin-top:8px}
+  .badge.ok{background:#eaf7ef;color:var(--good)} .badge.no{background:#fbeee9;color:var(--bad)}
+  .toolrow{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .mini{font-size:11px;color:var(--muted)}
+  svg{width:100%;height:auto;display:block}
+  .note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Meritage 3-Seater — Line Options Comparison</h1>
+  <p class="sub">Edit your current setup and the alternatives. Each option's throughput is set by its busiest station. Times in minutes; a station's work is assumed shareable among its people.</p>
+
+  <div class="card">
+    <div class="settings">
+      <div><label>Demand (units/day)</label><input id="demand" type="number" min="1" value="10" style="width:120px"></div>
+      <div><label>Working hours/day</label><input id="hours" type="number" min="1" step="0.5" value="7" style="width:120px"></div>
+      <div class="takt">Takt time → <b id="taktVal">42</b> min/unit <span class="mini">(the pace you must hit)</span></div>
+    </div>
+  </div>
+
+  <div class="opts" id="opts"></div>
+
+  <div class="card">
+    <div class="toolrow"><h3 style="margin:0;color:var(--navy);font-size:15px">Side-by-side</h3><button class="addbtn" id="addOpt">＋ Add option (copy last)</button></div>
+    <div id="chart"></div>
+    <div id="summary"></div>
+    <p class="note"><b>How it's computed:</b> cycle time = the busiest station's per-person time (work split among its people); throughput = working minutes ÷ cycle; efficiency = total labor ÷ (operators × cycle). We verified the feeder plan has no mid-build stall (Seat frame gates the start, and everything else is ready by then), so steady-state throughput is set by the bottleneck station — which is what this compares.</p>
+  </div>
+</div>
+
+<script>
+"use strict";
+var state = {
+  demand: 10, hours: 7,
+  options: [
+    { name: 'Current (2-person cell)', stations: [ {name:'Whole chair (assemble + pack)', min:272, people:2} ] },
+    { name: 'Feeder cells (our sketch)', stations: [
+      {name:'Connectors', min:19.25, people:1},
+      {name:'Arms', min:64, people:2},
+      {name:'Back frame', min:43.5, people:1},
+      {name:'Trellis', min:22.5, people:1},
+      {name:'Seat frame', min:47, people:1},
+      {name:'Full assembly + pack', min:76, people:2},
+    ]},
+    { name: 'Balanced line (7-op)', stations: [
+      {name:'S1 (steps 2-4)', min:33, people:1},
+      {name:'S2 Arms (2-up)', min:64, people:2},
+      {name:'S3 Seat frame pt', min:41, people:1},
+      {name:'S4 Seat+Back', min:39.5, people:1},
+      {name:'S5 Back+attach', min:41, people:1},
+      {name:'S6 Finish+pack', min:41.5, people:1},
+    ]},
+  ]
+};
+var COLORS = ['#5d6b78','#c98a2e','#2f7d52','#1a56b0','#7a5230','#8a3f6b'];
+function fmt(n,d){d=d==null?1:d;return (Math.round(n*Math.pow(10,d))/Math.pow(10,d)).toString();}
+function avail(){return state.hours*60;}
+function takt(){return state.demand>0?avail()/state.demand:0;}
+function metrics(opt){
+  const pp = opt.stations.map(s=>s.min/Math.max(1,s.people||1));
+  const cycle = pp.length?Math.max.apply(null,pp):0;
+  const ops = opt.stations.reduce((a,s)=>a+(+s.people||0),0);
+  const labor = opt.stations.reduce((a,s)=>a+(+s.min||0),0);
+  const day = cycle>0?avail()/cycle:0;
+  const eff = (ops*cycle>0)?labor/(ops*cycle):0;
+  const bni = pp.indexOf(cycle);
+  return {cycle, ops, labor, day, eff, bottleneck:opt.stations[bni], meets:cycle>0&&cycle<=takt()+1e-9};
+}
+function el(t,a,h){var e=document.createElement(t);if(a)for(var k in a){if(k==='class')e.className=a[k];else e.setAttribute(k,a[k]);}if(h!=null)e.innerHTML=h;return e;}
+
+function render(){
+  document.getElementById('taktVal').textContent = fmt(takt(),1);
+  // option cards
+  var host = document.getElementById('opts'); host.innerHTML='';
+  state.options.forEach(function(opt,oi){
+    var m = metrics(opt);
+    var card = el('div',{class:'opt'});
+    card.style.borderTopColor = COLORS[oi%COLORS.length];
+    // title
+    var h3 = el('h3'); var ti = el('input',{type:'text',value:opt.name}); ti.onchange=function(){opt.name=this.value;render();}; h3.appendChild(ti); card.appendChild(h3);
+    // table
+    var tbl = el('table');
+    tbl.innerHTML = '<tr><th>Station</th><th style="width:64px">Min</th><th style="width:60px">People</th><th style="width:24px"></th></tr>';
+    opt.stations.forEach(function(s,si){
+      var tr = el('tr');
+      var c1=el('td'); var i1=el('input',{type:'text',value:s.name}); i1.onchange=function(){s.name=this.value;}; c1.appendChild(i1);
+      var c2=el('td',{class:'num'}); var i2=el('input',{type:'number',step:'0.25',value:s.min}); i2.onchange=function(){s.min=parseFloat(this.value)||0;render();}; c2.appendChild(i2);
+      var c3=el('td',{class:'num'}); var i3=el('input',{type:'number',min:'1',value:s.people}); i3.onchange=function(){s.people=Math.max(1,parseInt(this.value,10)||1);render();}; c3.appendChild(i3);
+      var c4=el('td'); var bx=el('button',{class:'x',title:'remove'},'✕'); bx.onclick=function(){opt.stations.splice(si,1);render();}; c4.appendChild(bx);
+      tr.appendChild(c1);tr.appendChild(c2);tr.appendChild(c3);tr.appendChild(c4); tbl.appendChild(tr);
+    });
+    card.appendChild(tbl);
+    var add = el('button',{class:'addbtn'},'＋ Add station'); add.onclick=function(){opt.stations.push({name:'New station',min:10,people:1});render();}; card.appendChild(add);
+    // metrics
+    var mt = el('div',{class:'metrics'});
+    mt.appendChild(el('div',{class:'met'},'<div class="v">'+fmt(m.cycle,1)+'<span class="u">min</span></div><div class="l">Cycle (bottleneck)</div>'));
+    mt.appendChild(el('div',{class:'met'},'<div class="v">'+fmt(m.day,1)+'<span class="u">/day</span></div><div class="l">Capacity</div>'));
+    mt.appendChild(el('div',{class:'met'},'<div class="v">'+m.ops+'</div><div class="l">Operators</div>'));
+    mt.appendChild(el('div',{class:'met'},'<div class="v">'+fmt(m.eff*100,0)+'<span class="u">%</span></div><div class="l">Line efficiency</div>'));
+    card.appendChild(mt);
+    var bb = el('div',{class:'badge '+(m.meets?'ok':'no')}, m.meets?('✓ meets takt — '+fmt(m.day,1)+'/day ≥ '+state.demand):('✗ misses takt — '+fmt(m.day,1)+'/day < '+state.demand));
+    card.appendChild(bb);
+    if(m.bottleneck) card.appendChild(el('div',{class:'mini',style:'margin-top:6px'},'Bottleneck: '+(m.bottleneck.name||'?')+' ('+fmt(m.bottleneck.min/Math.max(1,m.bottleneck.people),1)+' min/unit)'));
+    if(m.ops>0) card.appendChild(el('div',{class:'mini'},fmt(m.day/m.ops,2)+' units per operator-day'));
+    host.appendChild(card);
+  });
+  renderChart();
+  renderSummary();
+}
+
+function renderChart(){
+  var ms = state.options.map(metrics);
+  var maxDay = Math.max(state.demand, Math.max.apply(null,ms.map(function(m){return m.day;})), 1)*1.15;
+  var W=720,H=210,padL=46,padR=14,padT=14,padB=46,plotW=W-padL-padR,plotH=H-padT-padB;
+  var n=ms.length, bw=plotW/n, barW=Math.min(90,bw*0.5);
+  var base=padT+plotH, scale=plotH/maxDay;
+  var s='<svg viewBox="0 0 '+W+' '+H+'">';
+  for(var g=0;g<=4;g++){var v=maxDay*g/4,y=base-v*scale; s+='<line x1="'+padL+'" y1="'+y+'" x2="'+(W-padR)+'" y2="'+y+'" stroke="#eef0ea"/><text x="'+(padL-6)+'" y="'+(y+3)+'" text-anchor="end" font-size="9" fill="#9aa3ad">'+fmt(v,0)+'</text>';}
+  // demand line
+  var dy=base-state.demand*scale; s+='<line x1="'+padL+'" y1="'+dy+'" x2="'+(W-padR)+'" y2="'+dy+'" stroke="#b3502e" stroke-width="1.4" stroke-dasharray="5 4"/><text x="'+(W-padR)+'" y="'+(dy-4)+'" text-anchor="end" font-size="10" font-weight="700" fill="#b3502e">demand '+state.demand+'/day</text>';
+  ms.forEach(function(m,i){
+    var cx=padL+bw*i+bw/2, x=cx-barW/2, h=m.day*scale, y=base-h;
+    s+='<rect x="'+x+'" y="'+y+'" width="'+barW+'" height="'+Math.max(0,h)+'" rx="3" fill="'+COLORS[i%COLORS.length]+'"/>';
+    s+='<text x="'+cx+'" y="'+(y-5)+'" text-anchor="middle" font-size="12" font-weight="800" fill="#15263a">'+fmt(m.day,1)+'/day</text>';
+    s+='<text x="'+cx+'" y="'+(base+16)+'" text-anchor="middle" font-size="10" fill="#41506a">'+(state.options[i].name.slice(0,22))+'</text>';
+    s+='<text x="'+cx+'" y="'+(base+30)+'" text-anchor="middle" font-size="9.5" fill="#9aa3ad">'+m.ops+' ops · '+fmt(m.eff*100,0)+'%</text>';
+  });
+  s+='</svg>';
+  document.getElementById('chart').innerHTML=s;
+}
+function renderSummary(){
+  var rows = state.options.map(function(o){var m=metrics(o);return '<tr><td style="font-weight:600">'+o.name+'</td><td class="num">'+fmt(m.cycle,1)+'</td><td class="num">'+fmt(m.day,1)+'</td><td class="num">'+m.ops+'</td><td class="num">'+fmt(m.day/Math.max(1,m.ops),2)+'</td><td class="num">'+fmt(m.eff*100,0)+'%</td><td>'+(m.meets?'<span style="color:#2f7d52;font-weight:700">✓</span>':'<span style="color:#b3502e;font-weight:700">✗</span>')+'</td></tr>';}).join('');
+  document.getElementById('summary').innerHTML='<table style="margin-top:14px"><tr><th>Option</th><th class="num">Cycle</th><th class="num">Units/day</th><th class="num">Operators</th><th class="num">Units/op-day</th><th class="num">Efficiency</th><th>Takt</th></tr>'+rows+'</table>';
+}
+
+document.getElementById('demand').onchange=function(){state.demand=Math.max(1,parseInt(this.value,10)||1);render();};
+document.getElementById('hours').onchange=function(){state.hours=Math.max(0.5,parseFloat(this.value)||7);render();};
+document.getElementById('addOpt').onclick=function(){var last=state.options[state.options.length-1];state.options.push({name:last.name+' (copy)',stations:last.stations.map(function(s){return {name:s.name,min:s.min,people:s.people};})});render();};
+render();
+</script>
+</body>
+</html>
