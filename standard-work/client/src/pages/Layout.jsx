@@ -215,6 +215,16 @@ export default function Layout() {
     setCarts([{ x: 15, y: 1.5 }]);
     setFg({ x: 15, y: 13.8 }); setFgName('Furniture'); setFgPpl(0);
     setConn({ c0: ['s0', 's1', 's2', 's3', 's4'], s0: ['s1', 's2', 's3'], s1: ['s5'], s2: ['s5'], s3: ['s5'], s4: ['s5'], s5: ['fg'] });
+    // also configure the line so the 3D Floor & Line Designer show this plan
+    try {
+      if (detail && detail.steps) {
+        const seqToStation = { 1: 0, 2: 0, 3: 5, 4: 1, 5: 4, 6: 2, 7: 5, 8: 5, 9: 5, 10: 3, 11: 5, 12: 5 };
+        const stPeople = [1, 2, 1, 1, 1, 2];
+        const assign = {}, workers = {};
+        detail.steps.forEach(s => { const st = seqToStation[s.sequence] != null ? seqToStation[s.sequence] : 5; assign[s.id] = st; workers[s.id] = stPeople[st] || 1; });
+        localStorage.setItem(`sw-line-${skuId}`, JSON.stringify({ assign, workers, stationCount: 6 }));
+      }
+    } catch { /* ignore */ }
   }
 
   // node geometry by key ('s'=station, 'c'=cart, 'fg'=finished goods)
