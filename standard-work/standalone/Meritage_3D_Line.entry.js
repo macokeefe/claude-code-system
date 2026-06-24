@@ -480,7 +480,7 @@ cartPad.position.set(CART_DEF[0], 0, CART_DEF[1]); level2.add(cartPad);
 
 // pool of physical carts moved by the elevator/queue state machine
 const EL = [-17.5, 6];                 // elevator column (level2-local x,z)
-const MAXQ = 3, LIFT = 4.0, ROLL = 5.0;   // up to 3 carts up at once; lift/roll speeds
+const MAXQ = 3, LIFT_PM = 14;          // up to 3 carts up at once; elevator speed in units per sim-minute
 let CART_UNITS = 1;                     // each cart carries the materials for one sofa
 const cartPool = [];
 for (let i = 0; i < 3; i++) { const c = makePartsCart(); c.scale.set(1.4, 1.3, 1.4); c.visible = false; level2.add(c); cartPool.push({ mesh: c, state: 'down', slot: -1, remaining: 0 }); }
@@ -930,8 +930,8 @@ function update(){
 }
 
 /* ============ CART LOGISTICS (queue + elevator, along the editable path) ============ */
-function easeD(o, target, dt) {                 // move a cart along the path by arc-distance
-  const step = ROLL * dt;
+function easeD(o, target, dt) {                 // move a cart along the path; dt is in sim-minutes
+  const step = (walkSpeed * YARD) * dt;         // pushed at walking speed (walkSpeed yd/min)
   if (Math.abs(target - o.d) <= step) o.d = target; else o.d += Math.sign(target - o.d) * step;
   const [x, z] = pointAtDist(o.d); o.mesh.position.set(x, 0, z);
   return o.d === target;
@@ -945,7 +945,7 @@ function updateCarts(dt) {
   }
   for (const o of cartPool) {
     if (o.state === 'rising') {
-      carY = Math.min(FLOOR2, carY + LIFT * dt);
+      carY = Math.min(FLOOR2, carY + LIFT_PM * dt);
       o.mesh.position.set(EL[0], carY - FLOOR2, EL[1]);
       if (carY >= FLOOR2) {
         const used = new Set(cartPool.filter(c => c !== o && ['toslot','queued','active'].includes(c.state)).map(c => c.slot));
@@ -961,7 +961,7 @@ function updateCarts(dt) {
     } else if (o.state === 'leaving') {
       if (easeD(o, 0, dt) && !elevBusy) { o.state = 'descending'; elevBusy = true; carY = FLOOR2; }
     } else if (o.state === 'descending') {
-      carY = Math.max(0.4, carY - LIFT * dt);
+      carY = Math.max(0.4, carY - LIFT_PM * dt);
       o.mesh.position.set(EL[0], carY - FLOOR2, EL[1]);
       if (carY <= 0.4) { o.state = 'down'; o.slot = -1; o.remaining = 0; o.mesh.visible = false; elevBusy = false; }
     }
@@ -1001,11 +1001,12 @@ ro.observe(mount);
 let last = performance.now();
 function loop(now){
   const dt = (now - last) / 1000; last = now;
+  const dsim = playing ? dt * parseFloat(speed.value) : 0;   // sim-minutes elapsed this frame
   if (playing) {
-    T += dt * parseFloat(speed.value);
+    T += dsim;
     if (T >= horizon) { T = horizon; setPlay(false); }
   }
-  updateCarts(dt);
+  updateCarts(dsim);   // carts move in sim-time so their speed scales with the line
   update();
   controls.update();
   renderer.render(scene, camera);
