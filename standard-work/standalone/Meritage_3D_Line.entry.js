@@ -298,7 +298,7 @@ function makeShipBox() {
 /* =========================== SIMULATION =========================== */
 const ST = [
   { id:'con', title:'CONNECTORS',   sub:'Connectors',   ppl:1, t:19.25, role:'feeder', kind:'connectors', accent:'#1d3a66' },
-  { id:'arm', title:'ARMS',         sub:'Arm assembly', ppl:2, t:32,    role:'feeder', kind:'arm',        accent:'#1d3a66' },
+  { id:'arm', title:'ARMS',         sub:'Arm assembly', ppl:2, t:32,    role:'feeder', kind:'arm',        accent:'#1d3a66', double:true },
   { id:'bak', title:'BACK FRAME',   sub:'Back frame',   ppl:1, t:43.5,  role:'feeder', kind:'back',       accent:'#1d3a66' },
   { id:'tre', title:'TRELLIS',      sub:'Trellis',      ppl:1, t:22.5,  role:'feeder', kind:'trellis',    accent:'#1d3a66' },
   { id:'sea', title:'SEAT FRAME',   sub:'Seat frame',   ppl:1, t:47,    role:'feeder', kind:'seat',       accent:'#9a3b1f', bot:true },
@@ -527,10 +527,17 @@ const crew = []; // {fig, station, homeX, homeZ}
 
 ST.forEach(s => {
   const [x, z] = POS[s.id];
-  const wide = (s.role === 'fa');
-  const { st, led } = makeBench(wide);
+  let st, led;
+  if (s.double) {                                  // two benches joined end-to-end (length-wise)
+    const g = new THREE.Group();
+    const b1 = makeBench(), b2 = makeBench();
+    b1.st.position.x = -1.35; b2.st.position.x = 1.35;   // share the inner edge -> one long bench
+    g.add(b1.st, b2.st);
+    st = g; led = [b1.led, b2.led];
+  } else {
+    const r = makeBench(s.role === 'fa'); st = r.st; led = r.led;
+  }
   st.position.set(x, 0, z);
-  if (s.role === 'fa') st.rotation.y = 0; // faces aisle
   level2.add(st);
   const label = makeStationLabel(s.title, s.sub, s.t ? s.t + ' min' : '—', s.accent);
   label.position.set(x, 2.85, z); level2.add(label);
@@ -548,7 +555,8 @@ ST.forEach(s => {
   for (let i = 0; i < np; i++) {
     const color = OP_COLORS[opColorIdx % OP_COLORS.length]; opColorIdx++;
     const fig = makeCrewFigure(color, s.title.split(' ')[0] + (np>1?(' '+(i+1)):''));
-    const ox = x + (np > 1 ? (i - (np-1)/2) * 1.1 : 0);
+    const spread = s.double ? 1.35 : 1.1;          // one operator per table on the double bench
+    const ox = x + (np > 1 ? (i - (np-1)/2) * 2 * spread : 0);
     const oz = z + 1.7;
     fig.position.set(ox, 0, oz);
     level2.add(fig);
@@ -654,7 +662,8 @@ function setStationPos(id, x, z) {
   if (nd.mini) { nd.mini.position.x = x; nd.mini.position.z = z; }
   if (nd.visual) { nd.visual.g.position.x = x; nd.visual.g.position.z = z; }
   const cs = crew.filter(c => c.station === id); const np = cs.length;
-  cs.forEach((c, i) => { c.homeX = x + (np > 1 ? (i - (np - 1) / 2) * 1.1 : 0); c.homeZ = z + 1.7;
+  const spread = (nd.s && nd.s.double) ? 1.35 : 1.1;
+  cs.forEach((c, i) => { c.homeX = x + (np > 1 ? (i - (np - 1) / 2) * 2 * spread : 0); c.homeZ = z + 1.7;
     if (!editing) { c.fig.position.x = c.homeX; c.fig.position.z = c.homeZ; } });
 }
 function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
@@ -850,7 +859,7 @@ document.getElementById('delLayout').onclick = () => {
 refreshLayoutSel();
 
 /* =========================== UPDATE =========================== */
-function setLed(mat, state, active){ mat.color.setHex(RING[state]); mat.emissive.setHex(state==='idle'?0x000000:RING[state]); mat.emissiveIntensity = active?1.1:0.5; }
+function setLed(mat, state, active){ (Array.isArray(mat)?mat:[mat]).forEach(m=>{ m.color.setHex(RING[state]); m.emissive.setHex(state==='idle'?0x000000:RING[state]); m.emissiveIntensity = active?1.1:0.5; }); }
 
 function update(){
   if (!sch) return;
