@@ -480,10 +480,11 @@ cartPad.position.set(CART_DEF[0], 0, CART_DEF[1]); level2.add(cartPad);
 
 // pool of physical carts moved by the elevator/queue state machine
 const EL = [-17.5, 6];                 // elevator column (level2-local x,z)
-const MAXQ = 3, USE_TIME = 18, LIFT = 4.0, ROLL = 5.0;   // up to 3 carts; sec a cart lasts; lift/roll speeds
+const MAXQ = 3, LIFT = 4.0, ROLL = 5.0;   // up to 3 carts up at once; lift/roll speeds
+let CART_UNITS = 4;                     // chairs' worth of material per cart
 const cartPool = [];
-for (let i = 0; i < 3; i++) { const c = makePartsCart(); c.scale.set(1.4, 1.3, 1.4); c.visible = false; level2.add(c); cartPool.push({ mesh: c, state: 'down', slot: -1, t: 0 }); }
-let elevBusy = false, carY = 0.4;
+for (let i = 0; i < 3; i++) { const c = makePartsCart(); c.scale.set(1.4, 1.3, 1.4); c.visible = false; level2.add(c); cartPool.push({ mesh: c, state: 'down', slot: -1, remaining: 0 }); }
+let elevBusy = false, carY = 0.4, lastConsumed = 0, lastSimT = 0;
 
 // ---- editable cart PATH: elevator -> waypoints -> cart spot (so carts route around stations) ----
 let cartWaypoints = [];            // [{x,z}] user-editable
@@ -621,7 +622,8 @@ const timeBox = document.getElementById('times');
 const moveCtl = document.createElement('div'); moveCtl.className = 'movectl';
 moveCtl.innerHTML = `<label class="mck"><input type="checkbox" id="walkOn" checked/> add walk time (by distance)</label>
   <div class="mrow">Walk speed <input type="number" id="walkSpeed" value="60" min="10" step="5"/> yd/min</div>
-  <div class="mrow">Trips / unit <input type="number" id="trips" value="1" min="0" step="0.5"/></div>`;
+  <div class="mrow">Trips / unit <input type="number" id="trips" value="1" min="0" step="0.5"/></div>
+  <div class="mrow">Cart holds <input type="number" id="cartUnits" value="4" min="1" step="1"/> chairs</div>`;
 timeBox.appendChild(moveCtl);
 ST.forEach(s => {
   const row = document.createElement('div'); row.className = 'trow';
@@ -638,6 +640,7 @@ timeBox.querySelectorAll('input[data-id]').forEach(inp => inp.onchange = e => {
 document.getElementById('walkOn').onchange = e => { walkOn = e.target.checked; schedule(); T = 0; setPlay(false); };
 document.getElementById('walkSpeed').onchange = e => { walkSpeed = Math.max(10, parseFloat(e.target.value) || 60); schedule(); T = 0; setPlay(false); };
 document.getElementById('trips').onchange = e => { tripsPerUnit = Math.max(0, parseFloat(e.target.value) || 0); schedule(); T = 0; setPlay(false); };
+document.getElementById('cartUnits').onchange = e => { CART_UNITS = Math.max(1, parseInt(e.target.value) || 4); };
 
 /* =========================== EDIT LAYOUT =========================== */
 const YARD = 0.9144;                       // 1 unit = 1 metre; 1 yard = 0.9144 m
@@ -950,28 +953,39 @@ function updateCarts(dt) {
         o.slot = s; o.d = 0; o.state = 'toslot'; elevBusy = false;     // step onto the path at the elevator end
       }
     } else if (o.state === 'toslot') {
-      if (easeD(o, slotDist(o.slot), dt)) o.state = (o.slot === 0 ? 'active' : 'queued');
+      if (easeD(o, slotDist(o.slot), dt)) { o.state = (o.slot === 0 ? 'active' : 'queued'); if (o.state === 'active') o.remaining = CART_UNITS; }
     } else if (o.state === 'queued') {
       easeD(o, slotDist(o.slot), dt);
     } else if (o.state === 'active') {
-      easeD(o, slotDist(0), dt);
-      o.t += dt;
-      if (o.t >= USE_TIME) {
-        o.state = 'leaving';
-        cartPool.forEach(c => { if (['queued','active'].includes(c.state) && c !== o && c.slot > 0) c.slot -= 1; });
-      }
+      easeD(o, slotDist(0), dt);          // depletion is driven by real material consumption (below), not a timer
     } else if (o.state === 'leaving') {
       if (easeD(o, 0, dt) && !elevBusy) { o.state = 'descending'; elevBusy = true; carY = FLOOR2; }
     } else if (o.state === 'descending') {
       carY = Math.max(0.4, carY - LIFT * dt);
       o.mesh.position.set(EL[0], carY - FLOOR2, EL[1]);
-      if (carY <= 0.4) { o.state = 'down'; o.slot = -1; o.t = 0; o.mesh.visible = false; elevBusy = false; }
+      if (carY <= 0.4) { o.state = 'down'; o.slot = -1; o.remaining = 0; o.mesh.visible = false; elevBusy = false; }
     }
   }
   if (!cartPool.some(o => o.state === 'active')) {
     const front = cartPool.find(o => o.state === 'queued' && o.slot === 0);
-    if (front) { front.state = 'active'; front.t = 0; }
+    if (front) { front.state = 'active'; front.remaining = CART_UNITS; }
   }
+  // ---- consumption: a cart leaves only when its material is actually used up ----
+  // a chair's worth of material is drawn from the cart when its kit is formed (all feeder parts ready)
+  let consumed = 0; if (sch) for (let u = 0; u < N; u++) if (T >= sch.kit[u]) consumed++;
+  if (T < lastSimT) lastConsumed = consumed;     // clock was reset/seeked backward
+  lastSimT = T;
+  let delta = consumed - lastConsumed;
+  while (delta > 0) {
+    const act = cartPool.find(o => o.state === 'active');
+    if (!act) break;                             // no active cart yet — hold the count until one is ready
+    act.remaining -= 1; delta -= 1;
+    if (act.remaining <= 0) {                     // this cart's material is used up -> it leaves
+      act.state = 'leaving';
+      cartPool.forEach(c => { if (['queued','active'].includes(c.state) && c !== act && c.slot > 0) c.slot -= 1; });
+    }
+  }
+  lastConsumed = consumed - delta;               // any units not yet drawn (no active cart) stay pending
   elevator.car.position.y = carY;
   elevator.crate.visible = false;
 }
