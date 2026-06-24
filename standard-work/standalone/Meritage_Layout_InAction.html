@@ -24,16 +24,16 @@
 <body>
 <div class="wrap">
   <h1>Meritage 3-Seater — our layout, in action</h1>
-  <p class="sub">Steady-state on a 47-min unit cycle. Watch the feeders fill, Full Assembly start once the kit is ready, then flip to packing — and where the idle sits.</p>
+  <p class="sub">One unit, walked through. Feeders build in parallel; <b>Full Assembly waits</b> until Seat frame + an Arm (or Back frame) are done, then assembles, then packs. (In steady state units overlap → one finishes every 47 min.)</p>
 
   <div class="bar">
     <button id="play">▶ Play</button>
     <button id="reset" class="sec">↺ Reset</button>
     <div>Speed <input id="speed" type="range" min="2" max="40" value="14"><span id="spd" class="stat" style="font-size:12px;color:#9aa7b4"> </span></div>
     <div class="spacer" style="flex:1"></div>
-    <div class="stat"><b id="clock">0.0</b><div class="l">min into cycle</div></div>
-    <div class="stat"><b id="units">0</b><div class="l">units done</div></div>
-    <div class="stat"><b id="rate">1.28</b><div class="l">units / hour</div></div>
+    <div class="stat"><b id="clock">0.0</b><div class="l">min (unit lead time)</div></div>
+    <div class="stat"><b id="units">0</b><div class="l">units shipped</div></div>
+    <div class="stat"><b id="rate">8.9</b><div class="l">/day (steady-state)</div></div>
   </div>
 
   <svg id="floor" viewBox="0 0 720 470"></svg>
@@ -41,16 +41,17 @@
   <div class="legend">
     <span><i style="background:#1f6feb"></i>Working</span>
     <span><i style="background:#d29922"></i>Seat frame (bottleneck)</span>
+    <span><i style="background:#3d4a5a"></i>Done — part waiting for the kit</span>
+    <span><i style="background:#b3261e"></i>Full Assembly waiting (kit not ready)</span>
     <span><i style="background:#2ea043"></i>Packing</span>
-    <span><i style="background:#30363d"></i>Idle / done — waiting on the cycle</span>
   </div>
-  <p class="note"><b>What to watch:</b> the fast feeders (Connectors, Trellis, Arms, Back frame) finish early and sit <b>idle</b> until the next cycle, while <b>Seat frame</b> runs the full 47 min — it sets the pace. <b>Full Assembly</b> works the kit (~29 min) then switches to <b>packing</b> the previous unit (~18 min), filling its own gap. One finished unit drops every 47 min ≈ <b>9/day</b> (just over the 42-min takt line is what you'd need to hit 10/day → that needs a 2nd hand on Seat frame).</p>
+  <p class="note"><b>What to watch:</b> Full Assembly's box stays <b>red "Waiting"</b> until the start condition is met — <b>Seat frame AND (an Arm or Back frame)</b>. Arms finish at 32 and Back frame at 43.5, but <b>Seat frame is last at 47</b>, so the kit isn't ready until 47 — that's when Full Assembly turns blue and begins. Meanwhile the fast feeders sit <b>"done — waiting"</b>. Then Full Assembly assembles (~29) and flips to <b>packing</b> (~18). Steady-state: one unit every 47 min ≈ <b>9/day</b> (Seat frame paces it; split it 2-up to clear the 42-min takt).</p>
 </div>
 
 <script>
 "use strict";
 var SVGNS='http://www.w3.org/2000/svg';
-var CYCLE=47, ASM=29, PACK=18; // full assembly: 29 assemble + 18 pack = 47
+var BUILD=47, ASM=29, PACK=18, TOTAL=BUILD+ASM+PACK; // kit ready at 47, then assemble 29, pack 18
 var BOXW=128, BOXH=58;
 // stations: x,y = top-left
 var STN=[
@@ -108,23 +109,36 @@ STN.forEach(function(s){
 });
 
 var t=0, playing=false, speed=14, units=0;
-document.getElementById('rate').textContent=(60/CYCLE).toFixed(2);
+document.getElementById('rate').textContent=(420/BUILD).toFixed(1);
 function setFill(id,frac,color){var s=byId[id],f=ui[id].fill;var h=Math.max(0,Math.min(1,frac))*BOXH;f.setAttribute('y',s.y+BOXH-h);f.setAttribute('height',h);f.setAttribute('fill',color);}
 function arrow(srcId,active){['fa'].forEach(function(){});var ln=arrowEls[srcId+'>fa'];if(ln){ln.setAttribute('stroke',active?'#3d6fb0':'#2a323c');ln.setAttribute('marker-end',active?'url(#ah)':'url(#ahf)');}}
 
 function frame(){
- var u=t%CYCLE;
- // feeders
+ var u=t%TOTAL;
+ var seatDone=u>=byId.sea.busy, armDone=u>=byId.arm.busy, backDone=u>=byId.bak.busy;
+ var kitReady = seatDone && (armDone||backDone);
+ // feeders (build phase only; after BUILD they're done & waiting)
  ['con','arm','bak','tre','sea'].forEach(function(id){
-  var s=byId[id];
-  if(u<s.busy){ setFill(id,u/s.busy, s.bottleneck?'#d29922':'#1f6feb'); ui[id].status.textContent='Working '+Math.round(u/s.busy*100)+'%'; ui[id].bg.setAttribute('stroke', s.bottleneck?'#d29922':'#2c3540'); arrow(id,false);}
-  else { setFill(id,1,'#30363d'); ui[id].status.textContent='✓ idle '+(CYCLE-s.busy).toFixed(0)+'m'; ui[id].bg.setAttribute('stroke','#2c3540'); arrow(id,true); }
+  var s=byId[id], done=u>=s.busy;
+  if(!done){ setFill(id,u/s.busy, s.bottleneck?'#d29922':'#1f6feb'); ui[id].status.textContent='Working '+Math.round(u/s.busy*100)+'%'; ui[id].bg.setAttribute('stroke', s.bottleneck?'#d29922':'#2c3540'); arrow(id,false);}
+  else { setFill(id,1,'#3d4a5a'); ui[id].status.textContent='✓ done — waiting'; ui[id].bg.setAttribute('stroke','#2c3540'); arrow(id,true); }
  });
- // full assembly
- if(u<ASM){ setFill('fa',u/ASM,'#1f6feb'); ui.fa.status.textContent='Assembling '+Math.round(u/ASM*100)+'%'; arrowEls['fa>fur'].setAttribute('stroke','#2a323c'); }
- else { setFill('fa',(u-ASM)/PACK,'#2ea043'); ui.fa.status.textContent='Packing '+Math.round((u-ASM)/PACK*100)+'%'; arrowEls['fa>fur'].setAttribute('stroke','#2ea043'); arrowEls['fa>fur'].setAttribute('marker-end','url(#ah)'); }
+ // full assembly: wait for kit, then assemble, then pack
+ var fa=arrowEls['fa>fur'];
+ if(u<BUILD){ // WAITING for the kit
+  setFill('fa',0,'#30363d');
+  ui.fa.status.textContent = kitReady ? 'Kit ready ✓ starting…' : ('Waiting — need '+(!seatDone?'Seat frame':'')+((!seatDone&&!(armDone||backDone))?' + ':'')+(!(armDone||backDone)?'an Arm':''));
+  ui.fa.bg.setAttribute('stroke', kitReady?'#2ea043':'#b3261e');
+  fa.setAttribute('stroke','#2a323c'); fa.setAttribute('marker-end','url(#ahf)');
+ } else if(u<BUILD+ASM){ // ASSEMBLING
+  setFill('fa',(u-BUILD)/ASM,'#1f6feb'); ui.fa.status.textContent='Assembling '+Math.round((u-BUILD)/ASM*100)+'%'; ui.fa.bg.setAttribute('stroke','#2c3540');
+  fa.setAttribute('stroke','#2a323c'); fa.setAttribute('marker-end','url(#ahf)');
+ } else { // PACKING
+  setFill('fa',(u-BUILD-ASM)/PACK,'#2ea043'); ui.fa.status.textContent='Packing '+Math.round((u-BUILD-ASM)/PACK*100)+'%'; ui.fa.bg.setAttribute('stroke','#2c3540');
+  fa.setAttribute('stroke','#2ea043'); fa.setAttribute('marker-end','url(#ah)');
+ }
  // furniture
- setFill('fur', (u/CYCLE), '#1d3a2a'); ui.fur.status.textContent= units+' shipped';
+ setFill('fur', u>=BUILD+ASM ? (u-BUILD-ASM)/PACK : 0, '#1d3a2a'); ui.fur.status.textContent= units+' shipped';
  document.getElementById('clock').textContent=u.toFixed(1);
  document.getElementById('units').textContent=units;
 }
@@ -132,9 +146,9 @@ var last=0;
 function loop(ts){
  if(!playing)return;
  if(!last)last=ts; var dt=(ts-last)/1000; last=ts;
- var prev=Math.floor(t/CYCLE);
+ var prev=Math.floor(t/TOTAL);
  t+=dt*speed;
- if(Math.floor(t/CYCLE)>prev) units+=Math.floor(t/CYCLE)-prev;
+ if(Math.floor(t/TOTAL)>prev) units+=Math.floor(t/TOTAL)-prev;
  frame();
  requestAnimationFrame(loop);
 }
