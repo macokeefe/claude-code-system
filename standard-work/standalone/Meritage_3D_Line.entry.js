@@ -485,6 +485,35 @@ const cartPool = [];
 for (let i = 0; i < 3; i++) { const c = makePartsCart(); c.scale.set(1.4, 1.3, 1.4); c.visible = false; level2.add(c); cartPool.push({ mesh: c, state: 'down', slot: -1, t: 0 }); }
 let elevBusy = false, carY = 0.4;
 
+// ---- editable cart PATH: elevator -> waypoints -> cart spot (so carts route around stations) ----
+let cartWaypoints = [];            // [{x,z}] user-editable
+const pathLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: 0x2e7d4f, dashSize: 0.6, gapSize: 0.35 }));
+pathLine.visible = false; level2.add(pathLine);
+const wpGroup = new THREE.Group(); wpGroup.visible = false; level2.add(wpGroup);
+const WP_MAT = new THREE.MeshStandardMaterial({ color: 0x2e7d4f, roughness: 0.5 });
+function pathPts() { return [[EL[0], EL[1]], ...cartWaypoints.map(w => [w.x, w.z]), [nodes.cart.x, nodes.cart.z]]; }
+function pathTotal() { const p = pathPts(); let t = 0; for (let i = 0; i < p.length - 1; i++) t += Math.hypot(p[i+1][0]-p[i][0], p[i+1][1]-p[i][1]); return t; }
+function pointAtDist(d) {
+  const p = pathPts(); let rem = Math.max(0, d);
+  for (let i = 0; i < p.length - 1; i++) {
+    const L = Math.hypot(p[i+1][0]-p[i][0], p[i+1][1]-p[i][1]);
+    if (rem <= L || i === p.length - 2) { const f = L ? rem / L : 0; return [p[i][0]+(p[i+1][0]-p[i][0])*f, p[i][1]+(p[i+1][1]-p[i][1])*f]; }
+    rem -= L;
+  }
+  return p[p.length - 1];
+}
+function slotDist(i) { return Math.max(0, pathTotal() - i * 2.9); }   // slot 0 = end of path (cart spot)
+function refreshPath() {
+  const p = pathPts(); const arr = [];
+  for (const pt of p) arr.push(pt[0], 0.12, pt[1]);
+  pathLine.geometry.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
+  pathLine.geometry.setDrawRange(0, p.length);
+  pathLine.geometry.computeBoundingSphere();
+  if (pathLine.computeLineDistances) pathLine.computeLineDistances();
+  while (wpGroup.children.length) wpGroup.remove(wpGroup.children[0]);
+  cartWaypoints.forEach((w, i) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.7, 16), WP_MAT); m.position.set(w.x, 0.35, w.z); m.userData.wp = i; wpGroup.add(m); });
+}
+
 /* ---- station layout: feeders in back row, FA + packing in front ---- */
 const OP_COLORS = [0x3a66a8, 0xb9772e, 0x2e7d4f, 0x8f5390, 0xa8923a, 0x3f8f8f, 0x9c4f45, 0x5c5f99];
 const POS = {
@@ -626,8 +655,8 @@ function setStationPos(id, x, z) {
   cs.forEach((c, i) => { c.homeX = x + (np > 1 ? (i - (np - 1) / 2) * 1.1 : 0); c.homeZ = z + 1.7;
     if (!editing) { c.fig.position.x = c.homeX; c.fig.position.z = c.homeZ; } });
 }
-function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
-function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (o) Object.keys(o).forEach(id => { if (nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); } catch (e) {} }
+function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
+function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); Object.keys(o).forEach(id => { if (id !== '__wps' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); } catch (e) {} }
 
 // 1-yard grid on the deck
 function buildGrid() {
@@ -711,6 +740,7 @@ function setEditing(on) {
   editBtn.textContent = on ? '✓ Done editing' : '✥ Edit layout';
   editBtn.classList.toggle('on', on);
   grid.visible = on;
+  pathLine.visible = on; wpGroup.visible = on; if (on) refreshPath();
   controls.enabled = !on;
   measurePanel.style.display = on ? 'block' : 'none';
   document.getElementById('editHint').style.display = on ? 'block' : 'none';
@@ -729,23 +759,52 @@ function setEditing(on) {
   }
 }
 editBtn.onclick = () => setEditing(!editing);
+let dragWp = null;
+function pickWaypoint(e) {
+  pointerNDC(e); raycaster.setFromCamera(ndc, camera);
+  const hits = raycaster.intersectObjects(wpGroup.children, false);
+  return hits.length ? hits[0].object.userData.wp : null;
+}
+const snap = v => Math.round(v / (YARD / 2)) * (YARD / 2);   // snap to 0.5 yd
 renderer.domElement.addEventListener('pointerdown', e => {
   if (!editing) return;
+  const wp = pickWaypoint(e);
+  if (wp != null) { dragWp = wp; renderer.domElement.setPointerCapture(e.pointerId); return; }
   const id = pickStation(e);
   if (id) { dragId = id; renderer.domElement.setPointerCapture(e.pointerId); refreshMeasure(); }
 });
 renderer.domElement.addEventListener('pointermove', e => {
-  if (!editing || !dragId) return;
+  if (!editing) return;
   const p = deckPoint(e); if (!p) return;
-  const snap = v => Math.round(v / (YARD / 2)) * (YARD / 2);   // snap to 0.5 yd
-  let x = Math.max(DECK.x0 + 1.4, Math.min(DECK.x1 - 1.4, snap(p.x)));
-  let z = Math.max(DECK.z0 + 1.4, Math.min(DECK.z1 - 1.4, snap(p.z)));
+  const cx = Math.max(DECK.x0 + 0.6, Math.min(DECK.x1 - 0.6, snap(p.x)));
+  const cz = Math.max(DECK.z0 + 0.6, Math.min(DECK.z1 - 0.6, snap(p.z)));
+  if (dragWp != null) { cartWaypoints[dragWp] = { x: cx, z: cz }; refreshPath(); return; }
+  if (!dragId) return;
+  const x = Math.max(DECK.x0 + 1.4, Math.min(DECK.x1 - 1.4, cx));
+  const z = Math.max(DECK.z0 + 1.4, Math.min(DECK.z1 - 1.4, cz));
   setStationPos(dragId, x, z);
-  refreshMeasure();
+  refreshMeasure(); refreshPath();
   schedule();                 // walk times + cycle/capacity update live as you move
 });
-renderer.domElement.addEventListener('pointerup', () => { if (dragId) { dragId = null; measure.visible = false; measurePanel.innerHTML = ''; saveLayout(); } });
+renderer.domElement.addEventListener('pointerup', () => {
+  if (dragWp != null) { dragWp = null; saveLayout(); }
+  if (dragId) { dragId = null; measure.visible = false; measurePanel.innerHTML = ''; saveLayout(); }
+});
+// right-click a waypoint to delete it
+renderer.domElement.addEventListener('contextmenu', e => {
+  if (!editing) return;
+  const wp = pickWaypoint(e);
+  if (wp != null) { e.preventDefault(); cartWaypoints.splice(wp, 1); refreshPath(); saveLayout(); }
+});
+// add a waypoint at the midpoint of the current path
+document.getElementById('addwp').onclick = () => {
+  const a = cartWaypoints.length ? cartWaypoints[cartWaypoints.length - 1] : { x: EL[0], z: EL[1] };
+  cartWaypoints.push({ x: (a.x + nodes.cart.x) / 2, z: (a.z + nodes.cart.z) / 2 });
+  if (!editing) setEditing(true);
+  refreshPath(); saveLayout();
+};
 loadLayout();
+refreshPath();
 
 /* ---- named layouts: save / load / compare different floor plans ---- */
 const LAYOUTS_KEY = 'm3d_layouts_v1';
@@ -756,7 +815,7 @@ function snapshot() {
   ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
   if (nodes.cart) pos.cart = [nodes.cart.x, nodes.cart.z];
   const cap = sch ? 420 / Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 0;
-  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, cap: +cap.toFixed(1) };
+  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), cap: +cap.toFixed(1) };
 }
 function applyLayout(L) {
   if (L.times) ST.forEach(s => { if (L.times[s.id] != null) get(s.id).t = L.times[s.id]; });
@@ -765,6 +824,7 @@ function applyLayout(L) {
   if (L.walkSpeed) { walkSpeed = L.walkSpeed; const c = document.getElementById('walkSpeed'); if (c) c.value = walkSpeed; }
   if (L.trips != null) { tripsPerUnit = L.trips; const c = document.getElementById('trips'); if (c) c.value = tripsPerUnit; }
   if (L.N) { N = L.N; nInput.value = N; }
+  if (Array.isArray(L.wps)) { cartWaypoints = L.wps.map(a => ({ x: a[0], z: a[1] })); refreshPath(); }
   ST.forEach(s => { const inp = timeBox.querySelector(`input[data-id="${s.id}"]`); if (inp) inp.value = get(s.id).t; });
   schedule(); T = 0; setPlay(false); saveLayout();
 }
@@ -866,65 +926,54 @@ function update(){
   });
 }
 
-/* ============ CART LOGISTICS (queue + elevator state machine) ============ */
-function slotPos(i) {
-  const ax = nodes.cart.x, az = nodes.cart.z;
-  let dx = ax - EL[0], dz = az - EL[1], L = Math.hypot(dx, dz) || 1;
-  const ux = dx / L, uz = dz / L;            // unit vector from elevator toward the cart spot
-  return [ax - ux * 2.9 * i, az - uz * 2.9 * i];   // slot 0 = the cart spot (active), others line up back toward elevator
-}
-function easeTo(mesh, tx, tz, dt) {
-  const dx = tx - mesh.position.x, dz = tz - mesh.position.z, d = Math.hypot(dx, dz);
+/* ============ CART LOGISTICS (queue + elevator, along the editable path) ============ */
+function easeD(o, target, dt) {                 // move a cart along the path by arc-distance
   const step = ROLL * dt;
-  if (d <= step || d < 0.01) { mesh.position.x = tx; mesh.position.z = tz; return true; }
-  mesh.position.x += dx / d * step; mesh.position.z += dz / d * step; return false;
+  if (Math.abs(target - o.d) <= step) o.d = target; else o.d += Math.sign(target - o.d) * step;
+  const [x, z] = pointAtDist(o.d); o.mesh.position.set(x, 0, z);
+  return o.d === target;
 }
 function updateCarts(dt) {
   const upStates = ['rising', 'toslot', 'queued', 'active'];
   const presentUp = cartPool.filter(o => upStates.includes(o.state)).length;
-  // bring a new cart up only while fewer than MAXQ are up and the elevator is free
   if (!elevBusy && presentUp < MAXQ) {
     const down = cartPool.find(o => o.state === 'down');
-    if (down) { down.state = 'rising'; down.mesh.visible = true; down.mesh.position.set(EL[0], 0.4 - FLOOR2, EL[1]); elevBusy = true; carY = 0.4; }
+    if (down) { down.state = 'rising'; down.mesh.visible = true; down.d = 0; down.mesh.position.set(EL[0], 0.4 - FLOOR2, EL[1]); elevBusy = true; carY = 0.4; }
   }
   for (const o of cartPool) {
     if (o.state === 'rising') {
       carY = Math.min(FLOOR2, carY + LIFT * dt);
       o.mesh.position.set(EL[0], carY - FLOOR2, EL[1]);
       if (carY >= FLOOR2) {
-        // step off onto the back-most empty slot
         const used = new Set(cartPool.filter(c => c !== o && ['toslot','queued','active'].includes(c.state)).map(c => c.slot));
         let s = MAXQ - 1; for (let k = 0; k < MAXQ; k++) { if (!used.has(k)) { s = k; break; } }
-        o.slot = s; o.state = 'toslot'; elevBusy = false;
+        o.slot = s; o.d = 0; o.state = 'toslot'; elevBusy = false;     // step onto the path at the elevator end
       }
     } else if (o.state === 'toslot') {
-      o.mesh.position.y = 0;
-      const [tx, tz] = slotPos(o.slot);
-      if (easeTo(o.mesh, tx, tz, dt)) o.state = (o.slot === 0 ? 'active' : 'queued');
+      if (easeD(o, slotDist(o.slot), dt)) o.state = (o.slot === 0 ? 'active' : 'queued');
     } else if (o.state === 'queued') {
-      const [tx, tz] = slotPos(o.slot); easeTo(o.mesh, tx, tz, dt);
+      easeD(o, slotDist(o.slot), dt);
     } else if (o.state === 'active') {
-      const [tx, tz] = slotPos(0); easeTo(o.mesh, tx, tz, dt);
+      easeD(o, slotDist(0), dt);
       o.t += dt;
-      if (o.t >= USE_TIME) {                      // cart used up -> leaves down the elevator
+      if (o.t >= USE_TIME) {
         o.state = 'leaving';
-        cartPool.forEach(c => { if (['queued','active'].includes(c.state) && c !== o && c.slot > 0) c.slot -= 1; });  // queue advances
+        cartPool.forEach(c => { if (['queued','active'].includes(c.state) && c !== o && c.slot > 0) c.slot -= 1; });
       }
     } else if (o.state === 'leaving') {
-      if (easeTo(o.mesh, EL[0], EL[1], dt) && !elevBusy) { o.state = 'descending'; elevBusy = true; carY = FLOOR2; }
+      if (easeD(o, 0, dt) && !elevBusy) { o.state = 'descending'; elevBusy = true; carY = FLOOR2; }
     } else if (o.state === 'descending') {
       carY = Math.max(0.4, carY - LIFT * dt);
       o.mesh.position.set(EL[0], carY - FLOOR2, EL[1]);
       if (carY <= 0.4) { o.state = 'down'; o.slot = -1; o.t = 0; o.mesh.visible = false; elevBusy = false; }
     }
   }
-  // promote a queued cart that reached the front into the active spot
   if (!cartPool.some(o => o.state === 'active')) {
     const front = cartPool.find(o => o.state === 'queued' && o.slot === 0);
     if (front) { front.state = 'active'; front.t = 0; }
   }
   elevator.car.position.y = carY;
-  elevator.crate.visible = false;               // carts are the load now
+  elevator.crate.visible = false;
 }
 
 /* =========================== LOOP =========================== */
