@@ -302,8 +302,8 @@ const ST = [
   { id:'bak', title:'BACK FRAME',   sub:'Back frame',   ppl:1, t:43.5,  role:'feeder', kind:'back',       accent:'#1d3a66' },
   { id:'tre', title:'TRELLIS',      sub:'Trellis',      ppl:1, t:22.5,  role:'feeder', kind:'trellis',    accent:'#1d3a66' },
   { id:'sea', title:'SEAT FRAME',   sub:'Seat frame',   ppl:1, t:47,    role:'feeder', kind:'seat',       accent:'#9a3b1f', bot:true },
-  { id:'fa',  title:'FULL ASSEMBLY',sub:'Assemble sofa',ppl:2, t:29,    role:'fa',     accent:'#1d3a66' },
-  { id:'pak', title:'PACKING',      sub:'Box & ship',   ppl:0, t:18,    role:'pack',   accent:'#236043' },
+  { id:'fa',  title:'FULL ASSEMBLY',sub:'Assemble frame',ppl:2, t:29,   role:'fa',     accent:'#1d3a66' },
+  { id:'pak', title:'CUSHIONS & PACK',sub:'Cushions + ship',ppl:0, t:18, role:'pack',   accent:'#236043' },
 ];
 const get = id => ST.find(s => s.id === id);
 
@@ -892,16 +892,17 @@ function update(){
   if (cur >= 0) {
     if (phase === 'asm') {
       const fr = (T - sch.faStart[cur]) / sch.ASM;
-      fa.visual.g.visible = true; fa.visual.update(fr);
+      fa.visual.g.visible = true; fa.visual.update(fr * 0.8);   // full assembly builds the frame only (no cushions yet)
       movingSofa.g.visible = false;
       setLed(fa.led, 'active', true);
     } else {
       fa.visual.g.visible = false;
-      // sofa slides from FA toward packing
+      // frame slides to packing, where the cushions are actually put on
       const fr = (T - (sch.faStart[cur] + sch.ASM)) / sch.PACK;
-      const sx = fa.x + (POS.pak[0] - fa.x) * fr;
-      const sz = fa.z + (POS.pak[1] - fa.z) * fr;
+      const sx = fa.x + (POS.pak[0] - fa.x) * Math.min(1, fr * 1.6);
+      const sz = fa.z + (POS.pak[1] - fa.z) * Math.min(1, fr * 1.6);
       movingSofa.g.visible = true; movingSofa.g.position.set(sx, 1.04, sz);
+      movingSofa.update(0.8 + Math.min(1, fr) * 0.2);           // cushions go on at the packing station
       setLed(fa.led, 'done', false);
     }
   } else {
