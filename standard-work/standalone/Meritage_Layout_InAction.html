@@ -38,7 +38,7 @@
   </div>
   <div id="done" style="color:#2ea043;font-weight:700;font-size:13px;min-height:18px;margin:-6px 0 10px"></div>
 
-  <svg id="floor" viewBox="0 0 720 470"></svg>
+  <svg id="floor" viewBox="0 0 720 500"></svg>
 
   <div class="legend">
     <span><i style="background:#1f6feb"></i>Working</span>
@@ -46,6 +46,7 @@
     <span><i style="background:#3d4a5a"></i>Done — part waiting for the kit</span>
     <span><i style="background:#b3261e"></i>Full Assembly waiting (kit not ready)</span>
     <span><i style="background:#2ea043"></i>Packing</span>
+    <span>✎ edit the <b style="color:#e7ecf1">min</b> under any box (Full assembly = assemble time, Furniture = packing time)</span>
   </div>
   <p class="note"><b>What to watch:</b> Full Assembly's box stays <b>red "Waiting"</b> until the start condition is met — <b>Seat frame AND (an Arm or Back frame)</b>. Arms finish at 32 and Back frame at 43.5, but <b>Seat frame is last at 47</b>, so the kit isn't ready until 47 — that's when Full Assembly turns blue and begins. Meanwhile the fast feeders sit <b>"done — waiting"</b>. Then Full Assembly assembles (~29) and flips to <b>packing</b> (~18). Steady-state: one unit every 47 min ≈ <b>9/day</b> (Seat frame paces it; split it 2-up to clear the 42-min takt).</p>
 </div>
@@ -92,6 +93,18 @@ ARROWS.forEach(function(a){
  svg.appendChild(ln); arrowEls[a[0]+'>'+a[1]]=ln;
 });
 
+// editable time box under a station (foreignObject input)
+function addTimeBox(s, get, set){
+ var fo=E('foreignObject',{x:s.x, y:s.y+BOXH+3, width:BOXW, height:26});
+ var div=document.createElement('div'); div.setAttribute('xmlns','http://www.w3.org/1999/xhtml');
+ div.style.cssText='display:flex;align-items:center;gap:4px;font-family:Inter,Arial,sans-serif';
+ var inp=document.createElement('input'); inp.type='number'; inp.step='0.25'; inp.min='0.25'; inp.value=get();
+ inp.style.cssText='width:58px;background:#0e1116;color:#e7ecf1;border:1px solid #2c3540;border-radius:5px;padding:3px 5px;font-size:11px';
+ inp.onchange=function(){ var v=parseFloat(this.value); if(!(v>0))v=0.25; set(v); this.value=v; schedule(); t=0; last=0; frame(); };
+ var lab=document.createElement('span'); lab.textContent='min'; lab.style.cssText='color:#8b97a4;font-size:10px';
+ div.appendChild(inp); div.appendChild(lab); fo.appendChild(div); svg.appendChild(fo);
+}
+
 // boxes
 var ui={};
 STN.forEach(function(s){
@@ -108,6 +121,9 @@ STN.forEach(function(s){
  var st=E('text',{x:s.x+BOXW/2,y:s.y+40,'text-anchor':'middle','font-size':11,'font-weight':700,fill:'#cdd6df'});g.appendChild(st);
  svg.appendChild(g);
  ui[s.id]={bg:bg,fill:fill,status:st};
+ if(s.kind==='feed') addTimeBox(s, function(){return s.busy;}, function(v){s.busy=v;});
+ else if(s.id==='fa') addTimeBox(s, function(){return ASM;}, function(v){ASM=v;});
+ else if(s.id==='fur') addTimeBox(s, function(){return PACK;}, function(v){PACK=v;});
 });
 
 var t=0, playing=false, speed=14, units=0, N=8;
@@ -154,6 +170,8 @@ function frame(){
  ui.fur.status.textContent= shipped+' / '+N+' shipped';
  document.getElementById('clock').textContent=Math.round(T);
  document.getElementById('units').textContent=shipped;
+ var cyc=Math.max(byId.con.busy,byId.arm.busy,byId.bak.busy,byId.tre.busy,byId.sea.busy, ASM+PACK);
+ document.getElementById('rate').textContent=(420/cyc).toFixed(1);
  if(N>0 && T>=faEnd[N-1]){ playing=false; document.getElementById('play').textContent='▶ Play';
    var mins=faEnd[N-1]; document.getElementById('done').textContent='✓ Batch done: '+N+' chairs in '+Math.round(mins)+' min ('+(mins/60).toFixed(1)+' h) · steady pace ~'+(420/byId.sea.busy).toFixed(1)+'/day';
  } else document.getElementById('done').textContent='';
