@@ -300,20 +300,30 @@ const get = id => ST.find(s => s.id === id);
 
 let N = 8;
 let sch = null, horizon = 0;
-// distance-based walk time: people add travel time fetching from their supply
-let walkOn = true, walkSpeed = 60, tripsPerUnit = 1;   // yd/min, round trips per unit
-const ELEV = [-16, 6];                                  // materials pickup (elevator landing)
+// distance-based walk time — only the tables a station gets parts FROM and gives parts TO matter
+let walkOn = true, walkSpeed = 60, tripsPerUnit = 1;   // yd/min, trips per unit
 const dist2 = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
+const CART_LANE = { x0:-13.5, x1:13.5, z:-1.5 };       // supply line of carts off the elevator
+const SHIP_PT = [24, 4.2];                              // ship-out dock
+// material flow: who each station receives from (in) and hands off to (out)
+const FLOW = {
+  con:{ in:['cart'], out:['fa'] }, arm:{ in:['cart'], out:['fa'] }, bak:{ in:['cart'], out:['fa'] },
+  tre:{ in:['cart'], out:['fa'] }, sea:{ in:['cart'], out:['fa'] },
+  fa:{ in:['con','arm','bak','tre','sea'], out:['pak'] },
+  pak:{ in:['fa'], out:['ship'] },
+};
+function linkPoint(tgt, nd) {
+  if (tgt === 'cart') return [Math.max(CART_LANE.x0, Math.min(CART_LANE.x1, nd.x)), CART_LANE.z]; // nearest point on the cart line
+  if (tgt === 'ship') return SHIP_PT;
+  const n = nodes[tgt]; return n ? [n.x, n.z] : [nd.x, nd.z];
+}
+function linkSet(id) { const f = FLOW[id]; if (!f) return []; return [...f.in, ...f.out].filter(t => nodes[t]); }
 function walkOf(id) {
   if (!walkOn) return 0;
-  const nd = nodes[id]; if (!nd) return 0;
-  let d = 0;
-  if (id === 'pak') { const f = nodes.fa; d = f ? dist2(nd.x, nd.z, f.x, f.z) : 0; }                 // packer fetches from full assembly
-  else if (id === 'fa') {                                                                            // assembler gathers sub-parts from feeders
-    const fs = ['con','arm','bak','tre','sea'].map(k => nodes[k]).filter(Boolean);
-    if (!fs.length) return 0; d = fs.reduce((a, f) => a + dist2(nd.x, nd.z, f.x, f.z), 0) / fs.length;
-  } else { d = dist2(nd.x, nd.z, ELEV[0], ELEV[1]); }                                                // feeders fetch materials from elevator
-  return (d * 2 / YARD) / Math.max(1, walkSpeed) * tripsPerUnit;                                     // round-trip yards / speed
+  const nd = nodes[id], f = FLOW[id]; if (!nd || !f) return 0;
+  let yd = 0;
+  for (const t of [...f.in, ...f.out]) { const p = linkPoint(t, nd); yd += dist2(nd.x, nd.z, p[0], p[1]) / YARD; }
+  return yd / Math.max(1, walkSpeed) * tripsPerUnit;   // sum of linked-table distances (yd) / speed * trips
 }
 function eff(id) { return (get(id).t || 0) + walkOf(id); }
 function schedule() {
@@ -443,6 +453,11 @@ function makeElevator(x,z){
 }
 const elevator = makeElevator(-17.5, 6.0);
 scene.add(elevator.shaft);
+
+// supply line: carts rolling off the elevator and queued along the feeder front
+const parkedCarts = [];
+for (const cx2 of [-11, -6.5, -2, 2.5, 7, 11.5]) { const c = makePartsCart(); c.position.set(cx2, 0, CART_LANE.z); c.rotation.y = Math.PI/2; level2.add(c); parkedCarts.push(c); }
+const supplyCart = makePartsCart(); supplyCart.rotation.y = Math.PI/2; level2.add(supplyCart);
 
 /* ---- station layout: feeders in back row, FA + packing in front ---- */
 const OP_COLORS = [0x3a66a8, 0xb9772e, 0x2e7d4f, 0x8f5390, 0xa8923a, 0x3f8f8f, 0x9c4f45, 0x5c5f99];
@@ -635,18 +650,19 @@ function deckPoint(e) {
 function refreshMeasure() {
   if (!dragId) { measure.visible = false; measurePanel.innerHTML = ''; return; }
   const a = nodes[dragId]; const pts = [];
+  const linked = new Set(linkSet(dragId));
   const rows = [];
   ST.forEach(s => {
     if (s.id === dragId) return; const b = nodes[s.id]; if (!b) return;
-    pts.push(a.x, FLOOR2 + 0.06, a.z, b.x, FLOOR2 + 0.06, b.z);
-    const d = Math.hypot(a.x - b.x, a.z - b.z);
-    rows.push({ t: s.title, y: u2y(d) });
+    const lk = linked.has(s.id);
+    if (lk) pts.push(a.x, FLOOR2 + 0.06, a.z, b.x, FLOOR2 + 0.06, b.z);  // only draw lines to linked tables
+    rows.push({ t: s.title, y: u2y(Math.hypot(a.x - b.x, a.z - b.z)), lk });
   });
   measureGeo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-  measureGeo.computeBoundingSphere(); measure.visible = true;
-  rows.sort((p, q) => p.y - q.y);
-  measurePanel.innerHTML = `<h4>${nodes[dragId].s.title}</h4>` +
-    rows.map(r => `<div class="mr"><span>${r.t}</span><b>${r.y.toFixed(1)} yd</b></div>`).join('');
+  measureGeo.computeBoundingSphere(); measure.visible = pts.length > 0;
+  rows.sort((p, q) => (q.lk - p.lk) || (p.y - q.y));
+  measurePanel.innerHTML = `<h4>${nodes[dragId].s.title}</h4><div class="mhint">▸ linked = distance counts</div>` +
+    rows.map(r => `<div class="mr ${r.lk ? 'lk' : 'no'}"><span>${r.lk ? '▸ ' : ''}${r.t}</span><b>${r.y.toFixed(1)} yd</b></div>`).join('');
 }
 function setEditing(on) {
   editing = on;
@@ -830,6 +846,12 @@ function loop(now){
   else                { ey = 0.4; loaded = false; }
   elevator.car.position.y = ey;
   elevator.crate.visible = loaded;
+  // a cart rolls off the elevator and runs the supply line in front of the feeders
+  const sp = (now / 1000 / 9) % 1;
+  let scx, scz; const startX = -13.5, endX = 13.5, lz = CART_LANE.z;
+  if (sp < 0.2) { const f = sp / 0.2; scx = -16 + (startX + 16) * f; scz = 4.5 + (lz - 4.5) * f; }
+  else { const f = (sp - 0.2) / 0.8; scx = startX + (endX - startX) * f; scz = lz; }
+  supplyCart.position.set(scx, 0, scz);
   update();
   controls.update();
   renderer.render(scene, camera);
