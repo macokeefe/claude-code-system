@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Meritage — Interactive Floor Plan</title>
+<style>
+  :root{--navy:#15263a;--ink:#1c2024;--mut:#6b7785;--blue:#2f6df6;--rust:#b3502e;--gold:#c98a2e;--ship:#2f7d52;--line:#c2cad3}
+  *{box-sizing:border-box}
+  body{margin:0;background:#e9ecef;font-family:"Inter","Segoe UI",Arial,sans-serif;color:var(--ink)}
+  header{background:var(--navy);color:#fff;padding:12px 18px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  header h1{font-size:16px;margin:0;font-weight:700;letter-spacing:.02em}
+  header .sp{flex:1}
+  .ctl{display:flex;align-items:center;gap:7px;font-size:12px;color:#cdd6e0}
+  .ctl input[type=number]{width:54px}
+  .ctl input[type=range]{width:90px}
+  button{background:#22364f;color:#fff;border:1px solid #34506f;border-radius:7px;padding:7px 12px;font-size:12.5px;font-weight:600;cursor:pointer}
+  button:hover{background:#2c465f}
+  button.go{background:var(--ship);border-color:var(--ship)}
+  button.warn{background:var(--rust);border-color:var(--rust)}
+  input,select{font-family:inherit;border:1px solid #9fb0c2;border-radius:6px;padding:4px 6px;font-size:12px;background:#fff;color:#1c2024}
+  .wrap{padding:16px;max-width:1280px;margin:0 auto}
+  .readouts{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px}
+  .rd{background:#fff;border:1px solid #dfe3e8;border-radius:10px;padding:8px 14px;min-width:120px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+  .rd .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut)}
+  .rd .v{font-size:20px;font-weight:800;color:var(--navy)}
+  .rd .v small{font-size:12px;font-weight:600;color:var(--mut)}
+  .floor{position:relative;width:100%;background:#f4f1ea;border:1px solid #d8dce1;border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.05),0 10px 30px rgba(0,0,0,.07)}
+  .floor img.bg{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#f4f1ea;pointer-events:none;user-select:none}
+  .floor svg.wires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  .card{position:absolute;transform:translate(-50%,-50%);min-width:118px;background:rgba(255,255,255,.94);border:1.5px solid #cfd6de;border-radius:10px;padding:7px 9px;box-shadow:0 2px 6px rgba(0,0,0,.16);backdrop-filter:blur(1px);font-size:12px}
+  .card.bot{border-color:var(--rust);border-width:2.5px}
+  .card.supply{background:rgba(238,242,246,.92);border-color:var(--line)}
+  .card.pack{}
+  .card .nm{font-weight:700;color:var(--navy);font-size:12.5px;display:flex;justify-content:space-between;gap:6px;align-items:center}
+  .card .ppl{color:var(--mut);font-weight:600;font-size:11px;white-space:nowrap}
+  .card .row{display:flex;align-items:center;gap:5px;margin-top:5px}
+  .card .row label{font-size:10px;color:var(--mut);width:26px}
+  .card input.t{width:52px;text-align:center}
+  .card input.p{width:34px;text-align:center}
+  .card .st{margin-top:5px;font-size:11px;color:var(--mut);min-height:14px}
+  .card .st b{color:var(--navy)}
+  .card .bar{height:5px;background:#e7e0d2;border-radius:3px;margin-top:4px;overflow:hidden}
+  .card .bar > i{display:block;height:100%;width:0;background:var(--gold);transition:width .08s linear}
+  .card.bot .bar > i{background:var(--rust)}
+  .card .tag{font-size:9.5px;font-weight:800;letter-spacing:.04em}
+  .card.bot .tag{color:var(--rust)}
+  .card.pack .tag{color:var(--ship)}
+  body.editing .card{cursor:grab;outline:2px dashed rgba(47,109,246,.5);outline-offset:2px}
+  body.editing .card:active{cursor:grabbing}
+  .hint{font-size:12px;color:var(--mut);margin:12px 4px 0;line-height:1.55}
+  .hint b{color:var(--navy)}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--mut);margin-top:8px}
+  .legend i{display:inline-block;width:22px;height:0;border-top-width:2px;border-top-style:solid;vertical-align:middle;margin-right:5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>MERITAGE 3-SEATER — LIVE FLOOR PLAN</h1>
+  <div class="ctl">Chairs <input type="number" id="n" min="1" max="40" value="8"/></div>
+  <div class="ctl">Speed <input type="range" id="speed" min="1" max="40" value="10"/><span id="speedv">10×</span></div>
+  <button class="go" id="play">▶ Play</button>
+  <button id="reset">↺ Reset</button>
+  <div class="sp"></div>
+  <div class="ctl">Plan <input type="range" id="op" min="10" max="100" value="100"/></div>
+  <button id="editbtn">✥ Move stations</button>
+  <button id="loadbtn">🖼 Load image</button>
+  <input type="file" id="file" accept="image/*" style="display:none"/>
+</header>
+
+<div class="wrap">
+  <div class="readouts">
+    <div class="rd"><div class="k">Clock</div><div class="v"><span id="rClock">0</span><small> min</small></div></div>
+    <div class="rd"><div class="k">Shipped</div><div class="v"><span id="rShip">0</span><small> / <span id="rN">8</span></small></div></div>
+    <div class="rd"><div class="k">Line pace (cycle)</div><div class="v"><span id="rCyc">47</span><small> min</small></div></div>
+    <div class="rd"><div class="k">Capacity</div><div class="v"><span id="rCap">8.9</span><small> /day</small></div></div>
+    <div class="rd"><div class="k">Bottleneck</div><div class="v" style="font-size:15px;line-height:1.9"><span id="rBot">Seat frame</span></div></div>
+  </div>
+
+  <div class="floor" id="floor">
+    <img class="bg" id="bg" alt="floor plan"/>
+    <svg class="wires" id="wires" preserveAspectRatio="none"></svg>
+    <!-- cards injected -->
+  </div>
+
+  <div class="legend">
+    <span><i style="border-color:#9aa3ad;border-top-style:dashed"></i>supply</span>
+    <span><i style="border-color:#2f6df6"></i>part flow → assembly</span>
+    <span><i style="border-color:#9aa3ad"></i>assembly → packing</span>
+    <span><i style="border-color:#2f7d52"></i>ship out</span>
+  </div>
+
+  <p class="hint"><b>Move stations:</b> click <b>✥ Move stations</b>, then drag each card so it sits on its bench in the floor plan — positions are saved automatically. <b>Load image:</b> use it to embed the saved PNG so the plan never disappears. Edit any station's <b>time</b> or <b>people</b> and the pace, capacity and bottleneck update live. Hit <b>▶ Play</b> to watch parts flow feeder → full assembly → packing for the number of chairs you set.</p>
+</div>
+
+<script>
+const DEFAULT_BG = "https://d8j0ntlcm91z4.cloudfront.net/user_32iSetbQFY92PpvJEgIu4TFAi2r/hf_20260624_145035_36d7d27e-385d-4fa5-98d7-f5eae18d4c56.png";
+const KEY = "mfp_v1";
+
+// id, name, people, time(min/unit), role, default %position on floor
+const DEF = [
+  {id:'cart',name:'Cart / Supply', ppl:0,  t:0,     role:'supply', x:50, y:9},
+  {id:'con', name:'Connectors',    ppl:1,  t:19.25, role:'feeder', x:13, y:30},
+  {id:'arm', name:'Arms assembly', ppl:2,  t:32,    role:'feeder', x:35, y:25},
+  {id:'bak', name:'Back frame',    ppl:1,  t:43.5,  role:'feeder', x:60, y:25},
+  {id:'tre', name:'Trellis',       ppl:1,  t:22.5,  role:'feeder', x:84, y:30},
+  {id:'sea', name:'Seat frame',    ppl:1,  t:47,    role:'feeder', x:14, y:62, bot:true},
+  {id:'fa',  name:'Full assembly', ppl:2,  t:29,    role:'fa',     x:48, y:62},
+  {id:'pak', name:'Packing / Ship',ppl:0,  t:18,    role:'pack',   x:78, y:84},
+];
+
+// ---- state (load/save) ----
+let S = load();
+function load(){
+  try{ const j=JSON.parse(localStorage.getItem(KEY)); if(j&&j.st) return j; }catch(e){}
+  return { st: DEF.map(d=>({...d})), bg:null, n:8 };
+}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+const by = id => S.st.find(s=>s.id===id);
+
+// ---- background image ----
+const bgEl = document.getElementById('bg');
+bgEl.src = S.bg || DEFAULT_BG;
+bgEl.onerror = ()=>{ if(bgEl.src!==DEFAULT_BG && !S.bg) bgEl.src=DEFAULT_BG; };
+document.getElementById('loadbtn').onclick = ()=>document.getElementById('file').click();
+document.getElementById('file').onchange = e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload = ()=>{ S.bg=r.result; bgEl.src=r.result; save(); };
+  r.readAsDataURL(f);
+};
+document.getElementById('op').oninput = e=>{ bgEl.style.opacity = e.target.value/100; };
+
+// ---- build cards ----
+const floor = document.getElementById('floor');
+const wires = document.getElementById('wires');
+function fmtPpl(s){
+  if(s.role==='supply') return 'staged';
+  if(s.ppl===0) return '0 (FA pair)';
+  return s.ppl+(s.ppl>1?' ppl':' person');
+}
+function buildCards(){
+  S.st.forEach(s=>{
+    const c=document.createElement('div');
+    c.className='card'+(s.bot?' bot':'')+(s.role==='supply'?' supply':'')+(s.role==='pack'?' pack':'');
+    c.id='c_'+s.id;
+    c.style.left=s.x+'%'; c.style.top=s.y+'%';
+    let inner = `<div class="nm">${s.name}<span class="ppl">${fmtPpl(s)}</span></div>`;
+    if(s.role!=='supply'){
+      const tlabel = s.role==='fa'?'ASM':(s.role==='pack'?'PACK':'min');
+      inner += `<div class="row"><label>${tlabel}</label><input class="t" type="number" step="0.25" min="0" value="${s.t}" data-id="${s.id}"/>`;
+      inner += `<label style="width:auto;margin-left:4px">ppl</label><input class="p" type="number" min="0" max="6" value="${s.ppl}" data-pid="${s.id}"/></div>`;
+      inner += `<div class="bar"><i id="bar_${s.id}"></i></div>`;
+      inner += `<div class="st" id="st_${s.id}"></div>`;
+      if(s.bot) inner += `<div class="tag">BOTTLENECK</div>`;
+      if(s.role==='pack') inner += `<div class="tag">→ SHIP OUT</div>`;
+    } else {
+      inner += `<div class="st">parts pre-staged</div>`;
+    }
+    c.innerHTML = inner;
+    floor.appendChild(c);
+  });
+  // input handlers
+  floor.querySelectorAll('input.t').forEach(inp=>inp.addEventListener('change',e=>{
+    const s=by(e.target.dataset.id); s.t=parseFloat(e.target.value)||0; save(); schedule(); resetClock();
+  }));
+  floor.querySelectorAll('input.p').forEach(inp=>inp.addEventListener('change',e=>{
+    const s=by(e.target.dataset.pid); s.ppl=parseInt(e.target.value)||0;
+    const ppEl=document.querySelector('#c_'+s.id+' .ppl'); if(ppEl) ppEl.textContent=fmtPpl(s);
+    save(); schedule(); resetClock();
+  }));
+}
+buildCards();
+
+// ---- drag to reposition (edit mode) ----
+let editing=false, drag=null;
+document.getElementById('editbtn').onclick = ()=>{
+  editing=!editing; document.body.classList.toggle('editing',editing);
+  document.getElementById('editbtn').textContent = editing?'✓ Done moving':'✥ Move stations';
+};
+floor.addEventListener('pointerdown', e=>{
+  if(!editing) return;
+  const card=e.target.closest('.card'); if(!card) return;
+  if(e.target.tagName==='INPUT') return;
+  const id=card.id.slice(2);
+  drag={id,card}; card.setPointerCapture(e.pointerId); e.preventDefault();
+});
+floor.addEventListener('pointermove', e=>{
+  if(!drag) return;
+  const r=floor.getBoundingClientRect();
+  let x=((e.clientX-r.left)/r.width)*100, y=((e.clientY-r.top)/r.height)*100;
+  x=Math.max(2,Math.min(98,x)); y=Math.max(2,Math.min(98,y));
+  const s=by(drag.id); s.x=x; s.y=y;
+  drag.card.style.left=x+'%'; drag.card.style.top=y+'%';
+  drawWires();
+});
+floor.addEventListener('pointerup', ()=>{ if(drag){save(); drag=null;} });
+
+// ---- geometry helpers ----
+function center(id){
+  const r=floor.getBoundingClientRect();
+  const s=by(id);
+  return { x:s.x/100*r.width, y:s.y/100*r.height };
+}
+function drawWires(){
+  const r=floor.getBoundingClientRect();
+  wires.setAttribute('viewBox',`0 0 ${r.width} ${r.height}`);
+  const mk=(a,b,col,dash)=>`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${col}" stroke-width="${dash?1.6:2.4}" ${dash?'stroke-dasharray="7 5"':''} marker-end="url(#a_${col.replace('#','')})"/>`;
+  const cols={'#9aa3ad':'9aa3ad','#2f6df6':'2f6df6','#2f7d52':'2f7d52'};
+  let defs='<defs>';
+  Object.keys(cols).forEach(c=>{defs+=`<marker id="a_${cols[c]}" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="${c}"/></marker>`;});
+  defs+='</defs>';
+  let s=defs;
+  ['con','arm','bak','tre','sea'].forEach(id=>{ s+=mk(center('cart'),center(id),'#9aa3ad',true); });
+  ['con','arm','bak','tre','sea'].forEach(id=>{ s+=mk(center(id),center('fa'),'#2f6df6',false); });
+  s+=mk(center('fa'),center('pak'),'#9aa3ad',false);
+  // ship out arrow to right edge
+  const p=center('pak');
+  s+=`<line x1="${p.x}" y1="${p.y}" x2="${r.width-14}" y2="${p.y}" stroke="#2f7d52" stroke-width="2.4" marker-end="url(#a_2f7d52)"/>`;
+  s+=`<text x="${r.width-18}" y="${p.y-8}" text-anchor="end" font-size="11" font-weight="700" fill="#2f7d52" font-family="Inter,Arial">SHIP OUT</text>`;
+  // moving tokens layer placeholder
+  s+=`<g id="tokens"></g>`;
+  wires.innerHTML=s;
+}
+
+// ====== SIMULATION ======
+let sch=null, horizon=0;
+function schedule(){
+  const N=S.n;
+  const seaT=by('sea').t, armT=by('arm').t, bakT=by('bak').t, treT=by('tre').t, conT=by('con').t;
+  const ASM=by('fa').t, PACK=by('pak').t;
+  const seatEnd=[],armEnd=[],bakEnd=[],kit=[],faStart=[],faEnd=[];
+  let prevFa=0;
+  for(let u=0;u<N;u++){
+    seatEnd[u]=seaT*(u+1);
+    armEnd[u]=armT*(u+1);
+    bakEnd[u]=bakT*(u+1);
+    // kit ready = seat frame AND (one arm OR back frame)
+    kit[u]=Math.max(seatEnd[u], Math.min(armEnd[u],bakEnd[u]));
+    faStart[u]=Math.max(kit[u], prevFa);
+    faEnd[u]=faStart[u]+ASM+PACK;
+    prevFa=faEnd[u];
+  }
+  sch={N,seaT,armT,bakT,treT,conT,ASM,PACK,seatEnd,armEnd,bakEnd,kit,faStart,faEnd};
+  horizon = (faEnd[N-1]||0)+5;
+  // metrics
+  const cyc=Math.max(conT,armT,bakT,treT,seaT,ASM+PACK);
+  const cap=420/cyc;
+  let bot='Seat frame', bv=seaT;
+  [['Connectors',conT],['Arms',armT],['Back frame',bakT],['Trellis',treT],['Seat frame',seaT],['Full assembly + pack',ASM+PACK]].forEach(([nm,v])=>{ if(v>bv){bv=v;bot=nm;} });
+  document.getElementById('rCyc').textContent = cyc.toFixed(1).replace(/\.0$/,'');
+  document.getElementById('rCap').textContent = cap.toFixed(1);
+  document.getElementById('rBot').textContent = bot+' ('+bv.toFixed(1).replace(/\.0$/,'')+')';
+  document.getElementById('rN').textContent = N;
+}
+
+let T=0, playing=false, lastTs=0;
+function resetClock(){ T=0; playing=false; document.getElementById('play').textContent='▶ Play'; render(); }
+document.getElementById('n').onchange = e=>{ S.n=Math.max(1,Math.min(40,parseInt(e.target.value)||8)); save(); schedule(); resetClock(); };
+document.getElementById('n').value = S.n;
+document.getElementById('speed').oninput = e=>{ document.getElementById('speedv').textContent=e.target.value+'×'; };
+document.getElementById('play').onclick = ()=>{
+  if(T>=horizon) T=0;
+  playing=!playing; document.getElementById('play').textContent = playing?'❚❚ Pause':'▶ Play';
+};
+document.getElementById('reset').onclick = resetClock;
+
+function tokenSVG(x,y,fill,label){
+  return `<g><circle cx="${x}" cy="${y}" r="9" fill="${fill}" stroke="#fff" stroke-width="2"/>${label?`<text x="${x}" y="${y+3.5}" text-anchor="middle" font-size="9" font-weight="800" fill="#fff" font-family="Inter,Arial">${label}</text>`:''}</g>`;
+}
+function lerp(a,b,t){ return {x:a.x+(b.x-a.x)*t, y:a.y+(b.y-a.y)*t}; }
+
+function render(){
+  if(!sch) schedule();
+  document.getElementById('rClock').textContent = Math.round(T);
+  // feeders progress
+  const fe={con:sch.conT,arm:sch.armT,bak:sch.bakT,tre:sch.treT,sea:sch.seaT};
+  Object.keys(fe).forEach(id=>{
+    const t=fe[id]; const done=Math.min(sch.N, Math.floor(T/t));
+    const frac = done>=sch.N ? 1 : (T % t)/t;
+    const bar=document.getElementById('bar_'+id); if(bar) bar.style.width=(frac*100)+'%';
+    const st=document.getElementById('st_'+id);
+    if(st) st.innerHTML = done>=sch.N ? `<b>✓ all ${sch.N} built</b>` : `<b>${done}/${sch.N}</b> built · on #${Math.min(sch.N,done+1)}`;
+  });
+  // full assembly + packing status
+  let cur=-1, phase='';
+  for(let u=0;u<sch.N;u++){ if(T>=sch.faStart[u] && T<sch.faEnd[u]){ cur=u; phase = (T < sch.faStart[u]+sch.ASM)?'assembling':'packing'; break; } }
+  const faSt=document.getElementById('st_fa');
+  const faBar=document.getElementById('bar_fa');
+  if(cur>=0){
+    if(phase==='assembling'){
+      const fr=(T-sch.faStart[cur])/sch.ASM;
+      if(faBar) faBar.style.width=(fr*100)+'%';
+      if(faSt) faSt.innerHTML=`assembling <b>#${cur+1}</b>`;
+    } else {
+      if(faBar) faBar.style.width='100%';
+      if(faSt) faSt.innerHTML=`<b>#${cur+1}</b> done → packing`;
+    }
+  } else {
+    // waiting for kit?
+    let nextWait=-1;
+    for(let u=0;u<sch.N;u++){ if(T<sch.faStart[u]){ nextWait=u; break; } }
+    if(faBar) faBar.style.width='0%';
+    if(faSt){
+      if(nextWait>=0 && T<sch.kit[nextWait]) faSt.innerHTML=`<span style="color:#b3502e">waiting for kit (seat + arm/back)</span>`;
+      else if(nextWait>=0) faSt.innerHTML=`ready — starting #${nextWait+1}`;
+      else faSt.innerHTML=`<b>✓ done</b>`;
+    }
+  }
+  // packing / ship counts
+  let shipped=0; for(let u=0;u<sch.N;u++){ if(T>=sch.faEnd[u]) shipped++; }
+  document.getElementById('rShip').textContent=shipped;
+  const pakSt=document.getElementById('st_pak');
+  const pakBar=document.getElementById('bar_pak');
+  if(cur>=0 && phase==='packing'){
+    const fr=(T-(sch.faStart[cur]+sch.ASM))/sch.PACK;
+    if(pakBar) pakBar.style.width=(fr*100)+'%';
+    if(pakSt) pakSt.innerHTML=`packing <b>#${cur+1}</b> · ${shipped}/${sch.N} shipped`;
+  } else {
+    if(pakBar) pakBar.style.width = shipped>=sch.N?'100%':'0%';
+    if(pakSt) pakSt.innerHTML=`<b>${shipped}/${sch.N}</b> shipped`;
+  }
+
+  // moving tokens
+  const tk=document.getElementById('tokens');
+  if(tk){
+    const fa=center('fa'), pak=center('pak'), sea=center('sea');
+    let g='';
+    for(let u=0;u<sch.N;u++){
+      if(T>=sch.faEnd[u]) continue;          // already shipped
+      if(T<sch.kit[u]){
+        // kit forming — token waiting near seat frame moving toward FA when close
+        continue;
+      }
+      if(T<sch.faStart[u]){
+        // queued at FA entrance
+        const p=lerp(sea,fa,0.85);
+        g+=tokenSVG(p.x,p.y-14,'#9aa3ad',(u+1));
+      } else if(T<sch.faStart[u]+sch.ASM){
+        g+=tokenSVG(fa.x,fa.y-14,'#c98a2e',(u+1));   // assembling at FA
+      } else {
+        const fr=(T-(sch.faStart[u]+sch.ASM))/sch.PACK;
+        const p=lerp(fa,pak,fr);
+        g+=tokenSVG(p.x,p.y-14,'#2f7d52',(u+1));      // moving to packing
+      }
+    }
+    tk.innerHTML=g;
+  }
+}
+
+function loop(ts){
+  if(playing){
+    if(!lastTs) lastTs=ts;
+    const speed=parseFloat(document.getElementById('speed').value);
+    T += (ts-lastTs)/1000*speed;
+    if(T>=horizon){ T=horizon; playing=false; document.getElementById('play').textContent='▶ Play'; }
+  }
+  lastTs=ts;
+  render();
+  requestAnimationFrame(loop);
+}
+
+// init
+schedule();
+window.addEventListener('resize', drawWires);
+bgEl.addEventListener('load', drawWires);
+setTimeout(()=>{ drawWires(); render(); }, 60);
+drawWires();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
