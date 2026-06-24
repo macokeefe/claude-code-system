@@ -929,66 +929,15 @@ function update(){
   });
 }
 
-/* ============ CART LOGISTICS (queue + elevator, along the editable path) ============ */
-function easeD(o, target, dt) {                 // move a cart along the path; dt is REAL seconds (steady visual pace)
-  const step = ROLL_RPS * dt;
-  if (Math.abs(target - o.d) <= step) o.d = target; else o.d += Math.sign(target - o.d) * step;
-  const [x, z] = pointAtDist(o.d); o.mesh.position.set(x, 0, z);
-  return o.d === target;
-}
-function updateCarts(dt) {
-  const upStates = ['rising', 'toslot', 'queued', 'active'];
-  const presentUp = cartPool.filter(o => upStates.includes(o.state)).length;
-  if (!elevBusy && presentUp < MAXQ) {
-    const down = cartPool.find(o => o.state === 'down');
-    if (down) { down.state = 'rising'; down.mesh.visible = true; down.d = 0; down.mesh.position.set(EL[0], 0.4 - FLOOR2, EL[1]); elevBusy = true; carY = 0.4; }
+/* ============ CARTS (static, for now): 3 carts parked in a line along the path ============ */
+function updateCarts() {
+  for (let i = 0; i < cartPool.length; i++) {     // slot 0 = cart spot, others back along the path toward the elevator
+    const o = cartPool[i];
+    o.mesh.visible = true;
+    const [x, z] = pointAtDist(slotDist(i));
+    o.mesh.position.set(x, 0, z);
   }
-  for (const o of cartPool) {
-    if (o.state === 'rising') {
-      carY = Math.min(FLOOR2, carY + LIFT_RPS * dt);
-      o.mesh.position.set(EL[0], carY - FLOOR2, EL[1]);
-      if (carY >= FLOOR2) {
-        const used = new Set(cartPool.filter(c => c !== o && ['toslot','queued','active'].includes(c.state)).map(c => c.slot));
-        let s = MAXQ - 1; for (let k = 0; k < MAXQ; k++) { if (!used.has(k)) { s = k; break; } }
-        o.slot = s; o.d = 0; o.state = 'toslot'; elevBusy = false;     // step onto the path at the elevator end
-      }
-    } else if (o.state === 'toslot') {
-      if (easeD(o, slotDist(o.slot), dt)) { o.state = (o.slot === 0 ? 'active' : 'queued'); if (o.state === 'active') o.remaining = CART_UNITS; }
-    } else if (o.state === 'queued') {
-      easeD(o, slotDist(o.slot), dt);
-    } else if (o.state === 'active') {
-      easeD(o, slotDist(0), dt);          // depletion is driven by real material consumption (below), not a timer
-    } else if (o.state === 'leaving') {
-      if (easeD(o, 0, dt) && !elevBusy) { o.state = 'descending'; elevBusy = true; carY = FLOOR2; }
-    } else if (o.state === 'descending') {
-      carY = Math.max(0.4, carY - LIFT_RPS * dt);
-      o.mesh.position.set(EL[0], carY - FLOOR2, EL[1]);
-      if (carY <= 0.4) { o.state = 'down'; o.slot = -1; o.remaining = 0; o.mesh.visible = false; elevBusy = false; }
-    }
-  }
-  if (!cartPool.some(o => o.state === 'active')) {
-    const front = cartPool.find(o => o.state === 'queued' && o.slot === 0);
-    if (front) { front.state = 'active'; front.remaining = CART_UNITS; }
-  }
-  // ---- consumption: a cart is emptied once every feeder that pulls from it has STARTED that sofa ----
-  // feeder builds unit u over [feederT*u, feederT*(u+1)); it picks its parts at the start (feederT*u).
-  // the cart for sofa u is used up when the last feeder to start has started -> max(feederT)*u.
-  const maxFeed = sch ? Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT) : 0;
-  let consumed = (sch && maxFeed > 0) ? Math.min(N, Math.floor(T / maxFeed) + 1) : 0;
-  if (T < lastSimT) lastConsumed = consumed;     // clock was reset/seeked backward
-  lastSimT = T;
-  let delta = consumed - lastConsumed;
-  while (delta > 0) {
-    const act = cartPool.find(o => o.state === 'active');
-    if (!act) break;                             // no active cart yet — hold the count until one is ready
-    act.remaining -= 1; delta -= 1;
-    if (act.remaining <= 0) {                     // this cart's material is used up -> it leaves
-      act.state = 'leaving';
-      cartPool.forEach(c => { if (['queued','active'].includes(c.state) && c !== act && c.slot > 0) c.slot -= 1; });
-    }
-  }
-  lastConsumed = consumed - delta;               // any units not yet drawn (no active cart) stay pending
-  elevator.car.position.y = carY;
+  elevator.car.position.y = FLOOR2;               // park the elevator car at the deck
   elevator.crate.visible = false;
 }
 
@@ -1005,7 +954,7 @@ function loop(now){
     T += dt * parseFloat(speed.value);
     if (T >= horizon) { T = horizon; setPlay(false); }
   }
-  updateCarts(playing ? Math.min(dt, 0.05) : 0);   // steady real-time motion; departures are sim-driven inside
+  updateCarts();   // carts stay parked in a line along the path
   update();
   controls.update();
   renderer.render(scene, camera);
