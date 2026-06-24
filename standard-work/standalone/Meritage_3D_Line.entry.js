@@ -481,7 +481,7 @@ cartPad.position.set(CART_DEF[0], 0, CART_DEF[1]); level2.add(cartPad);
 // pool of physical carts moved by the elevator/queue state machine
 const EL = [-17.5, 6];                 // elevator column (level2-local x,z)
 const MAXQ = 3, LIFT = 4.0, ROLL = 5.0;   // up to 3 carts up at once; lift/roll speeds
-let CART_UNITS = 4;                     // chairs' worth of material per cart
+let CART_UNITS = 1;                     // each cart carries the materials for one sofa
 const cartPool = [];
 for (let i = 0; i < 3; i++) { const c = makePartsCart(); c.scale.set(1.4, 1.3, 1.4); c.visible = false; level2.add(c); cartPool.push({ mesh: c, state: 'down', slot: -1, remaining: 0 }); }
 let elevBusy = false, carY = 0.4, lastConsumed = 0, lastSimT = 0;
@@ -623,7 +623,7 @@ const moveCtl = document.createElement('div'); moveCtl.className = 'movectl';
 moveCtl.innerHTML = `<label class="mck"><input type="checkbox" id="walkOn" checked/> add walk time (by distance)</label>
   <div class="mrow">Walk speed <input type="number" id="walkSpeed" value="60" min="10" step="5"/> yd/min</div>
   <div class="mrow">Trips / unit <input type="number" id="trips" value="1" min="0" step="0.5"/></div>
-  <div class="mrow">Cart holds <input type="number" id="cartUnits" value="4" min="1" step="1"/> chairs</div>`;
+  <div class="mrow" style="color:#6b7785">Each cart = 1 sofa's materials</div>`;
 timeBox.appendChild(moveCtl);
 ST.forEach(s => {
   const row = document.createElement('div'); row.className = 'trow';
@@ -640,7 +640,6 @@ timeBox.querySelectorAll('input[data-id]').forEach(inp => inp.onchange = e => {
 document.getElementById('walkOn').onchange = e => { walkOn = e.target.checked; schedule(); T = 0; setPlay(false); };
 document.getElementById('walkSpeed').onchange = e => { walkSpeed = Math.max(10, parseFloat(e.target.value) || 60); schedule(); T = 0; setPlay(false); };
 document.getElementById('trips').onchange = e => { tripsPerUnit = Math.max(0, parseFloat(e.target.value) || 0); schedule(); T = 0; setPlay(false); };
-document.getElementById('cartUnits').onchange = e => { CART_UNITS = Math.max(1, parseInt(e.target.value) || 4); };
 
 /* =========================== EDIT LAYOUT =========================== */
 const YARD = 0.9144;                       // 1 unit = 1 metre; 1 yard = 0.9144 m
