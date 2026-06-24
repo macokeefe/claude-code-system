@@ -970,9 +970,11 @@ function updateCarts(dt) {
     const front = cartPool.find(o => o.state === 'queued' && o.slot === 0);
     if (front) { front.state = 'active'; front.remaining = CART_UNITS; }
   }
-  // ---- consumption: a cart leaves only when its material is actually used up ----
-  // a chair's worth of material is drawn from the cart when its kit is formed (all feeder parts ready)
-  let consumed = 0; if (sch) for (let u = 0; u < N; u++) if (T >= sch.kit[u]) consumed++;
+  // ---- consumption: a cart is emptied once every feeder that pulls from it has STARTED that sofa ----
+  // feeder builds unit u over [feederT*u, feederT*(u+1)); it picks its parts at the start (feederT*u).
+  // the cart for sofa u is used up when the last feeder to start has started -> max(feederT)*u.
+  const maxFeed = sch ? Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT) : 0;
+  let consumed = (sch && maxFeed > 0) ? Math.min(N, Math.floor(T / maxFeed) + 1) : 0;
   if (T < lastSimT) lastConsumed = consumed;     // clock was reset/seeked backward
   lastSimT = T;
   let delta = consumed - lastConsumed;
