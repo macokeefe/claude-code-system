@@ -300,9 +300,25 @@ const get = id => ST.find(s => s.id === id);
 
 let N = 8;
 let sch = null, horizon = 0;
+// distance-based walk time: people add travel time fetching from their supply
+let walkOn = true, walkSpeed = 60, tripsPerUnit = 1;   // yd/min, round trips per unit
+const ELEV = [-16, 6];                                  // materials pickup (elevator landing)
+const dist2 = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
+function walkOf(id) {
+  if (!walkOn) return 0;
+  const nd = nodes[id]; if (!nd) return 0;
+  let d = 0;
+  if (id === 'pak') { const f = nodes.fa; d = f ? dist2(nd.x, nd.z, f.x, f.z) : 0; }                 // packer fetches from full assembly
+  else if (id === 'fa') {                                                                            // assembler gathers sub-parts from feeders
+    const fs = ['con','arm','bak','tre','sea'].map(k => nodes[k]).filter(Boolean);
+    if (!fs.length) return 0; d = fs.reduce((a, f) => a + dist2(nd.x, nd.z, f.x, f.z), 0) / fs.length;
+  } else { d = dist2(nd.x, nd.z, ELEV[0], ELEV[1]); }                                                // feeders fetch materials from elevator
+  return (d * 2 / YARD) / Math.max(1, walkSpeed) * tripsPerUnit;                                     // round-trip yards / speed
+}
+function eff(id) { return (get(id).t || 0) + walkOf(id); }
 function schedule() {
-  const seaT=get('sea').t, armT=get('arm').t, bakT=get('bak').t, treT=get('tre').t, conT=get('con').t;
-  const ASM=get('fa').t, PACK=get('pak').t;
+  const seaT=eff('sea'), armT=eff('arm'), bakT=eff('bak'), treT=eff('tre'), conT=eff('con');
+  const ASM=eff('fa'), PACK=eff('pak');
   const seatEnd=[],armEnd=[],bakEnd=[],kit=[],faStart=[],faEnd=[];
   let prev=0;
   for (let u=0;u<N;u++){
@@ -322,6 +338,17 @@ function schedule() {
   ui.cap.textContent=cap.toFixed(1);
   ui.bot.textContent=`${bot} (${bv.toFixed(1).replace(/\.0$/,'')})`;
   ui.nOut.textContent=N;
+  // reflect walk time on labels + times panel
+  ST.forEach(s => {
+    const w = walkOf(s.id), base = get(s.id).t || 0;
+    const nd = nodes[s.id];
+    if (nd && nd.label && nd.label.userData.redraw) {
+      const txt = (w > 0.05) ? `${(+base.toFixed(2))}+${w.toFixed(1)}w` : (base ? base + ' min' : '—');
+      nd.label.userData.redraw(txt, s.accent);
+    }
+    const el = document.getElementById('walk_' + s.id);
+    if (el) el.textContent = (w > 0.05) ? `+${w.toFixed(1)} walk` : '';
+  });
 }
 
 /* =========================== SCENE =========================== */
@@ -506,20 +533,27 @@ document.getElementById('top').onclick = () => { camera.position.set(4,FLOOR2+38
 
 // build editable time rows
 const timeBox = document.getElementById('times');
+// walk-time controls
+const moveCtl = document.createElement('div'); moveCtl.className = 'movectl';
+moveCtl.innerHTML = `<label class="mck"><input type="checkbox" id="walkOn" checked/> add walk time (by distance)</label>
+  <div class="mrow">Walk speed <input type="number" id="walkSpeed" value="60" min="10" step="5"/> yd/min</div>
+  <div class="mrow">Trips / unit <input type="number" id="trips" value="1" min="0" step="0.5"/></div>`;
+timeBox.appendChild(moveCtl);
 ST.forEach(s => {
-  if (s.role === 'pack') { /* still editable */ }
   const row = document.createElement('div'); row.className = 'trow';
   const lbl = s.role==='fa' ? 'ASM' : (s.role==='pack'?'PACK':'min');
   row.innerHTML = `<span class="tn">${s.title}${s.bot?' <b style="color:#c0552c">◄</b>':''}</span>
-    <span class="tp">${s.role==='pack'?'0 ppl':(s.ppl+(s.ppl>1?' ppl':' p'))}</span>
-    <input type="number" step="0.25" min="0" value="${s.t}" data-id="${s.id}"/> <span class="tu">${lbl}</span>`;
+    <input type="number" step="0.25" min="0" value="${s.t}" data-id="${s.id}"/> <span class="tu">${lbl}</span>
+    <span class="tw" id="walk_${s.id}"></span>`;
   timeBox.appendChild(row);
 });
-timeBox.querySelectorAll('input').forEach(inp => inp.onchange = e => {
+timeBox.querySelectorAll('input[data-id]').forEach(inp => inp.onchange = e => {
   const s = get(e.target.dataset.id); s.t = parseFloat(e.target.value) || 0;
-  if (nodes[s.id]?.label?.userData?.redraw) nodes[s.id].label.userData.redraw(s.t + ' min', s.accent);
   schedule(); T = 0; setPlay(false);
 });
+document.getElementById('walkOn').onchange = e => { walkOn = e.target.checked; schedule(); T = 0; setPlay(false); };
+document.getElementById('walkSpeed').onchange = e => { walkSpeed = Math.max(10, parseFloat(e.target.value) || 60); schedule(); T = 0; setPlay(false); };
+document.getElementById('trips').onchange = e => { tripsPerUnit = Math.max(0, parseFloat(e.target.value) || 0); schedule(); T = 0; setPlay(false); };
 
 /* =========================== EDIT LAYOUT =========================== */
 const YARD = 0.9144;                       // 1 unit = 1 metre; 1 yard = 0.9144 m
@@ -650,6 +684,7 @@ renderer.domElement.addEventListener('pointermove', e => {
   let z = Math.max(DECK.z0 + 1.4, Math.min(DECK.z1 - 1.4, snap(p.z)));
   setStationPos(dragId, x, z);
   refreshMeasure();
+  schedule();                 // walk times + cycle/capacity update live as you move
 });
 renderer.domElement.addEventListener('pointerup', () => { if (dragId) { dragId = null; measure.visible = false; measurePanel.innerHTML = ''; saveLayout(); } });
 loadLayout();
