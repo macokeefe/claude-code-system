@@ -331,7 +331,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xe9edf1);
 scene.fog = new THREE.Fog(0xe9edf1, 60, 140);
 const camera = new THREE.PerspectiveCamera(44, mount.clientWidth / mount.clientHeight, 0.1, 300);
-camera.position.set(2, 17, 34);
+camera.position.set(4, 22, 40);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(mount.clientWidth, mount.clientHeight);
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
@@ -339,7 +339,7 @@ renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadow
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.06;
 mount.appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true; controls.target.set(0, 0.8, 0); controls.maxPolarAngle = Math.PI / 2.05; controls.maxDistance = 70;
+controls.enableDamping = true; controls.target.set(2, 6.8, 0.5); controls.maxPolarAngle = Math.PI / 2.02; controls.maxDistance = 90;
 
 scene.add(new THREE.HemisphereLight(0xffffff, 0xb8bcc2, 1.0));
 const sun = new THREE.DirectionalLight(0xfff8ee, 0.85);
@@ -358,7 +358,65 @@ for (const rx of [-22, -11, 0, 11, 22]) { const r = makeRack(); r.position.set(r
 for (const [cx, cz] of [[-28,-12],[28,-12],[-28,12],[28,12]]) { const col = bx(0.6,8,0.6,MAT.column); col.position.set(cx,4,cz); scene.add(col); }
 const fans = [];
 for (const fx of [-10, 10]) { const f = makeFan(); f.position.set(fx, 7.4, 0); scene.add(f); fans.push(f); }
-const cart = makePartsCart(); cart.position.set(-13.5, 0, 6.0); cart.rotation.y = 0.2; scene.add(cart);
+/* ===== second-floor mezzanine: the whole line sits on a raised deck, fed by
+   a materials elevator standing where the parts cart used to be ===== */
+const FLOOR2 = 6.0;                                  // floor-to-deck height (~20 ft)
+const level2 = new THREE.Group(); level2.position.y = FLOOR2; scene.add(level2);
+
+const DECK = { x0:-16, x1:24, z0:-6, z1:8.5 };
+const deckW = DECK.x1 - DECK.x0, deckD = DECK.z1 - DECK.z0;
+const deckCx = (DECK.x0 + DECK.x1)/2, deckCz = (DECK.z0 + DECK.z1)/2;
+const deckMat = new THREE.MeshStandardMaterial({ color:0xb7bcc2, roughness:0.7, metalness:0.3 });
+const deck = bx(deckW, 0.3, deckD, deckMat); deck.position.set(deckCx, -0.16, deckCz); deck.receiveShadow = true; level2.add(deck);
+// diamond-plate edge fascia
+const fascia = new THREE.MeshStandardMaterial({ color:0x8a9099, roughness:0.6, metalness:0.4 });
+for (const [w,d,x,z] of [[deckW,0.5,deckCx,DECK.z0],[deckW,0.5,deckCx,DECK.z1],[0.5,deckD,DECK.x0,deckCz],[0.5,deckD,DECK.x1,deckCz]]) {
+  const f = bx(w,0.5,d,fascia); f.position.set(x,-0.34,z); level2.add(f);
+}
+// support columns from ground up to the deck
+for (const cx2 of [-15,-5,5,15,23]) for (const cz2 of [-5.5,8]) {
+  const col = bx(0.4, FLOOR2, 0.4, MAT.steel); col.position.set(cx2, FLOOR2/2, cz2); col.castShadow = true; scene.add(col);
+  const base = bx(0.7,0.1,0.7,MAT.steel); base.position.set(cx2,0.05,cz2); scene.add(base);
+}
+// guard railing around the deck (gap on the left edge where the elevator docks)
+const RAILMAT = MAT.steel;
+function railing(x0,z0,x1,z1){
+  const g = new THREE.Group();
+  const dx=x1-x0, dz=z1-z0, len=Math.hypot(dx,dz), ang=Math.atan2(dz,dx);
+  for (const y of [0.55,1.05]) { const r=bx(len,0.06,0.06,RAILMAT); r.position.set((x0+x1)/2,y,(z0+z1)/2); r.rotation.y=-ang; g.add(r); }
+  const posts=Math.max(2,Math.round(len/2.2));
+  for (let i=0;i<=posts;i++){ const t=i/posts; const p=bx(0.07,1.05,0.07,RAILMAT); p.position.set(x0+dx*t,0.52,z0+dz*t); g.add(p); }
+  return g;
+}
+level2.add(railing(DECK.x0,DECK.z0,DECK.x1,DECK.z0));   // back
+level2.add(railing(DECK.x0,DECK.z1,DECK.x1,DECK.z1));   // front
+level2.add(railing(DECK.x1,DECK.z0,DECK.x1,DECK.z1));   // right
+level2.add(railing(DECK.x0,DECK.z0,DECK.x0,4));         // left (lower)
+level2.add(railing(DECK.x0,8,DECK.x0,DECK.z1));         // left (upper) — gap 4..8 = elevator opening
+
+// materials elevator where the cart was
+function makeElevator(x,z){
+  const shaft = new THREE.Group();
+  const S = 1.25, H = FLOOR2 + 1.4;
+  for (const [px,pz] of [[-S,-S],[S,-S],[-S,S],[S,S]]) {
+    const post = bx(0.16,H,0.16,MAT.rackPost); post.position.set(x+px,H/2,z+pz); shaft.add(post);
+  }
+  const header = bx(2*S+0.3,0.22,2*S+0.3,MAT.rackBeam); header.position.set(x,H,z); shaft.add(header);
+  const cable = bx(0.04,H,0.04,MAT.pants); cable.position.set(x,H/2,z); shaft.add(cable);
+  // signage
+  const car = new THREE.Group();
+  const plat = bx(2*S,0.14,2*S,MAT.steel); plat.castShadow = true; car.add(plat);
+  for (const [px,pz] of [[-S,-S],[S,-S],[-S,S],[S,S]]) { const p=bx(0.08,1.0,0.08,MAT.steel); p.position.set(px,0.55,pz); car.add(p); }
+  const back = bx(2*S,1.0,0.08,MAT.steel); back.position.set(0,0.55,-S); car.add(back);
+  const crate = new THREE.Group();
+  crate.add(bx(1.5,0.8,1.5,MAT.box));
+  const lid = bx(1.52,0.08,0.45,MAT.boxWhite); lid.position.y=0.42; crate.add(lid);
+  crate.position.y=0.5; car.add(crate);
+  car.position.set(x,0.4,z); shaft.add(car);
+  return { shaft, car, crate, x, z, H };
+}
+const elevator = makeElevator(-17.5, 6.0);
+scene.add(elevator.shaft);
 
 /* ---- station layout: feeders in back row, FA + packing in front ---- */
 const OP_COLORS = [0x3a66a8, 0xb9772e, 0x2e7d4f, 0x8f5390, 0xa8923a, 0x3f8f8f, 0x9c4f45, 0x5c5f99];
@@ -376,13 +434,13 @@ ST.forEach(s => {
   const { st, led } = makeBench(wide);
   st.position.set(x, 0, z);
   if (s.role === 'fa') st.rotation.y = 0; // faces aisle
-  scene.add(st);
+  level2.add(st);
   const label = makeStationLabel(s.title, s.sub, s.t ? s.t + ' min' : '—', s.accent);
-  label.position.set(x, 3.4, z); scene.add(label);
+  label.position.set(x, 3.4, z); level2.add(label);
 
   let visual = null;
-  if (s.role === 'feeder') { visual = makeFeederWIP(s.kind); visual.g.position.set(x, 1.04, z); scene.add(visual.g); }
-  if (s.role === 'fa') { visual = makeSofaProduct(); visual.g.position.set(x, 1.04, z); visual.update(0); scene.add(visual.g); }
+  if (s.role === 'feeder') { visual = makeFeederWIP(s.kind); visual.g.position.set(x, 1.04, z); level2.add(visual.g); }
+  if (s.role === 'fa') { visual = makeSofaProduct(); visual.g.position.set(x, 1.04, z); visual.update(0); level2.add(visual.g); }
 
   nodes[s.id] = { s, st, led, visual, label, x, z };
 
@@ -394,15 +452,15 @@ ST.forEach(s => {
     const ox = x + (np > 1 ? (i - (np-1)/2) * 1.1 : 0);
     const oz = z + 1.7;
     fig.position.set(ox, 0, oz);
-    scene.add(fig);
+    level2.add(fig);
     crew.push({ fig, station: s.id, homeX: ox, homeZ: oz, idx: i });
   }
 });
 // shipped boxes pool near packing/ship dock
 const shipBoxes = [];
-for (let i = 0; i < 40; i++) { const b = makeShipBox(); b.visible = false; b.position.set(16 + (i%4)*2.0, 0, 4.2 + Math.floor(i/4)*1.2); scene.add(b); shipBoxes.push(b); }
+for (let i = 0; i < 40; i++) { const b = makeShipBox(); b.visible = false; b.position.set(16 + (i%4)*2.0, 0, 4.2 + Math.floor(i/4)*1.2); level2.add(b); shipBoxes.push(b); }
 // a sofa that travels from FA to packing during pack phase
-const movingSofa = makeSofaProduct(); movingSofa.update(1); movingSofa.g.visible = false; scene.add(movingSofa.g);
+const movingSofa = makeSofaProduct(); movingSofa.update(1); movingSofa.g.visible = false; level2.add(movingSofa.g);
 
 /* ---- traveling feeder parts: each feeder ships its finished sub-part to the
    full-assembly bench, where it stages until full assembly starts that unit.
@@ -419,12 +477,12 @@ FEEDERS.forEach(id => {
   const arr = [];
   for (let u = 0; u < MAX_UNITS; u++) {
     const p = buildSub(kind); p.scale.set(0.5, 0.5, 0.5); p.visible = false;
-    scene.add(p); arr.push(p);
+    level2.add(p); arr.push(p);
   }
   travelParts[id] = arr;
 });
 
-controls.target.set(0, 0.8, 0.5);
+controls.target.set(2, FLOOR2 + 0.8, 0.5);
 
 /* =========================== UI =========================== */
 const ui = {
@@ -444,8 +502,8 @@ const nInput = document.getElementById('n');
 nInput.value = N;
 nInput.onchange = e => { N = Math.max(1, Math.min(40, parseInt(e.target.value)||8)); schedule(); T=0; setPlay(false); };
 const speed = document.getElementById('speed');
-document.getElementById('cam').onclick = () => { camera.position.set(2,17,34); controls.target.set(0,0.8,0.5); };
-document.getElementById('top').onclick = () => { camera.position.set(0,40,0.1); controls.target.set(0,0,0); };
+document.getElementById('cam').onclick = () => { camera.position.set(4,22,40); controls.target.set(2,FLOOR2+0.8,0.5); };
+document.getElementById('top').onclick = () => { camera.position.set(4,FLOOR2+38,1); controls.target.set(4,FLOOR2,1); };
 
 // build editable time rows
 const timeBox = document.getElementById('times');
@@ -557,6 +615,16 @@ function loop(now){
     if (T >= horizon) { T = horizon; setPlay(false); }
   }
   for (const f of fans) f.userData.blades.rotation.y += dt * 0.8;
+  // materials elevator: rise loaded -> dock -> descend empty -> reload
+  const ecyc = 7;                       // seconds per full cycle
+  const ph = (now / 1000 / ecyc) % 1;
+  let ey, loaded;
+  if (ph < 0.4)       { ey = 0.4 + (FLOOR2 - 0.4) * (ph / 0.4); loaded = true; }
+  else if (ph < 0.55) { ey = FLOOR2; loaded = true; }
+  else if (ph < 0.9)  { ey = FLOOR2 - (FLOOR2 - 0.4) * ((ph - 0.55) / 0.35); loaded = false; }
+  else                { ey = 0.4; loaded = false; }
+  elevator.car.position.y = ey;
+  elevator.crate.visible = loaded;
   update();
   controls.update();
   renderer.render(scene, camera);
