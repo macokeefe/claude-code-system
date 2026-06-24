@@ -689,6 +689,45 @@ renderer.domElement.addEventListener('pointermove', e => {
 renderer.domElement.addEventListener('pointerup', () => { if (dragId) { dragId = null; measure.visible = false; measurePanel.innerHTML = ''; saveLayout(); } });
 loadLayout();
 
+/* ---- named layouts: save / load / compare different floor plans ---- */
+const LAYOUTS_KEY = 'm3d_layouts_v1';
+const readLayouts = () => { try { return JSON.parse(localStorage.getItem(LAYOUTS_KEY)) || {}; } catch (e) { return {}; } };
+const writeLayouts = o => { try { localStorage.setItem(LAYOUTS_KEY, JSON.stringify(o)); } catch (e) {} };
+function snapshot() {
+  const pos = {}, times = {};
+  ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
+  const cap = sch ? 420 / Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 0;
+  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, cap: +cap.toFixed(1) };
+}
+function applyLayout(L) {
+  if (L.times) ST.forEach(s => { if (L.times[s.id] != null) get(s.id).t = L.times[s.id]; });
+  if (L.pos) Object.keys(L.pos).forEach(id => { if (nodes[id]) setStationPos(id, L.pos[id][0], L.pos[id][1]); });
+  if (typeof L.walkOn === 'boolean') { walkOn = L.walkOn; const c = document.getElementById('walkOn'); if (c) c.checked = walkOn; }
+  if (L.walkSpeed) { walkSpeed = L.walkSpeed; const c = document.getElementById('walkSpeed'); if (c) c.value = walkSpeed; }
+  if (L.trips != null) { tripsPerUnit = L.trips; const c = document.getElementById('trips'); if (c) c.value = tripsPerUnit; }
+  if (L.N) { N = L.N; nInput.value = N; }
+  ST.forEach(s => { const inp = timeBox.querySelector(`input[data-id="${s.id}"]`); if (inp) inp.value = get(s.id).t; });
+  schedule(); T = 0; setPlay(false); saveLayout();
+}
+const layoutSel = document.getElementById('layoutSel');
+function refreshLayoutSel(sel) {
+  const o = readLayouts();
+  layoutSel.innerHTML = '<option value="">— working —</option>' +
+    Object.keys(o).map(n => `<option value="${n}">${n} · ${o[n].cap ?? '?'}/day</option>`).join('');
+  layoutSel.value = sel || '';
+}
+document.getElementById('saveLayout').onclick = () => {
+  const name = (prompt('Save this layout as:') || '').trim(); if (!name) return;
+  const o = readLayouts(); o[name] = snapshot(); writeLayouts(o); refreshLayoutSel(name);
+};
+layoutSel.onchange = e => { const L = readLayouts()[e.target.value]; if (L) applyLayout(L); };
+document.getElementById('delLayout').onclick = () => {
+  const n = layoutSel.value; if (!n) return;
+  if (!confirm(`Delete layout "${n}"?`)) return;
+  const o = readLayouts(); delete o[n]; writeLayouts(o); refreshLayoutSel('');
+};
+refreshLayoutSel();
+
 /* =========================== UPDATE =========================== */
 function setLed(mat, state, active){ mat.color.setHex(RING[state]); mat.emissive.setHex(state==='idle'?0x000000:RING[state]); mat.emissiveIntensity = active?1.1:0.5; }
 
