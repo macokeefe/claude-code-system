@@ -356,8 +356,7 @@ const addLane = (w, d, x, z) => { const m = bx(w, 0.012, d, MAT.tape); m.positio
 for (const z of [6.6, 8.2]) addLane(54, 0.12, 0, z);
 for (const rx of [-22, -11, 0, 11, 22]) { const r = makeRack(); r.position.set(rx, 0, -16); scene.add(r); }
 for (const [cx, cz] of [[-28,-12],[28,-12],[-28,12],[28,12]]) { const col = bx(0.6,8,0.6,MAT.column); col.position.set(cx,4,cz); scene.add(col); }
-const fans = [];
-for (const fx of [-10, 10]) { const f = makeFan(); f.position.set(fx, 7.4, 0); scene.add(f); fans.push(f); }
+// (ceiling fans removed)
 /* ===== second-floor mezzanine: the whole line sits on a raised deck, fed by
    a materials elevator standing where the parts cart used to be ===== */
 const FLOOR2 = 6.0;                                  // floor-to-deck height (~20 ft)
@@ -522,6 +521,139 @@ timeBox.querySelectorAll('input').forEach(inp => inp.onchange = e => {
   schedule(); T = 0; setPlay(false);
 });
 
+/* =========================== EDIT LAYOUT =========================== */
+const YARD = 0.9144;                       // 1 unit = 1 metre; 1 yard = 0.9144 m
+const u2y = u => u / YARD;                  // units -> yards
+const LAYOUT_KEY = 'm3d_layout_v1';
+
+function setStationPos(id, x, z) {
+  const nd = nodes[id]; if (!nd) return;
+  nd.x = x; nd.z = z; POS[id] = [x, z];
+  nd.st.position.x = x; nd.st.position.z = z;
+  nd.label.position.x = x; nd.label.position.z = z;
+  if (nd.visual) { nd.visual.g.position.x = x; nd.visual.g.position.z = z; }
+  const cs = crew.filter(c => c.station === id); const np = cs.length;
+  cs.forEach((c, i) => { c.homeX = x + (np > 1 ? (i - (np - 1) / 2) * 1.1 : 0); c.homeZ = z + 1.7;
+    if (!editing) { c.fig.position.x = c.homeX; c.fig.position.z = c.homeZ; } });
+}
+function saveLayout() { try { const o = {}; ST.forEach(s => { if (POS[s.id]) o[s.id] = POS[s.id]; }); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
+function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (o) Object.keys(o).forEach(id => { if (nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); } catch (e) {} }
+
+// 1-yard grid on the deck
+function buildGrid() {
+  const g = new THREE.Group(); g.visible = false;
+  const y = FLOOR2 + 0.04;
+  const minor = new THREE.LineBasicMaterial({ color: 0x9aa6b2, transparent: true, opacity: 0.45 });
+  const major = new THREE.LineBasicMaterial({ color: 0x33414f, transparent: true, opacity: 0.8 });
+  const vp = [], vpM = [], hp = [], hpM = [];
+  let i = 0;
+  for (let x = DECK.x0; x <= DECK.x1 + 1e-6; x += YARD, i++) { (i % 5 === 0 ? vpM : vp).push(x, y, DECK.z0, x, y, DECK.z1); }
+  i = 0;
+  for (let z = DECK.z0; z <= DECK.z1 + 1e-6; z += YARD, i++) { (i % 5 === 0 ? hpM : hp).push(DECK.x0, y, z, DECK.x1, y, z); }
+  const mk = (pts, mat) => { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); return new THREE.LineSegments(geo, mat); };
+  g.add(mk(vp, minor), mk(hp, minor), mk(vpM, major), mk(hpM, major));
+  // yard ruler labels every 5 yd along the near edges
+  const mkLbl = (txt, wx, wz) => {
+    const c = document.createElement('canvas'); c.width = 96; c.height = 48; const cx = c.getContext('2d');
+    cx.fillStyle = '#1d3a66'; cx.font = '700 30px Arial'; cx.textAlign = 'center'; cx.fillText(txt, 48, 34);
+    const tex = new THREE.CanvasTexture(c); const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+    sp.scale.set(2.0, 1.0, 1); sp.position.set(wx, y + 0.2, wz); g.add(sp);
+  };
+  let yd = 0;
+  for (let x = DECK.x0; x <= DECK.x1 + 1e-6; x += 5 * YARD, yd += 5) mkLbl(yd + 'yd', x, DECK.z1 + 0.9);
+  yd = 0;
+  for (let z = DECK.z0; z <= DECK.z1 + 1e-6; z += 5 * YARD, yd += 5) mkLbl(yd + 'yd', DECK.x0 - 0.9, z);
+  return g;
+}
+const grid = buildGrid(); scene.add(grid);
+
+// dynamic measurement lines from the dragged station to all others
+const measureMat = new THREE.LineBasicMaterial({ color: 0xc0552c });
+const measureGeo = new THREE.BufferGeometry();
+const measure = new THREE.LineSegments(measureGeo, measureMat); measure.visible = false; scene.add(measure);
+
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+const deckPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(FLOOR2 - 0.0)); // y = FLOOR2
+let editing = false, dragId = null, savedView = null;
+const stList = () => ST.map(s => nodes[s.id]).filter(n => n && n.st);
+const measurePanel = document.getElementById('measure');
+const editBtn = document.getElementById('edit');
+
+function pointerNDC(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+  ndc.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+}
+function pickStation(e) {
+  pointerNDC(e); raycaster.setFromCamera(ndc, camera);
+  const hits = raycaster.intersectObjects(stList().map(n => n.st), true);
+  if (!hits.length) return null;
+  let o = hits[0].object;
+  while (o) { const f = stList().find(n => n.st === o); if (f) return f.s.id; o = o.parent; }
+  return null;
+}
+function deckPoint(e) {
+  pointerNDC(e); raycaster.setFromCamera(ndc, camera);
+  const p = new THREE.Vector3();
+  return raycaster.ray.intersectPlane(deckPlane, p) ? p : null;
+}
+function refreshMeasure() {
+  if (!dragId) { measure.visible = false; measurePanel.innerHTML = ''; return; }
+  const a = nodes[dragId]; const pts = [];
+  const rows = [];
+  ST.forEach(s => {
+    if (s.id === dragId) return; const b = nodes[s.id]; if (!b) return;
+    pts.push(a.x, FLOOR2 + 0.06, a.z, b.x, FLOOR2 + 0.06, b.z);
+    const d = Math.hypot(a.x - b.x, a.z - b.z);
+    rows.push({ t: s.title, y: u2y(d) });
+  });
+  measureGeo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  measureGeo.computeBoundingSphere(); measure.visible = true;
+  rows.sort((p, q) => p.y - q.y);
+  measurePanel.innerHTML = `<h4>${nodes[dragId].s.title}</h4>` +
+    rows.map(r => `<div class="mr"><span>${r.t}</span><b>${r.y.toFixed(1)} yd</b></div>`).join('');
+}
+function setEditing(on) {
+  editing = on;
+  editBtn.textContent = on ? '✓ Done editing' : '✥ Edit layout';
+  editBtn.classList.toggle('on', on);
+  grid.visible = on;
+  controls.enabled = !on;
+  measurePanel.style.display = on ? 'block' : 'none';
+  document.getElementById('editHint').style.display = on ? 'block' : 'none';
+  if (on) {
+    setPlay(false);
+    savedView = { p: camera.position.clone(), t: controls.target.clone() };
+    camera.position.set((DECK.x0 + DECK.x1) / 2, FLOOR2 + 46, (DECK.z0 + DECK.z1) / 2 + 0.01);
+    controls.target.set((DECK.x0 + DECK.x1) / 2, FLOOR2, (DECK.z0 + DECK.z1) / 2);
+    camera.lookAt(controls.target);
+  } else {
+    dragId = null; measure.visible = false; measurePanel.innerHTML = '';
+    if (savedView) { camera.position.copy(savedView.p); controls.target.copy(savedView.t); }
+    // settle crew back home
+    crew.forEach(c => { c.fig.position.x = c.homeX; c.fig.position.z = c.homeZ; });
+    saveLayout();
+  }
+}
+editBtn.onclick = () => setEditing(!editing);
+renderer.domElement.addEventListener('pointerdown', e => {
+  if (!editing) return;
+  const id = pickStation(e);
+  if (id) { dragId = id; renderer.domElement.setPointerCapture(e.pointerId); refreshMeasure(); }
+});
+renderer.domElement.addEventListener('pointermove', e => {
+  if (!editing || !dragId) return;
+  const p = deckPoint(e); if (!p) return;
+  const snap = v => Math.round(v / (YARD / 2)) * (YARD / 2);   // snap to 0.5 yd
+  let x = Math.max(DECK.x0 + 1.4, Math.min(DECK.x1 - 1.4, snap(p.x)));
+  let z = Math.max(DECK.z0 + 1.4, Math.min(DECK.z1 - 1.4, snap(p.z)));
+  setStationPos(dragId, x, z);
+  refreshMeasure();
+});
+renderer.domElement.addEventListener('pointerup', () => { if (dragId) { dragId = null; measure.visible = false; measurePanel.innerHTML = ''; saveLayout(); } });
+loadLayout();
+
 /* =========================== UPDATE =========================== */
 function setLed(mat, state, active){ mat.color.setHex(RING[state]); mat.emissive.setHex(state==='idle'?0x000000:RING[state]); mat.emissiveIntensity = active?1.1:0.5; }
 
@@ -614,7 +746,6 @@ function loop(now){
     T += dt * parseFloat(speed.value);
     if (T >= horizon) { T = horizon; setPlay(false); }
   }
-  for (const f of fans) f.userData.blades.rotation.y += dt * 0.8;
   // materials elevator: rise loaded -> dock -> descend empty -> reload
   const ecyc = 7;                       // seconds per full cycle
   const ph = (now / 1000 / ecyc) % 1;
