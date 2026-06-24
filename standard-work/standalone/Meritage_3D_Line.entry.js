@@ -164,7 +164,6 @@ function makeBench(wide = false) {
   const led = new THREE.Mesh(new THREE.BoxGeometry(W - 0.2, 0.055, 0.05),
     new THREE.MeshStandardMaterial({ color: RING.idle, emissive: 0x000000, emissiveIntensity: 1.6, roughness: 0.4 }));
   led.position.set(0, 1.045, 0.875); st.add(led);
-  const hose = makeHose(); hose.position.set(W/2 - 0.5, 0, -0.45); st.add(hose);
   return { st, led: led.material };
 }
 
@@ -465,17 +464,26 @@ const elevator = makeElevator(-17.5, 6.0);
 scene.add(elevator.shaft);
 
 // the single materials cart (holds all parts) — draggable; feeders pull from this one spot
-const bigCart = makePartsCart(); bigCart.scale.set(1.7, 1.45, 1.7); level2.add(bigCart);
-// a sign over the cart
+// draggable cart SPOT (front of the queue) — feeders pull parts from here
+const cartPad = new THREE.Group();
+const pad = bx(2.7, 0.04, 2.7, new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.9, transparent: true, opacity: 0.45 }));
+pad.position.y = 0.025; cartPad.add(pad);
+for (const dx of [-1.35, 1.35]) { const e = bx(0.1, 0.03, 2.7, MAT.tape); e.position.set(dx, 0.03, 0); cartPad.add(e); }
+for (const dz of [-1.35, 1.35]) { const e = bx(2.7, 0.03, 0.1, MAT.tape); e.position.set(0, 0.03, dz); cartPad.add(e); }
 const cartSign = (function(){ const c=document.createElement('canvas'); c.width=320; c.height=72; const x=c.getContext('2d');
   x.fillStyle='#1d3a66'; x.beginPath(); x.roundRect(4,8,312,56,14); x.fill();
   x.fillStyle='#fff'; x.font='700 30px Arial'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('MATERIALS CART',160,38);
   const tex=new THREE.CanvasTexture(c); tex.anisotropy=8; const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true}));
-  sp.scale.set(2.0,0.45,1); sp.position.y=2.2; bigCart.add(sp); return sp; })();
+  sp.scale.set(2.0,0.45,1); sp.position.y=1.6; cartPad.add(sp); return sp; })();
 const CART_DEF = [-2, -1.2];
-bigCart.position.set(CART_DEF[0], 0, CART_DEF[1]);
-// a shuttle cart restocks the big cart from the elevator
-const shuttle = makePartsCart(); level2.add(shuttle);
+cartPad.position.set(CART_DEF[0], 0, CART_DEF[1]); level2.add(cartPad);
+
+// pool of physical carts moved by the elevator/queue state machine
+const EL = [-17.5, 6];                 // elevator column (level2-local x,z)
+const MAXQ = 3, USE_TIME = 18, LIFT = 4.0, ROLL = 5.0;   // up to 3 carts; sec a cart lasts; lift/roll speeds
+const cartPool = [];
+for (let i = 0; i < 3; i++) { const c = makePartsCart(); c.scale.set(1.4, 1.3, 1.4); c.visible = false; level2.add(c); cartPool.push({ mesh: c, state: 'down', slot: -1, t: 0 }); }
+let elevBusy = false, carY = 0.4;
 
 /* ---- station layout: feeders in back row, FA + packing in front ---- */
 const OP_COLORS = [0x3a66a8, 0xb9772e, 0x2e7d4f, 0x8f5390, 0xa8923a, 0x3f8f8f, 0x9c4f45, 0x5c5f99];
@@ -518,7 +526,7 @@ ST.forEach(s => {
   }
 });
 // register the materials cart as a draggable source node (nodes/POS now exist)
-nodes.cart = { id:'cart', x:CART_DEF[0], z:CART_DEF[1], st:bigCart, s:{ id:'cart', title:'Materials cart' } };
+nodes.cart = { id:'cart', x:CART_DEF[0], z:CART_DEF[1], st:cartPad, s:{ id:'cart', title:'Materials cart' } };
 POS.cart = [CART_DEF[0], CART_DEF[1]];
 // shipped boxes pool near packing/ship dock
 const shipBoxes = [];
@@ -858,6 +866,67 @@ function update(){
   });
 }
 
+/* ============ CART LOGISTICS (queue + elevator state machine) ============ */
+function slotPos(i) {
+  const ax = nodes.cart.x, az = nodes.cart.z;
+  let dx = ax - EL[0], dz = az - EL[1], L = Math.hypot(dx, dz) || 1;
+  const ux = dx / L, uz = dz / L;            // unit vector from elevator toward the cart spot
+  return [ax - ux * 2.9 * i, az - uz * 2.9 * i];   // slot 0 = the cart spot (active), others line up back toward elevator
+}
+function easeTo(mesh, tx, tz, dt) {
+  const dx = tx - mesh.position.x, dz = tz - mesh.position.z, d = Math.hypot(dx, dz);
+  const step = ROLL * dt;
+  if (d <= step || d < 0.01) { mesh.position.x = tx; mesh.position.z = tz; return true; }
+  mesh.position.x += dx / d * step; mesh.position.z += dz / d * step; return false;
+}
+function updateCarts(dt) {
+  const upStates = ['rising', 'toslot', 'queued', 'active'];
+  const presentUp = cartPool.filter(o => upStates.includes(o.state)).length;
+  // bring a new cart up only while fewer than MAXQ are up and the elevator is free
+  if (!elevBusy && presentUp < MAXQ) {
+    const down = cartPool.find(o => o.state === 'down');
+    if (down) { down.state = 'rising'; down.mesh.visible = true; down.mesh.position.set(EL[0], 0.4 - FLOOR2, EL[1]); elevBusy = true; carY = 0.4; }
+  }
+  for (const o of cartPool) {
+    if (o.state === 'rising') {
+      carY = Math.min(FLOOR2, carY + LIFT * dt);
+      o.mesh.position.set(EL[0], carY - FLOOR2, EL[1]);
+      if (carY >= FLOOR2) {
+        // step off onto the back-most empty slot
+        const used = new Set(cartPool.filter(c => c !== o && ['toslot','queued','active'].includes(c.state)).map(c => c.slot));
+        let s = MAXQ - 1; for (let k = 0; k < MAXQ; k++) { if (!used.has(k)) { s = k; break; } }
+        o.slot = s; o.state = 'toslot'; elevBusy = false;
+      }
+    } else if (o.state === 'toslot') {
+      o.mesh.position.y = 0;
+      const [tx, tz] = slotPos(o.slot);
+      if (easeTo(o.mesh, tx, tz, dt)) o.state = (o.slot === 0 ? 'active' : 'queued');
+    } else if (o.state === 'queued') {
+      const [tx, tz] = slotPos(o.slot); easeTo(o.mesh, tx, tz, dt);
+    } else if (o.state === 'active') {
+      const [tx, tz] = slotPos(0); easeTo(o.mesh, tx, tz, dt);
+      o.t += dt;
+      if (o.t >= USE_TIME) {                      // cart used up -> leaves down the elevator
+        o.state = 'leaving';
+        cartPool.forEach(c => { if (['queued','active'].includes(c.state) && c !== o && c.slot > 0) c.slot -= 1; });  // queue advances
+      }
+    } else if (o.state === 'leaving') {
+      if (easeTo(o.mesh, EL[0], EL[1], dt) && !elevBusy) { o.state = 'descending'; elevBusy = true; carY = FLOOR2; }
+    } else if (o.state === 'descending') {
+      carY = Math.max(0.4, carY - LIFT * dt);
+      o.mesh.position.set(EL[0], carY - FLOOR2, EL[1]);
+      if (carY <= 0.4) { o.state = 'down'; o.slot = -1; o.t = 0; o.mesh.visible = false; elevBusy = false; }
+    }
+  }
+  // promote a queued cart that reached the front into the active spot
+  if (!cartPool.some(o => o.state === 'active')) {
+    const front = cartPool.find(o => o.state === 'queued' && o.slot === 0);
+    if (front) { front.state = 'active'; front.t = 0; }
+  }
+  elevator.car.position.y = carY;
+  elevator.crate.visible = false;               // carts are the load now
+}
+
 /* =========================== LOOP =========================== */
 const ro = new ResizeObserver(() => {
   const W = mount.clientWidth, H = mount.clientHeight || 520;
@@ -871,24 +940,7 @@ function loop(now){
     T += dt * parseFloat(speed.value);
     if (T >= horizon) { T = horizon; setPlay(false); }
   }
-  // materials elevator: rise loaded -> dock -> descend empty -> reload
-  const ecyc = 7;                       // seconds per full cycle
-  const ph = (now / 1000 / ecyc) % 1;
-  let ey, loaded;
-  if (ph < 0.4)       { ey = 0.4 + (FLOOR2 - 0.4) * (ph / 0.4); loaded = true; }
-  else if (ph < 0.55) { ey = FLOOR2; loaded = true; }
-  else if (ph < 0.9)  { ey = FLOOR2 - (FLOOR2 - 0.4) * ((ph - 0.55) / 0.35); loaded = false; }
-  else                { ey = 0.4; loaded = false; }
-  elevator.car.position.y = ey;
-  elevator.crate.visible = loaded;
-  // shuttle cart restocks the big materials cart from the elevator (and follows it if moved)
-  const sp = (now / 1000 / 9) % 1;
-  const ex = -16, ez = 4.5, cxs = nodes.cart.x, czs = nodes.cart.z;
-  let hx, hz;
-  if (sp < 0.45) { const f = sp / 0.45; hx = ex + (cxs - ex) * f; hz = ez + (czs - ez) * f; }      // deliver to cart
-  else if (sp < 0.5) { hx = cxs; hz = czs; }                                                        // dwell
-  else { const f = (sp - 0.5) / 0.5; hx = cxs + (ex - cxs) * f; hz = czs + (ez - czs) * f; }        // return empty
-  shuttle.position.set(hx, 0, hz);
+  updateCarts(dt);
   update();
   controls.update();
   renderer.render(scene, camera);
