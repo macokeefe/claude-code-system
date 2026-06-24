@@ -74,7 +74,7 @@ function makeStationLabel(title, sub, timeStr, accent = '#1d3a66') {
   x.fillText(sub, 36, 178);
   const tex = new THREE.CanvasTexture(c); tex.anisotropy = 8;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-  sp.scale.set(4.4, 1.22, 1); sp.renderOrder = 999;
+  sp.scale.set(3.5, 0.95, 1); sp.renderOrder = 999;
   sp.userData.redraw = (timeStr2, accent2) => {
     x.clearRect(0,0,W,H);
     x.fillStyle = 'rgba(10,16,26,0.18)'; x.beginPath(); x.roundRect(14, 18, W - 22, H - 24, 22); x.fill();
@@ -90,6 +90,16 @@ function makeStationLabel(title, sub, timeStr, accent = '#1d3a66') {
   return sp;
 }
 
+function makeMiniLabel(title, accent) {
+  const c = document.createElement('canvas'); c.width = 480; c.height = 96; const x = c.getContext('2d');
+  x.fillStyle = accent || '#1d3a66'; x.beginPath(); x.roundRect(8, 22, 464, 52, 16); x.fill();
+  x.fillStyle = '#ffffff'; x.font = '700 38px Arial'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(title, 240, 49);
+  const tex = new THREE.CanvasTexture(c); tex.anisotropy = 8;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  sp.scale.set(2.4, 0.48, 1); sp.renderOrder = 999;
+  return sp;
+}
 function makeNameTag(name, colorHex) {
   const c = document.createElement('canvas'); c.width = 320; c.height = 92;
   const x = c.getContext('2d');
@@ -457,11 +467,11 @@ scene.add(elevator.shaft);
 // the single materials cart (holds all parts) — draggable; feeders pull from this one spot
 const bigCart = makePartsCart(); bigCart.scale.set(1.7, 1.45, 1.7); level2.add(bigCart);
 // a sign over the cart
-(function(){ const c=document.createElement('canvas'); c.width=256; c.height=64; const x=c.getContext('2d');
-  x.fillStyle='#1d3a66'; x.beginPath(); x.roundRect(0,0,256,64,12); x.fill();
-  x.fillStyle='#fff'; x.font='700 34px Arial'; x.textAlign='center'; x.fillText('MATERIALS CART',128,42);
-  const tex=new THREE.CanvasTexture(c); const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true}));
-  sp.scale.set(3.0,0.75,1); sp.position.y=2.1; bigCart.add(sp); })();
+const cartSign = (function(){ const c=document.createElement('canvas'); c.width=320; c.height=72; const x=c.getContext('2d');
+  x.fillStyle='#1d3a66'; x.beginPath(); x.roundRect(4,8,312,56,14); x.fill();
+  x.fillStyle='#fff'; x.font='700 30px Arial'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('MATERIALS CART',160,38);
+  const tex=new THREE.CanvasTexture(c); tex.anisotropy=8; const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true}));
+  sp.scale.set(2.0,0.45,1); sp.position.y=2.2; bigCart.add(sp); return sp; })();
 const CART_DEF = [-2, -1.2];
 bigCart.position.set(CART_DEF[0], 0, CART_DEF[1]);
 // a shuttle cart restocks the big cart from the elevator
@@ -485,13 +495,15 @@ ST.forEach(s => {
   if (s.role === 'fa') st.rotation.y = 0; // faces aisle
   level2.add(st);
   const label = makeStationLabel(s.title, s.sub, s.t ? s.t + ' min' : '—', s.accent);
-  label.position.set(x, 3.4, z); level2.add(label);
+  label.position.set(x, 2.85, z); level2.add(label);
+  const mini = makeMiniLabel(s.title, s.accent);
+  mini.position.set(x, 2.55, z); level2.add(mini);
 
   let visual = null;
   if (s.role === 'feeder') { visual = makeFeederWIP(s.kind); visual.g.position.set(x, 1.04, z); level2.add(visual.g); }
   if (s.role === 'fa') { visual = makeSofaProduct(); visual.g.position.set(x, 1.04, z); visual.update(0); level2.add(visual.g); }
 
-  nodes[s.id] = { s, st, led, visual, label, x, z };
+  nodes[s.id] = { s, st, led, visual, label, mini, x, z };
 
   // crew figures
   const np = s.role === 'pack' ? 0 : s.ppl;
@@ -556,6 +568,15 @@ nInput.onchange = e => { N = Math.max(1, Math.min(40, parseInt(e.target.value)||
 const speed = document.getElementById('speed');
 document.getElementById('cam').onclick = () => { camera.position.set(4,22,40); controls.target.set(2,FLOOR2+0.8,0.5); };
 document.getElementById('top').onclick = () => { camera.position.set(4,FLOOR2+38,1); controls.target.set(4,FLOOR2,1); };
+// label visibility: 0 = off, 1 = names only (compact), 2 = full cards
+let labelMode = 1;
+function applyLabels() {
+  ST.forEach(s => { const nd = nodes[s.id]; if (!nd) return; if (nd.label) nd.label.visible = labelMode === 2; if (nd.mini) nd.mini.visible = labelMode === 1; });
+  if (typeof cartSign !== 'undefined' && cartSign) cartSign.visible = labelMode !== 0;
+  const b = document.getElementById('labels'); if (b) b.textContent = 'Labels: ' + (labelMode === 0 ? 'Off' : labelMode === 1 ? 'Names' : 'Full');
+}
+document.getElementById('labels').onclick = () => { labelMode = (labelMode + 1) % 3; applyLabels(); };
+applyLabels();
 
 // build editable time rows
 const timeBox = document.getElementById('times');
@@ -590,7 +611,8 @@ function setStationPos(id, x, z) {
   const nd = nodes[id]; if (!nd) return;
   nd.x = x; nd.z = z; POS[id] = [x, z];
   nd.st.position.x = x; nd.st.position.z = z;
-  nd.label.position.x = x; nd.label.position.z = z;
+  if (nd.label) { nd.label.position.x = x; nd.label.position.z = z; }
+  if (nd.mini) { nd.mini.position.x = x; nd.mini.position.z = z; }
   if (nd.visual) { nd.visual.g.position.x = x; nd.visual.g.position.z = z; }
   const cs = crew.filter(c => c.station === id); const np = cs.length;
   cs.forEach((c, i) => { c.homeX = x + (np > 1 ? (i - (np - 1) / 2) * 1.1 : 0); c.homeZ = z + 1.7;
