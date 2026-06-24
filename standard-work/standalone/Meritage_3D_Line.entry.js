@@ -303,7 +303,6 @@ let sch = null, horizon = 0;
 // distance-based walk time — only the tables a station gets parts FROM and gives parts TO matter
 let walkOn = true, walkSpeed = 60, tripsPerUnit = 1;   // yd/min, trips per unit
 const dist2 = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
-const CART_LANE = { x0:-13.5, x1:13.5, z:-1.5 };       // supply line of carts off the elevator
 const SHIP_PT = [24, 4.2];                              // ship-out dock
 // material flow: who each station receives from (in) and hands off to (out)
 const FLOW = {
@@ -311,9 +310,10 @@ const FLOW = {
   tre:{ in:['cart'], out:['fa'] }, sea:{ in:['cart'], out:['fa'] },
   fa:{ in:['con','arm','bak','tre','sea'], out:['pak'] },
   pak:{ in:['fa'], out:['ship'] },
+  cart:{ in:[], out:['con','arm','bak','tre','sea'] },  // the one cart feeds all feeders
 };
 function linkPoint(tgt, nd) {
-  if (tgt === 'cart') return [Math.max(CART_LANE.x0, Math.min(CART_LANE.x1, nd.x)), CART_LANE.z]; // nearest point on the cart line
+  if (tgt === 'cart') { const c = nodes.cart; return c ? [c.x, c.z] : [nd.x, nd.z]; } // the single cart spot
   if (tgt === 'ship') return SHIP_PT;
   const n = nodes[tgt]; return n ? [n.x, n.z] : [nd.x, nd.z];
 }
@@ -454,10 +454,18 @@ function makeElevator(x,z){
 const elevator = makeElevator(-17.5, 6.0);
 scene.add(elevator.shaft);
 
-// supply line: carts rolling off the elevator and queued along the feeder front
-const parkedCarts = [];
-for (const cx2 of [-11, -6.5, -2, 2.5, 7, 11.5]) { const c = makePartsCart(); c.position.set(cx2, 0, CART_LANE.z); c.rotation.y = Math.PI/2; level2.add(c); parkedCarts.push(c); }
-const supplyCart = makePartsCart(); supplyCart.rotation.y = Math.PI/2; level2.add(supplyCart);
+// the single materials cart (holds all parts) — draggable; feeders pull from this one spot
+const bigCart = makePartsCart(); bigCart.scale.set(1.7, 1.45, 1.7); level2.add(bigCart);
+// a sign over the cart
+(function(){ const c=document.createElement('canvas'); c.width=256; c.height=64; const x=c.getContext('2d');
+  x.fillStyle='#1d3a66'; x.beginPath(); x.roundRect(0,0,256,64,12); x.fill();
+  x.fillStyle='#fff'; x.font='700 34px Arial'; x.textAlign='center'; x.fillText('MATERIALS CART',128,42);
+  const tex=new THREE.CanvasTexture(c); const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true}));
+  sp.scale.set(3.0,0.75,1); sp.position.y=2.1; bigCart.add(sp); })();
+const CART_DEF = [-2, -1.2];
+bigCart.position.set(CART_DEF[0], 0, CART_DEF[1]);
+// a shuttle cart restocks the big cart from the elevator
+const shuttle = makePartsCart(); level2.add(shuttle);
 
 /* ---- station layout: feeders in back row, FA + packing in front ---- */
 const OP_COLORS = [0x3a66a8, 0xb9772e, 0x2e7d4f, 0x8f5390, 0xa8923a, 0x3f8f8f, 0x9c4f45, 0x5c5f99];
@@ -497,6 +505,9 @@ ST.forEach(s => {
     crew.push({ fig, station: s.id, homeX: ox, homeZ: oz, idx: i });
   }
 });
+// register the materials cart as a draggable source node (nodes/POS now exist)
+nodes.cart = { id:'cart', x:CART_DEF[0], z:CART_DEF[1], st:bigCart, s:{ id:'cart', title:'Materials cart' } };
+POS.cart = [CART_DEF[0], CART_DEF[1]];
 // shipped boxes pool near packing/ship dock
 const shipBoxes = [];
 for (let i = 0; i < 40; i++) { const b = makeShipBox(); b.visible = false; b.position.set(16 + (i%4)*2.0, 0, 4.2 + Math.floor(i/4)*1.2); level2.add(b); shipBoxes.push(b); }
@@ -585,7 +596,7 @@ function setStationPos(id, x, z) {
   cs.forEach((c, i) => { c.homeX = x + (np > 1 ? (i - (np - 1) / 2) * 1.1 : 0); c.homeZ = z + 1.7;
     if (!editing) { c.fig.position.x = c.homeX; c.fig.position.z = c.homeZ; } });
 }
-function saveLayout() { try { const o = {}; ST.forEach(s => { if (POS[s.id]) o[s.id] = POS[s.id]; }); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
+function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
 function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (o) Object.keys(o).forEach(id => { if (nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); } catch (e) {} }
 
 // 1-yard grid on the deck
@@ -625,7 +636,7 @@ const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 const deckPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(FLOOR2 - 0.0)); // y = FLOOR2
 let editing = false, dragId = null, savedView = null;
-const stList = () => ST.map(s => nodes[s.id]).filter(n => n && n.st);
+const stList = () => [...ST.map(s => nodes[s.id]), nodes.cart].filter(n => n && n.st);
 const measurePanel = document.getElementById('measure');
 const editBtn = document.getElementById('edit');
 
@@ -652,7 +663,8 @@ function refreshMeasure() {
   const a = nodes[dragId]; const pts = [];
   const linked = new Set(linkSet(dragId));
   const rows = [];
-  ST.forEach(s => {
+  const targets = ST.concat([{ id: 'cart', title: 'Materials cart' }]);
+  targets.forEach(s => {
     if (s.id === dragId) return; const b = nodes[s.id]; if (!b) return;
     const lk = linked.has(s.id);
     if (lk) pts.push(a.x, FLOOR2 + 0.06, a.z, b.x, FLOOR2 + 0.06, b.z);  // only draw lines to linked tables
@@ -712,6 +724,7 @@ const writeLayouts = o => { try { localStorage.setItem(LAYOUTS_KEY, JSON.stringi
 function snapshot() {
   const pos = {}, times = {};
   ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
+  if (nodes.cart) pos.cart = [nodes.cart.x, nodes.cart.z];
   const cap = sch ? 420 / Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 0;
   return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, cap: +cap.toFixed(1) };
 }
@@ -846,12 +859,14 @@ function loop(now){
   else                { ey = 0.4; loaded = false; }
   elevator.car.position.y = ey;
   elevator.crate.visible = loaded;
-  // a cart rolls off the elevator and runs the supply line in front of the feeders
+  // shuttle cart restocks the big materials cart from the elevator (and follows it if moved)
   const sp = (now / 1000 / 9) % 1;
-  let scx, scz; const startX = -13.5, endX = 13.5, lz = CART_LANE.z;
-  if (sp < 0.2) { const f = sp / 0.2; scx = -16 + (startX + 16) * f; scz = 4.5 + (lz - 4.5) * f; }
-  else { const f = (sp - 0.2) / 0.8; scx = startX + (endX - startX) * f; scz = lz; }
-  supplyCart.position.set(scx, 0, scz);
+  const ex = -16, ez = 4.5, cxs = nodes.cart.x, czs = nodes.cart.z;
+  let hx, hz;
+  if (sp < 0.45) { const f = sp / 0.45; hx = ex + (cxs - ex) * f; hz = ez + (czs - ez) * f; }      // deliver to cart
+  else if (sp < 0.5) { hx = cxs; hz = czs; }                                                        // dwell
+  else { const f = (sp - 0.5) / 0.5; hx = cxs + (ex - cxs) * f; hz = czs + (ez - czs) * f; }        // return empty
+  shuttle.position.set(hx, 0, hz);
   update();
   controls.update();
   renderer.render(scene, camera);
