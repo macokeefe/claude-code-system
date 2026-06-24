@@ -24,17 +24,19 @@
 <body>
 <div class="wrap">
   <h1>Meritage 3-Seater — our layout, in action</h1>
-  <p class="sub">One unit, walked through. Feeders build in parallel; <b>Full Assembly waits</b> until Seat frame + an Arm (or Back frame) are done, then assembles, then packs. (In steady state units overlap → one finishes every 47 min.)</p>
+  <p class="sub">Set how many chairs to build. Each operator <b>starts the next chair the moment they finish</b> their current one. <b>Full Assembly only starts a chair once its kit is ready</b> (Seat frame + an Arm or Back frame). Watch the line fill up and units ship.</p>
 
   <div class="bar">
     <button id="play">▶ Play</button>
     <button id="reset" class="sec">↺ Reset</button>
+    <div>Chairs <input id="chairs" type="number" min="1" max="60" value="8" style="width:64px;background:#0e1116;color:#e7ecf1;border:1px solid #2c3540;border-radius:6px;padding:6px 8px"></div>
     <div>Speed <input id="speed" type="range" min="2" max="40" value="14"><span id="spd" class="stat" style="font-size:12px;color:#9aa7b4"> </span></div>
     <div class="spacer" style="flex:1"></div>
-    <div class="stat"><b id="clock">0.0</b><div class="l">min (unit lead time)</div></div>
-    <div class="stat"><b id="units">0</b><div class="l">units shipped</div></div>
-    <div class="stat"><b id="rate">8.9</b><div class="l">/day (steady-state)</div></div>
+    <div class="stat"><b id="clock">0</b><div class="l">min elapsed</div></div>
+    <div class="stat"><b id="units">0</b><div class="l">shipped</div></div>
+    <div class="stat"><b id="rate">8.9</b><div class="l">/day (steady)</div></div>
   </div>
+  <div id="done" style="color:#2ea043;font-weight:700;font-size:13px;min-height:18px;margin:-6px 0 10px"></div>
 
   <svg id="floor" viewBox="0 0 720 470"></svg>
 
@@ -108,52 +110,66 @@ STN.forEach(function(s){
  ui[s.id]={bg:bg,fill:fill,status:st};
 });
 
-var t=0, playing=false, speed=14, units=0;
+var t=0, playing=false, speed=14, units=0, N=8;
+var faStart=[], faEnd=[];
+function schedule(){
+ faStart=[]; faEnd=[]; var prevEnd=0;
+ for(var u=0;u<N;u++){
+   var seatEnd=(u+1)*byId.sea.busy, armEnd=(u+1)*byId.arm.busy, backEnd=(u+1)*byId.bak.busy;
+   var kit=Math.max(seatEnd, Math.min(armEnd,backEnd));   // Seat AND (Arm or Back)
+   var st=Math.max(kit, prevEnd);
+   faStart[u]=st; faEnd[u]=st+ASM+PACK; prevEnd=faEnd[u];
+ }
+}
+schedule();
 document.getElementById('rate').textContent=(420/BUILD).toFixed(1);
 function setFill(id,frac,color){var s=byId[id],f=ui[id].fill;var h=Math.max(0,Math.min(1,frac))*BOXH;f.setAttribute('y',s.y+BOXH-h);f.setAttribute('height',h);f.setAttribute('fill',color);}
 function arrow(srcId,active){['fa'].forEach(function(){});var ln=arrowEls[srcId+'>fa'];if(ln){ln.setAttribute('stroke',active?'#3d6fb0':'#2a323c');ln.setAttribute('marker-end',active?'url(#ah)':'url(#ahf)');}}
 
 function frame(){
- var u=t%TOTAL;
- var seatDone=u>=byId.sea.busy, armDone=u>=byId.arm.busy, backDone=u>=byId.bak.busy;
- var kitReady = seatDone && (armDone||backDone);
- // feeders (build phase only; after BUILD they're done & waiting)
+ var T=t;
+ // feeders: each builds chair after chair (starts the next when done)
  ['con','arm','bak','tre','sea'].forEach(function(id){
-  var s=byId[id], done=u>=s.busy;
-  if(!done){ setFill(id,u/s.busy, s.bottleneck?'#d29922':'#1f6feb'); ui[id].status.textContent='Working '+Math.round(u/s.busy*100)+'%'; ui[id].bg.setAttribute('stroke', s.bottleneck?'#d29922':'#2c3540'); arrow(id,false);}
-  else { setFill(id,1,'#3d4a5a'); ui[id].status.textContent='✓ done — waiting'; ui[id].bg.setAttribute('stroke','#2c3540'); arrow(id,true); }
+  var s=byId[id], unit=Math.floor(T/s.busy);
+  if(unit>=N){ setFill(id,1,'#3d4a5a'); ui[id].status.textContent='✓ all '+N+' built'; ui[id].bg.setAttribute('stroke','#2c3540'); arrow(id,true); }
+  else { var fr=(T-unit*s.busy)/s.busy; setFill(id,fr, s.bottleneck?'#d29922':'#1f6feb'); ui[id].status.textContent='Chair '+(unit+1)+' · '+Math.round(fr*100)+'%'; ui[id].bg.setAttribute('stroke', s.bottleneck?'#d29922':'#2c3540'); arrow(id,false); }
  });
- // full assembly: wait for kit, then assemble, then pack
- var fa=arrowEls['fa>fur'];
- if(u<BUILD){ // WAITING for the kit
-  setFill('fa',0,'#30363d');
-  ui.fa.status.textContent = kitReady ? 'Kit ready ✓ starting…' : ('Waiting — need '+(!seatDone?'Seat frame':'')+((!seatDone&&!(armDone||backDone))?' + ':'')+(!(armDone||backDone)?'an Arm':''));
-  ui.fa.bg.setAttribute('stroke', kitReady?'#2ea043':'#b3261e');
+ // full assembly: process each chair's kit when ready, back to back
+ var fa=arrowEls['fa>fur'], cur=-1;
+ for(var u=0;u<N;u++){ if(T>=faStart[u] && T<faEnd[u]){ cur=u; break; } }
+ if(cur>=0){
+  var local=T-faStart[cur];
+  if(local<ASM){ setFill('fa',local/ASM,'#1f6feb'); ui.fa.status.textContent='Chair '+(cur+1)+' · assembling '+Math.round(local/ASM*100)+'%'; ui.fa.bg.setAttribute('stroke','#2c3540'); fa.setAttribute('stroke','#2a323c'); fa.setAttribute('marker-end','url(#ahf)'); }
+  else { setFill('fa',(local-ASM)/PACK,'#2ea043'); ui.fa.status.textContent='Chair '+(cur+1)+' · packing '+Math.round((local-ASM)/PACK*100)+'%'; ui.fa.bg.setAttribute('stroke','#2c3540'); fa.setAttribute('stroke','#2ea043'); fa.setAttribute('marker-end','url(#ah)'); }
+ } else {
+  var allDone = N>0 && T>=faEnd[N-1];
+  setFill('fa',0, allDone?'#1d3a2a':'#30363d');
+  ui.fa.status.textContent = allDone ? '✓ done' : 'Waiting for kit (Seat frame + an Arm)';
+  ui.fa.bg.setAttribute('stroke', allDone?'#2c3540':'#b3261e');
   fa.setAttribute('stroke','#2a323c'); fa.setAttribute('marker-end','url(#ahf)');
- } else if(u<BUILD+ASM){ // ASSEMBLING
-  setFill('fa',(u-BUILD)/ASM,'#1f6feb'); ui.fa.status.textContent='Assembling '+Math.round((u-BUILD)/ASM*100)+'%'; ui.fa.bg.setAttribute('stroke','#2c3540');
-  fa.setAttribute('stroke','#2a323c'); fa.setAttribute('marker-end','url(#ahf)');
- } else { // PACKING
-  setFill('fa',(u-BUILD-ASM)/PACK,'#2ea043'); ui.fa.status.textContent='Packing '+Math.round((u-BUILD-ASM)/PACK*100)+'%'; ui.fa.bg.setAttribute('stroke','#2c3540');
-  fa.setAttribute('stroke','#2ea043'); fa.setAttribute('marker-end','url(#ah)');
  }
- // furniture
- setFill('fur', u>=BUILD+ASM ? (u-BUILD-ASM)/PACK : 0, '#1d3a2a'); ui.fur.status.textContent= units+' shipped';
- document.getElementById('clock').textContent=u.toFixed(1);
- document.getElementById('units').textContent=units;
+ // shipped count
+ var shipped=0; for(var k=0;k<N;k++) if(T>=faEnd[k]) shipped++;
+ setFill('fur', (cur>=0 && (T-faStart[cur])>=ASM) ? ((T-faStart[cur]-ASM)/PACK) : 0, '#1d3a2a');
+ ui.fur.status.textContent= shipped+' / '+N+' shipped';
+ document.getElementById('clock').textContent=Math.round(T);
+ document.getElementById('units').textContent=shipped;
+ if(N>0 && T>=faEnd[N-1]){ playing=false; document.getElementById('play').textContent='▶ Play';
+   var mins=faEnd[N-1]; document.getElementById('done').textContent='✓ Batch done: '+N+' chairs in '+Math.round(mins)+' min ('+(mins/60).toFixed(1)+' h) · steady pace ~'+(420/byId.sea.busy).toFixed(1)+'/day';
+ } else document.getElementById('done').textContent='';
 }
 var last=0;
 function loop(ts){
  if(!playing)return;
  if(!last)last=ts; var dt=(ts-last)/1000; last=ts;
- var prev=Math.floor(t/TOTAL);
  t+=dt*speed;
- if(Math.floor(t/TOTAL)>prev) units+=Math.floor(t/TOTAL)-prev;
+ if(N>0 && t>faEnd[N-1]) t=faEnd[N-1];
  frame();
- requestAnimationFrame(loop);
+ if(playing) requestAnimationFrame(loop);
 }
-document.getElementById('play').onclick=function(){ playing=!playing; this.textContent=playing?'⏸ Pause':'▶ Play'; if(playing){last=0;requestAnimationFrame(loop);} };
+document.getElementById('play').onclick=function(){ if(N>0 && t>=faEnd[N-1]){t=0;} playing=!playing; this.textContent=playing?'⏸ Pause':'▶ Play'; if(playing){last=0;requestAnimationFrame(loop);} };
 document.getElementById('reset').onclick=function(){ t=0;units=0;last=0;frame(); };
+document.getElementById('chairs').onchange=function(){ N=Math.max(1,Math.min(60,parseInt(this.value,10)||1)); t=0; schedule(); frame(); };
 document.getElementById('speed').oninput=function(){ speed=+this.value; document.getElementById('spd').textContent=' '+speed+' min/s'; };
 document.getElementById('spd').textContent=' 14 min/s';
 frame();
