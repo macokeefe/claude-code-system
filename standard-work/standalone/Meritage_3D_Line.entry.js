@@ -339,9 +339,14 @@ function walkOf(id) {
   return yd / Math.max(1, walkSpeed) * tripsPerUnit;   // sum of linked-table distances (yd) / speed * trips
 }
 function eff(id) { return (get(id).t || 0) + walkOf(id); }
+function helpInto(id) { return (typeof helpArrows === 'undefined') ? 0 : helpArrows.reduce((s, a) => s + (a.to === id ? (a.helpMin || 0) : 0), 0); }
+function helpFrom(id) { return (typeof helpArrows === 'undefined') ? 0 : helpArrows.reduce((s, a) => s + (a.from === id ? (a.helpMin || 0) : 0), 0); }
+function effNet(id) { return Math.max(0.1, eff(id) - helpInto(id)); }   // a helped station's time drops by the help minutes
+function lineCyc() { return sch ? Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 1; }
+function availIdle(id) { return Math.max(0, lineCyc() - effNet(id) - helpFrom(id)); }   // spare minutes/chair an operator can give
 function schedule() {
-  const seaT=eff('sea'), armT=eff('arm'), bakT=eff('bak'), treT=eff('tre'), conT=eff('con');
-  const ASM=eff('fa'), PACK=eff('pak');
+  const seaT=effNet('sea'), armT=effNet('arm'), bakT=effNet('bak'), treT=effNet('tre'), conT=effNet('con');
+  const ASM=effNet('fa'), PACK=effNet('pak');
   const seatEnd=[],armEnd=[],bakEnd=[],kit=[],faStart=[],faEnd=[];
   let prev=0;
   for (let u=0;u<N;u++){
@@ -373,6 +378,7 @@ function schedule() {
     if (el) el.textContent = (w > 0.05) ? `+${w.toFixed(1)} walk` : '';
   });
   if (typeof renderIdle === 'function') renderIdle();
+  if (typeof renderHelpPanel === 'function') renderHelpPanel();
 }
 
 /* =========================== SCENE =========================== */
@@ -526,10 +532,10 @@ const helpGroup = new THREE.Group(); level2.add(helpGroup);
 const HELP_COL = 0x8f3fbf;
 function assignHelpers() {
   if (typeof crew === 'undefined') return;
-  crew.forEach(c => { c.helpTo = null; });
+  crew.forEach(c => { c.helpTo = null; c.helpMin = 0; });
   helpArrows.forEach(a => {
     const cs = crew.filter(c => c.station === a.from);   // the last operator at the FROM station becomes the helper
-    if (cs.length) cs[cs.length - 1].helpTo = a.to;
+    if (cs.length) { cs[cs.length - 1].helpTo = a.to; cs[cs.length - 1].helpMin = a.helpMin || 0; }
   });
 }
 function buildHelp() {
@@ -697,11 +703,18 @@ const FEEDNAME = { con:'Connectors', arm:'Arms', bak:'Back frame', tre:'Trellis'
 function operatorsList() {
   const list = [];
   for (const id of ['con','arm','bak','tre','sea']) {
-    const s = get(id), bpu = eff(id);              // each operator at the station works the full per-unit time
-    for (let i = 0; i < s.ppl; i++) list.push({ name: FEEDNAME[id] + (s.ppl > 1 ? ' ' + (i+1) : ''), bpu });
+    const s = get(id), base = effNet(id);          // station's per-unit time (reduced if it receives help)
+    for (let i = 0; i < s.ppl; i++) {
+      let bpu = base;
+      if (i === s.ppl - 1) bpu += helpFrom(id);     // the last operator is the helper -> their time spent helping adds to their busy
+      list.push({ name: FEEDNAME[id] + (s.ppl > 1 ? ' ' + (i+1) : ''), bpu });
+    }
   }
-  const faS = get('fa'), faBpu = eff('fa') + eff('pak');   // FA pair also does the packing/cushions
-  for (let i = 0; i < faS.ppl; i++) list.push({ name: 'Full assembly ' + (i+1), bpu: faBpu });
+  const faS = get('fa'), faBase = effNet('fa') + effNet('pak');   // FA pair also does the packing/cushions
+  for (let i = 0; i < faS.ppl; i++) {
+    let bpu = faBase; if (i === faS.ppl - 1) bpu += helpFrom('fa');
+    list.push({ name: 'Full assembly ' + (i+1), bpu });
+  }
   return list;
 }
 function renderIdle() {
@@ -724,6 +737,37 @@ function renderIdle() {
 document.getElementById('idlebtn').onclick = () => {
   idlePanel.style.display = (idlePanel.style.display === 'none') ? 'block' : 'none';
   renderIdle();
+};
+
+// ---- help-paths dashboard ----
+const helpPanel = document.getElementById('helpPanel');
+const stName = id => (get(id) ? get(id).title : id);
+function renderHelpPanel() {
+  if (!helpPanel || helpPanel.style.display === 'none') return;
+  if (!helpArrows.length) { helpPanel.innerHTML = '<h3>Help paths</h3><div class="ihint">None yet — click “➤ Help arrow”, then a FROM station and the TO station.</div>'; return; }
+  let html = '<h3>Help paths</h3><div class="ihint">Set how many minutes each helper takes off the target step. Capped by the helper\'s spare idle.</div>';
+  helpArrows.forEach((a, i) => {
+    const spare = availIdle(a.from) + (a.helpMin || 0);
+    html += `<div class="hrow">
+      <div class="hnm">${stName(a.from)} → <b>${stName(a.to)}</b></div>
+      <div class="hctl">takes <input type="number" class="hmin" data-i="${i}" min="0" max="${spare.toFixed(1)}" step="0.5" value="${(a.helpMin||0)}"> min/chair off ${stName(a.to)}
+        <button class="hdel" data-i="${i}">✕ remove</button></div>
+      <div class="hsub">helper spends ~${(a.helpMin||0)} min/chair at ${stName(a.to)} · ${spare.toFixed(1)} min/chair spare available</div>
+    </div>`;
+  });
+  helpPanel.innerHTML = html;
+  helpPanel.querySelectorAll('.hmin').forEach(inp => inp.onchange = e => {
+    const a = helpArrows[+e.target.dataset.i]; const spare = availIdle(a.from) + (a.helpMin || 0);
+    a.helpMin = Math.max(0, Math.min(spare, parseFloat(e.target.value) || 0));
+    buildHelp(); schedule(); renderIdle(); saveLayout();
+  });
+  helpPanel.querySelectorAll('.hdel').forEach(b => b.onclick = e => {
+    helpArrows.splice(+e.target.dataset.i, 1); buildHelp(); schedule(); renderIdle(); saveLayout();
+  });
+}
+document.getElementById('helppaths').onclick = () => {
+  helpPanel.style.display = (helpPanel.style.display === 'none') ? 'block' : 'none';
+  renderHelpPanel();
 };
 
 /* =========================== EDIT LAYOUT =========================== */
@@ -867,7 +911,7 @@ renderer.domElement.addEventListener('pointerdown', e => {
   if (helpArming) {                                   // drawing a help arrow: pick source, then target
     const sid = pickStation(e); if (!sid) return;
     if (!armSource) { armSource = sid; }
-    else { if (sid !== armSource) { helpArrows.push({ from: armSource, to: sid }); buildHelp(); saveLayout(); } armSource = null; }
+    else { if (sid !== armSource) { helpArrows.push({ from: armSource, to: sid, helpMin: Math.min(5, +availIdle(armSource).toFixed(1)) }); buildHelp(); schedule(); saveLayout(); } armSource = null; }
     return;
   }
   const wp = pickWaypoint(e);
@@ -1031,11 +1075,11 @@ function update(){
   crew.forEach(c => {
     let tx = c.homeX, tz = c.homeZ;
     if (c.station === 'fa' && packing) { tx = POS.pak[0] + (c.idx - 0.5) * 1.1; tz = POS.pak[1] + 1.7; }
-    else if (c.helpTo && playing && nodes[c.helpTo]) {
-      // this operator finishes their task each cycle, then walks over to help with the rest of the cycle
-      const work = eff(c.station);
+    else if (c.helpTo && playing && nodes[c.helpTo] && (c.helpMin || 0) > 0) {
+      // finishes own task each cycle, then walks to help for helpMin minutes, then returns
+      const work = effNet(c.station), hm = c.helpMin || 0;
       const ph = (T % cyc) / cyc;
-      if (ph > work / cyc) { const n = nodes[c.helpTo]; tx = n.x + 0.7; tz = n.z + 1.7; }
+      if (ph > work / cyc && ph <= (work + hm) / cyc) { const n = nodes[c.helpTo]; tx = n.x + 0.7; tz = n.z + 1.7; }
     }
     c.fig.position.x += (tx - c.fig.position.x) * 0.08;
     c.fig.position.z += (tz - c.fig.position.z) * 0.08;
