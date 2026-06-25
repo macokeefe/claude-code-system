@@ -520,6 +520,31 @@ function refreshPath() {
   cartWaypoints.forEach((w, i) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.7, 16), WP_MAT); m.position.set(w.x, 0.35, w.z); m.userData.wp = i; wpGroup.add(m); });
 }
 
+// ---- help-movement arrows: where an operator goes to help after finishing ----
+let helpArrows = [];                 // [{from, to}]  station ids
+const helpGroup = new THREE.Group(); level2.add(helpGroup);
+const HELP_COL = 0x8f3fbf;
+function buildHelp() {
+  while (helpGroup.children.length) helpGroup.remove(helpGroup.children[0]);
+  helpArrows.forEach(a => {
+    if (!nodes[a.from] || !nodes[a.to]) return;
+    const line = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: HELP_COL }));
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.55, 12), new THREE.MeshStandardMaterial({ color: HELP_COL }));
+    helpGroup.add(line, cone); a._line = line; a._cone = cone;
+  });
+}
+const _hy = new THREE.Vector3(0,1,0), _hd = new THREE.Vector3();
+function updateHelp() {
+  const y = 0.25;
+  helpArrows.forEach(a => {
+    if (!a._line) return; const A = nodes[a.from], B = nodes[a.to]; if (!A || !B) return;
+    a._line.geometry.setAttribute('position', new THREE.Float32BufferAttribute([A.x, y, A.z, B.x, y, B.z], 3));
+    a._line.geometry.computeBoundingSphere();
+    a._cone.position.set(B.x, y, B.z);
+    _hd.set(B.x - A.x, 0, B.z - A.z); if (_hd.lengthSq() > 0.0001) { _hd.normalize(); a._cone.quaternion.setFromUnitVectors(_hy, _hd); }
+  });
+}
+
 /* ---- station layout: feeders in back row, FA + packing in front ---- */
 const OP_COLORS = [0x3a66a8, 0xb9772e, 0x2e7d4f, 0x8f5390, 0xa8923a, 0x3f8f8f, 0x9c4f45, 0x5c5f99];
 const POS = {
@@ -709,8 +734,8 @@ function setStationPos(id, x, z) {
   cs.forEach((c, i) => { c.homeX = x + (np > 1 ? (i - (np - 1) / 2) * 2 * spread : 0); c.homeZ = z + 1.7;
     if (!editing) { c.fig.position.x = c.homeX; c.fig.position.z = c.homeZ; } });
 }
-function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
-function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); Object.keys(o).forEach(id => { if (id !== '__wps' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); } catch (e) {} }
+function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to]); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
+function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__help)) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1] })); buildHelp(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); } catch (e) {} }
 
 // 1-yard grid on the deck
 function buildGrid() {
@@ -795,6 +820,7 @@ function setEditing(on) {
   editBtn.classList.toggle('on', on);
   grid.visible = on;
   pathLine.visible = on; wpGroup.visible = on; if (on) refreshPath();
+  if (!on) { helpArming = false; armSource = null; const hb = document.getElementById('helparrow'); if (hb) hb.classList.remove('on'); }
   controls.enabled = !on;
   measurePanel.style.display = on ? 'block' : 'none';
   document.getElementById('editHint').style.display = on ? 'block' : 'none';
@@ -813,15 +839,28 @@ function setEditing(on) {
   }
 }
 editBtn.onclick = () => setEditing(!editing);
-let dragWp = null;
+let dragWp = null, helpArming = false, armSource = null;
 function pickWaypoint(e) {
   pointerNDC(e); raycaster.setFromCamera(ndc, camera);
   const hits = raycaster.intersectObjects(wpGroup.children, false);
   return hits.length ? hits[0].object.userData.wp : null;
 }
+const helpBtn = document.getElementById('helparrow');
+helpBtn.onclick = () => {
+  if (!editing) setEditing(true);
+  helpArming = !helpArming; armSource = null;
+  helpBtn.classList.toggle('on', helpArming);
+  helpBtn.textContent = helpArming ? '➤ click FROM → TO' : '➤ Help arrow';
+};
 const snap = v => Math.round(v / (YARD / 2)) * (YARD / 2);   // snap to 0.5 yd
 renderer.domElement.addEventListener('pointerdown', e => {
   if (!editing) return;
+  if (helpArming) {                                   // drawing a help arrow: pick source, then target
+    const sid = pickStation(e); if (!sid) return;
+    if (!armSource) { armSource = sid; }
+    else { if (sid !== armSource) { helpArrows.push({ from: armSource, to: sid }); buildHelp(); saveLayout(); } armSource = null; }
+    return;
+  }
   const wp = pickWaypoint(e);
   if (wp != null) { dragWp = wp; renderer.domElement.setPointerCapture(e.pointerId); return; }
   const id = pickStation(e);
@@ -844,11 +883,15 @@ renderer.domElement.addEventListener('pointerup', () => {
   if (dragWp != null) { dragWp = null; saveLayout(); }
   if (dragId) { dragId = null; measure.visible = false; measurePanel.innerHTML = ''; saveLayout(); }
 });
-// right-click a waypoint to delete it
+// right-click a waypoint to delete it; right-click a station to delete its help arrows
 renderer.domElement.addEventListener('contextmenu', e => {
   if (!editing) return;
   const wp = pickWaypoint(e);
-  if (wp != null) { e.preventDefault(); cartWaypoints.splice(wp, 1); refreshPath(); saveLayout(); }
+  if (wp != null) { e.preventDefault(); cartWaypoints.splice(wp, 1); refreshPath(); saveLayout(); return; }
+  const id = pickStation(e);
+  if (id && helpArrows.some(a => a.from === id || a.to === id)) {
+    e.preventDefault(); helpArrows = helpArrows.filter(a => a.from !== id && a.to !== id); buildHelp(); saveLayout();
+  }
 });
 // add a waypoint at the midpoint of the current path
 document.getElementById('addwp').onclick = () => {
@@ -869,7 +912,7 @@ function snapshot() {
   ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
   if (nodes.cart) pos.cart = [nodes.cart.x, nodes.cart.z];
   const cap = sch ? 420 / Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 0;
-  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), cap: +cap.toFixed(1) };
+  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to]), cap: +cap.toFixed(1) };
 }
 function applyLayout(L) {
   if (L.times) ST.forEach(s => { if (L.times[s.id] != null) get(s.id).t = L.times[s.id]; });
@@ -879,6 +922,7 @@ function applyLayout(L) {
   if (L.trips != null) { tripsPerUnit = L.trips; const c = document.getElementById('trips'); if (c) c.value = tripsPerUnit; }
   if (L.N) { N = L.N; nInput.value = N; }
   if (Array.isArray(L.wps)) { cartWaypoints = L.wps.map(a => ({ x: a[0], z: a[1] })); refreshPath(); }
+  if (Array.isArray(L.help)) { helpArrows = L.help.map(a => ({ from: a[0], to: a[1] })); buildHelp(); }
   ST.forEach(s => { const inp = timeBox.querySelector(`input[data-id="${s.id}"]`); if (inp) inp.value = get(s.id).t; });
   schedule(); T = 0; setPlay(false); saveLayout();
 }
@@ -1007,6 +1051,7 @@ function loop(now){
     if (T >= horizon) { T = horizon; setPlay(false); }
   }
   updateCarts();   // carts stay parked in a line along the path
+  updateHelp();    // help-movement arrows follow the stations
   update();
   controls.update();
   renderer.render(scene, camera);
