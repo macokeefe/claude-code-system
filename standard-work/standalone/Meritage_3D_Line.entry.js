@@ -372,6 +372,7 @@ function schedule() {
     const el = document.getElementById('walk_' + s.id);
     if (el) el.textContent = (w > 0.05) ? `+${w.toFixed(1)} walk` : '';
   });
+  if (typeof renderIdle === 'function') renderIdle();
 }
 
 /* =========================== SCENE =========================== */
@@ -654,6 +655,42 @@ timeBox.querySelectorAll('input[data-id]').forEach(inp => inp.onchange = e => {
 document.getElementById('walkOn').onchange = e => { walkOn = e.target.checked; schedule(); T = 0; setPlay(false); };
 document.getElementById('walkSpeed').onchange = e => { walkSpeed = Math.max(10, parseFloat(e.target.value) || 60); schedule(); T = 0; setPlay(false); };
 document.getElementById('trips').onchange = e => { tripsPerUnit = Math.max(0, parseFloat(e.target.value) || 0); schedule(); T = 0; setPlay(false); };
+
+// ---- idle-time-per-operator chart (full day) ----
+let dayMin = 420;   // 7-hr working day
+const idlePanel = document.getElementById('idlePanel');
+const FEEDNAME = { con:'Connectors', arm:'Arms', bak:'Back frame', tre:'Trellis', sea:'Seat frame' };
+function operatorsList() {
+  const list = [];
+  for (const id of ['con','arm','bak','tre','sea']) {
+    const s = get(id), bpu = eff(id);              // each operator at the station works the full per-unit time
+    for (let i = 0; i < s.ppl; i++) list.push({ name: FEEDNAME[id] + (s.ppl > 1 ? ' ' + (i+1) : ''), bpu });
+  }
+  const faS = get('fa'), faBpu = eff('fa') + eff('pak');   // FA pair also does the packing/cushions
+  for (let i = 0; i < faS.ppl; i++) list.push({ name: 'Full assembly ' + (i+1), bpu: faBpu });
+  return list;
+}
+function renderIdle() {
+  if (!idlePanel || idlePanel.style.display === 'none') return;
+  const ops = operatorsList();
+  const cyc = Math.max(0.001, ...ops.map(o => o.bpu));     // line paces at the busiest operator
+  const units = dayMin / cyc;
+  let html = `<h3>Idle time per operator — ${(dayMin/60).toFixed(1)}-hr day</h3>`;
+  html += `<div class="ihint">~${units.toFixed(1)} units/day · day length <input type="number" id="dayHrs" value="${(dayMin/60)}" min="1" max="16" step="0.5" style="width:46px"> hr · blue = working</div>`;
+  ops.forEach(o => {
+    const busy = Math.min(dayMin, o.bpu * units), idle = Math.max(0, dayMin - busy), util = busy / dayMin * 100;
+    html += `<div class="irow"><span class="inm">${o.name}</span>`
+         +  `<span class="ibar"><i style="width:${util.toFixed(1)}%"></i></span>`
+         +  `<span class="iv"><b>${Math.round(idle)} min</b> idle (${Math.round(100-util)}%)</span></div>`;
+  });
+  idlePanel.innerHTML = html;
+  const dh = document.getElementById('dayHrs');
+  if (dh) dh.onchange = e => { dayMin = Math.max(60, (parseFloat(e.target.value) || 7) * 60); renderIdle(); };
+}
+document.getElementById('idlebtn').onclick = () => {
+  idlePanel.style.display = (idlePanel.style.display === 'none') ? 'block' : 'none';
+  renderIdle();
+};
 
 /* =========================== EDIT LAYOUT =========================== */
 const YARD = 0.9144;                       // 1 unit = 1 metre; 1 yard = 0.9144 m
