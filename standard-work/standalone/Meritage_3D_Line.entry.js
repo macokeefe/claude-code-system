@@ -138,32 +138,36 @@ function makeHose() {
   return new THREE.Mesh(new THREE.TubeGeometry(curve, 80, 0.022, 6), MAT.hose);
 }
 
-function makeBench(wide = false) {
-  const W = wide ? 3.4 : 2.7;
+const FT = 0.3048;   // metres per foot (world units = metres; CAD scale 3/8"=1'-0")
+function makeBench(lenFt = 8, depFt = 3) {
+  const W = lenFt * FT, D = depFt * FT;
   const st = new THREE.Group();
-  const top = new THREE.Mesh(new THREE.BoxGeometry(W, 0.14, 1.7), MAT.benchTop);
+  const top = new THREE.Mesh(new THREE.BoxGeometry(W, 0.14, D), MAT.benchTop);
   top.position.y = 0.96; top.castShadow = true; top.receiveShadow = true; st.add(top);
-  const trim = new THREE.Mesh(new THREE.BoxGeometry(W + 0.02, 0.05, 1.72), MAT.trimBlue);
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(W + 0.02, 0.05, D + 0.02), MAT.trimBlue);
   trim.position.y = 0.875; st.add(trim);
-  for (const [lx, lz] of [[-W/2+0.15, -0.7], [W/2-0.15, -0.7], [-W/2+0.15, 0.7], [W/2-0.15, 0.7]]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.95, 0.14), MAT.pine);
+  const li = Math.min(0.13, W/2 - 0.05), ld = Math.min(0.13, D/2 - 0.05);
+  for (const [lx, lz] of [[-W/2+li, -D/2+ld], [W/2-li, -D/2+ld], [-W/2+li, D/2-ld], [W/2-li, D/2-ld]]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.95, 0.1), MAT.pine);
     leg.position.set(lx, 0.47, lz); leg.castShadow = true; st.add(leg);
   }
-  const shelf = new THREE.Mesh(new THREE.BoxGeometry(W - 0.2, 0.07, 1.4), MAT.pine);
+  const shelf = new THREE.Mesh(new THREE.BoxGeometry(W - 0.2, 0.06, Math.max(0.25, D - 0.2)), MAT.pine);
   shelf.position.y = 0.42; shelf.castShadow = true; st.add(shelf);
-  for (let b = 0; b < 6; b++) {
-    const bin = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, 0.34), b % 3 === 2 ? MAT.binBlue : MAT.binYellow);
-    bin.position.set(-W/2 + 0.35 + b * 0.42, 0.57, 0.35); bin.castShadow = true; st.add(bin);
+  const nb = Math.max(2, Math.floor(W / 0.45));
+  for (let b = 0; b < nb; b++) {
+    const bin = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.2, Math.min(0.28, D - 0.3)), b % 3 === 2 ? MAT.binBlue : MAT.binYellow);
+    bin.position.set(-W/2 + 0.25 + b * (W - 0.5) / (nb - 1 || 1), 0.57, -D/2 + 0.16); bin.castShadow = true; st.add(bin);
   }
-  const mat = new THREE.Mesh(new THREE.BoxGeometry(W - 0.1, 0.025, 1.15), MAT.mat);
-  mat.position.set(0, 0.013, 1.55); mat.receiveShadow = true; st.add(mat);
-  for (const dz of [-0.62, 0.62]) {
-    const edge = new THREE.Mesh(new THREE.BoxGeometry(W - 0.1, 0.027, 0.09), MAT.matEdge);
-    edge.position.set(0, 0.014, 1.55 + dz); st.add(edge);
+  // anti-fatigue mat on the operator side (front, +z)
+  const mat = new THREE.Mesh(new THREE.BoxGeometry(W - 0.1, 0.025, 0.9), MAT.mat);
+  mat.position.set(0, 0.013, D/2 + 0.6); mat.receiveShadow = true; st.add(mat);
+  for (const dz of [-0.45, 0.45]) {
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(W - 0.1, 0.027, 0.08), MAT.matEdge);
+    edge.position.set(0, 0.014, D/2 + 0.6 + dz); st.add(edge);
   }
-  const led = new THREE.Mesh(new THREE.BoxGeometry(W - 0.2, 0.055, 0.05),
+  const led = new THREE.Mesh(new THREE.BoxGeometry(W - 0.2, 0.05, 0.05),
     new THREE.MeshStandardMaterial({ color: RING.idle, emissive: 0x000000, emissiveIntensity: 1.6, roughness: 0.4 }));
-  led.position.set(0, 1.045, 0.875); st.add(led);
+  led.position.set(0, 1.045, D/2 + 0.03); st.add(led);
   return { st, led: led.material };
 }
 
@@ -528,14 +532,16 @@ const crew = []; // {fig, station, homeX, homeZ}
 ST.forEach(s => {
   const [x, z] = POS[s.id];
   let st, led;
-  if (s.double) {                                  // two benches joined end-to-end (length-wise)
+  if (s.double) {                                  // Arms = two 8'x3' benches joined end-to-end (16' x 3')
     const g = new THREE.Group();
-    const b1 = makeBench(), b2 = makeBench();
-    b1.st.position.x = -1.35; b2.st.position.x = 1.35;   // share the inner edge -> one long bench
+    const b1 = makeBench(8, 3), b2 = makeBench(8, 3);
+    b1.st.position.x = -4 * FT; b2.st.position.x = 4 * FT;   // share the inner edge
     g.add(b1.st, b2.st);
     st = g; led = [b1.led, b2.led];
+  } else if (s.role === 'fa') {
+    const r = makeBench(10, 4); st = r.st; led = r.led;      // full assembly: larger table
   } else {
-    const r = makeBench(s.role === 'fa'); st = r.st; led = r.led;
+    const r = makeBench(8, 3); st = r.st; led = r.led;       // 8' x 3' workbench
   }
   st.position.set(x, 0, z);
   level2.add(st);
@@ -555,7 +561,7 @@ ST.forEach(s => {
   for (let i = 0; i < np; i++) {
     const color = OP_COLORS[opColorIdx % OP_COLORS.length]; opColorIdx++;
     const fig = makeCrewFigure(color, s.title.split(' ')[0] + (np>1?(' '+(i+1)):''));
-    const spread = s.double ? 1.35 : 1.1;          // one operator per table on the double bench
+    const spread = s.double ? 4 * FT : 1.1;        // one operator per 8' table on the double bench
     const ox = x + (np > 1 ? (i - (np-1)/2) * 2 * spread : 0);
     const oz = z + 1.7;
     fig.position.set(ox, 0, oz);
@@ -662,7 +668,7 @@ function setStationPos(id, x, z) {
   if (nd.mini) { nd.mini.position.x = x; nd.mini.position.z = z; }
   if (nd.visual) { nd.visual.g.position.x = x; nd.visual.g.position.z = z; }
   const cs = crew.filter(c => c.station === id); const np = cs.length;
-  const spread = (nd.s && nd.s.double) ? 1.35 : 1.1;
+  const spread = (nd.s && nd.s.double) ? 4 * FT : 1.1;
   cs.forEach((c, i) => { c.homeX = x + (np > 1 ? (i - (np - 1) / 2) * 2 * spread : 0); c.homeZ = z + 1.7;
     if (!editing) { c.fig.position.x = c.homeX; c.fig.position.z = c.homeZ; } });
 }
