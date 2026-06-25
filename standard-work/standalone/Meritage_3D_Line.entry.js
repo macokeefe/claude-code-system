@@ -524,6 +524,14 @@ function refreshPath() {
 let helpArrows = [];                 // [{from, to}]  station ids
 const helpGroup = new THREE.Group(); level2.add(helpGroup);
 const HELP_COL = 0x8f3fbf;
+function assignHelpers() {
+  if (typeof crew === 'undefined') return;
+  crew.forEach(c => { c.helpTo = null; });
+  helpArrows.forEach(a => {
+    const cs = crew.filter(c => c.station === a.from);   // the last operator at the FROM station becomes the helper
+    if (cs.length) cs[cs.length - 1].helpTo = a.to;
+  });
+}
 function buildHelp() {
   while (helpGroup.children.length) helpGroup.remove(helpGroup.children[0]);
   helpArrows.forEach(a => {
@@ -532,6 +540,7 @@ function buildHelp() {
     const cone = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.55, 12), new THREE.MeshStandardMaterial({ color: HELP_COL }));
     helpGroup.add(line, cone); a._line = line; a._cone = cone;
   });
+  assignHelpers();
 }
 const _hy = new THREE.Vector3(0,1,0), _hd = new THREE.Vector3();
 function updateHelp() {
@@ -886,11 +895,12 @@ renderer.domElement.addEventListener('pointerup', () => {
 // right-click a waypoint to delete it; right-click a station to delete its help arrows
 renderer.domElement.addEventListener('contextmenu', e => {
   if (!editing) return;
+  e.preventDefault();                                  // no browser menu while editing
   const wp = pickWaypoint(e);
-  if (wp != null) { e.preventDefault(); cartWaypoints.splice(wp, 1); refreshPath(); saveLayout(); return; }
+  if (wp != null) { cartWaypoints.splice(wp, 1); refreshPath(); saveLayout(); return; }
   const id = pickStation(e);
   if (id && helpArrows.some(a => a.from === id || a.to === id)) {
-    e.preventDefault(); helpArrows = helpArrows.filter(a => a.from !== id && a.to !== id); buildHelp(); saveLayout();
+    helpArrows = helpArrows.filter(a => a.from !== id && a.to !== id); buildHelp(); saveLayout();
   }
 });
 // add a waypoint at the midpoint of the current path
@@ -1015,11 +1025,18 @@ function update(){
   shipBoxes.forEach((b,i)=> b.visible = i < shipped);
   ui.ship.textContent = shipped;
 
-  // FA crew walk to packing during pack phase
+  // FA crew walk to packing during pack phase; help-arrow operators walk to help during their idle slack
   const packing = (cur>=0 && phase==='pack');
+  const cyc = Math.max(0.001, sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK);
   crew.forEach(c => {
     let tx = c.homeX, tz = c.homeZ;
     if (c.station === 'fa' && packing) { tx = POS.pak[0] + (c.idx - 0.5) * 1.1; tz = POS.pak[1] + 1.7; }
+    else if (c.helpTo && playing && nodes[c.helpTo]) {
+      // this operator finishes their task each cycle, then walks over to help with the rest of the cycle
+      const work = eff(c.station);
+      const ph = (T % cyc) / cyc;
+      if (ph > work / cyc) { const n = nodes[c.helpTo]; tx = n.x + 0.7; tz = n.z + 1.7; }
+    }
     c.fig.position.x += (tx - c.fig.position.x) * 0.08;
     c.fig.position.z += (tz - c.fig.position.z) * 0.08;
   });
