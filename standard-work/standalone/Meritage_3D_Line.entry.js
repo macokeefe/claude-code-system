@@ -381,7 +381,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xe9edf1);
 scene.fog = new THREE.Fog(0xe9edf1, 60, 140);
 const camera = new THREE.PerspectiveCamera(44, mount.clientWidth / mount.clientHeight, 0.1, 300);
-camera.position.set(-10, 22, 38);
+camera.position.set(4, 22, 40);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(mount.clientWidth, mount.clientHeight);
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
@@ -389,7 +389,7 @@ renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadow
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.06;
 mount.appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true; controls.target.set(-10, 6.8, 0); controls.maxPolarAngle = Math.PI / 2.02; controls.maxDistance = 90;
+controls.enableDamping = true; controls.target.set(2, 6.8, 0.5); controls.maxPolarAngle = Math.PI / 2.02; controls.maxDistance = 90;
 
 scene.add(new THREE.HemisphereLight(0xffffff, 0xb8bcc2, 1.0));
 const sun = new THREE.DirectionalLight(0xfff8ee, 0.85);
@@ -412,7 +412,7 @@ for (const [cx, cz] of [[-28,-12],[28,-12],[-28,12],[28,12]]) { const col = bx(0
 const FLOOR2 = 6.0;                                  // floor-to-deck height (~20 ft)
 const level2 = new THREE.Group(); level2.position.y = FLOOR2; scene.add(level2);
 
-const DECK = { x0:-16, x1:-16 + 40*FT, z0:-10.5, z1:10.5 };   // real left-portion footprint: ~40' wide x ~69' deep (3/8"=1' scale)
+const DECK = { x0:-16, x1:24, z0:-6, z1:8.5 };
 const deckW = DECK.x1 - DECK.x0, deckD = DECK.z1 - DECK.z0;
 const deckCx = (DECK.x0 + DECK.x1)/2, deckCz = (DECK.z0 + DECK.z1)/2;
 const deckMat = new THREE.MeshStandardMaterial({ color:0xb7bcc2, roughness:0.7, metalness:0.3 });
@@ -423,7 +423,7 @@ for (const [w,d,x,z] of [[deckW,0.5,deckCx,DECK.z0],[deckW,0.5,deckCx,DECK.z1],[
   const f = bx(w,0.5,d,fascia); f.position.set(x,-0.34,z); level2.add(f);
 }
 // support columns from ground up to the deck
-for (const cx2 of [-14.5,-5.5]) for (const cz2 of [-9,0,9]) {
+for (const cx2 of [-15,-5,5,15,23]) for (const cz2 of [-5.5,8]) {
   const col = bx(0.4, FLOOR2, 0.4, MAT.steel); col.position.set(cx2, FLOOR2/2, cz2); col.castShadow = true; scene.add(col);
   const base = bx(0.7,0.1,0.7,MAT.steel); base.position.set(cx2,0.05,cz2); scene.add(base);
 }
@@ -479,7 +479,7 @@ const cartSign = (function(){ const c=document.createElement('canvas'); c.width=
   x.fillStyle='#fff'; x.font='700 30px Arial'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('MATERIALS CART',160,38);
   const tex=new THREE.CanvasTexture(c); tex.anisotropy=8; const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true}));
   sp.scale.set(2.0,0.45,1); sp.position.y=1.6; cartPad.add(sp); return sp; })();
-const CART_DEF = [-8, -9];
+const CART_DEF = [-2, -1.2];
 cartPad.position.set(CART_DEF[0], 0, CART_DEF[1]); level2.add(cartPad);
 
 // pool of physical carts moved by the elevator/queue state machine
@@ -521,9 +521,9 @@ function refreshPath() {
 
 /* ---- station layout: feeders in back row, FA + packing in front ---- */
 const OP_COLORS = [0x3a66a8, 0xb9772e, 0x2e7d4f, 0x8f5390, 0xa8923a, 0x3f8f8f, 0x9c4f45, 0x5c5f99];
-const POS = {            // column layout to fit the ~40'x69' deck (rearrange freely in Edit Layout)
-  con:[-13.0, -8.5], arm:[-12.4, -4.5], bak:[-13.0, -0.5], tre:[-13.0, 3.5], sea:[-13.0, 7.5],
-  fa:[-7.5, -1.5], pak:[-6.5, 6.5],
+const POS = {
+  con:[-12, -3.2], arm:[-6, -3.2], bak:[0, -3.2], tre:[6, -3.2], sea:[12, -3.2],
+  fa:[-2, 4.2], pak:[10, 4.2],
 };
 const nodes = {};
 let opColorIdx = 0;
@@ -598,7 +598,7 @@ FEEDERS.forEach(id => {
   travelParts[id] = arr;
 });
 
-controls.target.set(-10, FLOOR2 + 0.8, 0);
+controls.target.set(2, FLOOR2 + 0.8, 0.5);
 
 /* =========================== UI =========================== */
 const ui = {
@@ -618,7 +618,7 @@ const nInput = document.getElementById('n');
 nInput.value = N;
 nInput.onchange = e => { N = Math.max(1, Math.min(40, parseInt(e.target.value)||8)); schedule(); T=0; setPlay(false); };
 const speed = document.getElementById('speed');
-document.getElementById('cam').onclick = () => { camera.position.set(-10,22,38); controls.target.set(-10,FLOOR2+0.8,0); };
+document.getElementById('cam').onclick = () => { camera.position.set(4,22,40); controls.target.set(2,FLOOR2+0.8,0.5); };
 document.getElementById('top').onclick = () => { camera.position.set(4,FLOOR2+38,1); controls.target.set(4,FLOOR2,1); };
 // label visibility: 0 = off, 1 = names only (compact), 2 = full cards
 let labelMode = 1;
