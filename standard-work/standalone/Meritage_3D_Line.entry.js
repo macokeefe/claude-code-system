@@ -598,7 +598,7 @@ ST.forEach(s => {
   if (s.role === 'feeder') { visual = makeFeederWIP(s.kind); visual.g.position.set(x, 1.04, z); level2.add(visual.g); }
   if (s.role === 'fa') { visual = makeSofaProduct(); visual.g.position.set(x, 1.04, z); visual.update(0); level2.add(visual.g); }
 
-  nodes[s.id] = { s, st, led, visual, label, mini, x, z };
+  nodes[s.id] = { s, st, led, visual, label, mini, x, z, rot: 0 };
 
   // crew figures
   const np = s.role === 'pack' ? 0 : s.ppl;
@@ -606,11 +606,10 @@ ST.forEach(s => {
     const color = OP_COLORS[opColorIdx % OP_COLORS.length]; opColorIdx++;
     const fig = makeCrewFigure(color, s.title.split(' ')[0] + (np>1?(' '+(i+1)):''));
     const spread = s.double ? 4 * FT : 1.1;        // one operator per 8' table on the double bench
-    const ox = x + (np > 1 ? (i - (np-1)/2) * 2 * spread : 0);
-    const oz = z + 1.7;
-    fig.position.set(ox, 0, oz);
+    const bdx = (np > 1 ? (i - (np-1)/2) * 2 * spread : 0), bdz = 1.7;   // base offset from station (rotates with the table)
+    fig.position.set(x + bdx, 0, z + bdz);
     level2.add(fig);
-    crew.push({ fig, station: s.id, homeX: ox, homeZ: oz, idx: i });
+    crew.push({ fig, station: s.id, bdx, bdz, homeX: x + bdx, homeZ: z + bdz, idx: i });
   }
 });
 // register the materials cart as a draggable source node (nodes/POS now exist)
@@ -778,20 +777,30 @@ const YARD = 0.9144;                       // 1 unit = 1 metre; 1 yard = 0.9144 
 const u2y = u => u / YARD;                  // units -> yards
 const LAYOUT_KEY = 'm3d_layout_v2';   // bumped: deck rescaled to real footprint
 
+function placeStation(id) {
+  const nd = nodes[id]; if (!nd) return;
+  const x = nd.x, z = nd.z, r = nd.rot || 0, cs = Math.cos(r), sn = Math.sin(r);
+  nd.st.position.x = x; nd.st.position.z = z; nd.st.rotation.y = r;
+  if (nd.label) { nd.label.position.x = x; nd.label.position.z = z; }
+  if (nd.mini) { nd.mini.position.x = x; nd.mini.position.z = z; }
+  if (nd.visual) { nd.visual.g.position.x = x; nd.visual.g.position.z = z; nd.visual.g.rotation.y = r; }
+  crew.filter(c => c.station === id).forEach(c => {
+    const rx = c.bdx * cs - c.bdz * sn, rz = c.bdx * sn + c.bdz * cs;   // rotate the operator's offset with the table
+    c.homeX = x + rx; c.homeZ = z + rz;
+    if (!editing) { c.fig.position.x = c.homeX; c.fig.position.z = c.homeZ; }
+  });
+}
 function setStationPos(id, x, z) {
   const nd = nodes[id]; if (!nd) return;
   nd.x = x; nd.z = z; POS[id] = [x, z];
-  nd.st.position.x = x; nd.st.position.z = z;
-  if (nd.label) { nd.label.position.x = x; nd.label.position.z = z; }
-  if (nd.mini) { nd.mini.position.x = x; nd.mini.position.z = z; }
-  if (nd.visual) { nd.visual.g.position.x = x; nd.visual.g.position.z = z; }
-  const cs = crew.filter(c => c.station === id); const np = cs.length;
-  const spread = (nd.s && nd.s.double) ? 4 * FT : 1.1;
-  cs.forEach((c, i) => { c.homeX = x + (np > 1 ? (i - (np - 1) / 2) * 2 * spread : 0); c.homeZ = z + 1.7;
-    if (!editing) { c.fig.position.x = c.homeX; c.fig.position.z = c.homeZ; } });
+  placeStation(id);
 }
-function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0]); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
-function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0 })); buildHelp(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); } catch (e) {} }
+function setStationRot(id, rot) {
+  const nd = nodes[id]; if (!nd) return;
+  nd.rot = rot; placeStation(id);
+}
+function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
+function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0 })); buildHelp(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); } catch (e) {} }
 
 // 1-yard grid on the deck
 function buildGrid() {
@@ -904,7 +913,7 @@ function setEditing(on) {
   }
 }
 editBtn.onclick = () => setEditing(!editing);
-let dragWp = null, helpArming = false, armSource = null;
+let dragWp = null, helpArming = false, armSource = null, selectedStation = null;
 function pickWaypoint(e) {
   pointerNDC(e); raycaster.setFromCamera(ndc, camera);
   const hits = raycaster.intersectObjects(wpGroup.children, false);
@@ -929,8 +938,14 @@ renderer.domElement.addEventListener('pointerdown', e => {
   const wp = pickWaypoint(e);
   if (wp != null) { dragWp = wp; renderer.domElement.setPointerCapture(e.pointerId); return; }
   const id = pickStation(e);
-  if (id) { dragId = id; renderer.domElement.setPointerCapture(e.pointerId); refreshMeasure(); }
+  if (id) { dragId = id; selectedStation = id; renderer.domElement.setPointerCapture(e.pointerId); refreshMeasure(); }
 });
+document.getElementById('rotbtn').onclick = () => {
+  if (!editing) setEditing(true);
+  if (!selectedStation) return;
+  setStationRot(selectedStation, ((nodes[selectedStation].rot || 0) + Math.PI / 2) % (Math.PI * 2));
+  saveLayout();
+};
 renderer.domElement.addEventListener('pointermove', e => {
   if (!editing) return;
   const p = deckPoint(e); if (!p) return;
@@ -979,7 +994,7 @@ function snapshot() {
   ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
   if (nodes.cart) pos.cart = [nodes.cart.x, nodes.cart.z];
   const cap = sch ? 420 / Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 0;
-  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0]), cap: +cap.toFixed(1) };
+  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), cap: +cap.toFixed(1) };
 }
 function applyLayout(L) {
   if (L.times) ST.forEach(s => { if (L.times[s.id] != null) get(s.id).t = L.times[s.id]; });
@@ -990,6 +1005,7 @@ function applyLayout(L) {
   if (L.N) { N = L.N; nInput.value = N; }
   if (Array.isArray(L.wps)) { cartWaypoints = L.wps.map(a => ({ x: a[0], z: a[1] })); refreshPath(); }
   if (Array.isArray(L.help)) { helpArrows = L.help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0 })); buildHelp(); }
+  if (L.rot) Object.keys(L.rot).forEach(id => { if (nodes[id]) setStationRot(id, L.rot[id]); });
   ST.forEach(s => { const inp = timeBox.querySelector(`input[data-id="${s.id}"]`); if (inp) inp.value = get(s.id).t; });
   schedule(); T = 0; setPlay(false); saveLayout();
 }
