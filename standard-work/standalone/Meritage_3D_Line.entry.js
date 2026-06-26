@@ -447,12 +447,12 @@ function railing(x0,z0,x1,z1){
 }
 level2.add(railing(DECK.x0,DECK.z0,DECK.x1,DECK.z0));   // back
 level2.add(railing(DECK.x0,DECK.z1,DECK.x1,DECK.z1));   // front
-level2.add(railing(DECK.x1,DECK.z0,DECK.x1,DECK.z1));   // right
 level2.add(railing(DECK.x0,DECK.z0,DECK.x0,4));         // left (lower)
 level2.add(railing(DECK.x0,8,DECK.x0,DECK.z1));         // left (upper) — gap 4..8 = elevator opening
+// (no railing on the right/shared edge — the two floors butt together, divided only by the painted line)
 
-// ---- mirrored floor to the right (a 2nd identical Meritage cell) with a crossable divider ----
-const AISLE = 1.2;                                  // crossable gap between the two floors
+// ---- mirrored floor directly to the right (2nd Meritage cell), no gap — just a crossable painted line ----
+const AISLE = 0;                                   // floors butt together; the line between is crossable
 const MX0 = DECK.x1 + AISLE, MX1 = MX0 + deckW, MCx = (MX0 + MX1)/2;
 const mdeck = bx(deckW, 0.3, deckD, deckMat); mdeck.position.set(MCx, -0.16, deckCz); mdeck.receiveShadow = true; level2.add(mdeck);
 for (const [w,d,x,z] of [[deckW,0.5,MCx,DECK.z0],[deckW,0.5,MCx,DECK.z1],[0.5,deckD,MX0,deckCz],[0.5,deckD,MX1,deckCz]]) {
@@ -475,29 +475,55 @@ level2.add(railing(MX1,DECK.z0,MX1,DECK.z1));       // mirror right (outer)
   level2.add(g);
 })();
 
-// materials elevator where the cart was
+// proper enclosed freight elevator that docks the floor edge
 function makeElevator(x,z){
   const shaft = new THREE.Group();
-  const S = 1.25, H = FLOOR2 + 1.4;
-  for (const [px,pz] of [[-S,-S],[S,-S],[-S,S],[S,S]]) {
-    const post = bx(0.16,H,0.16,MAT.rackPost); post.position.set(x+px,H/2,z+pz); shaft.add(post);
-  }
-  const header = bx(2*S+0.3,0.22,2*S+0.3,MAT.rackBeam); header.position.set(x,H,z); shaft.add(header);
-  const cable = bx(0.04,H,0.04,MAT.pants); cable.position.set(x,H/2,z); shaft.add(cable);
-  // signage
+  const S = 1.4, H = FLOOR2 + 1.7, CH = 2.2;          // half-width, shaft height, cab height
+  const wallMat = new THREE.MeshStandardMaterial({ color:0xc7ccd2, roughness:0.5, metalness:0.5 });
+  // shaft guide posts + header + motor + cable
+  for (const [px,pz] of [[-S,-S],[S,-S],[-S,S],[S,S]]) { const p=bx(0.16,H,0.16,MAT.rackPost); p.position.set(x+px,H/2,z+pz); shaft.add(p); }
+  const header = bx(2*S+0.3,0.26,2*S+0.3,MAT.rackBeam); header.position.set(x,H,z); shaft.add(header);
+  const motor = bx(1.0,0.6,1.0,MAT.steel); motor.position.set(x,H+0.4,z); shaft.add(motor);
+  const cable = bx(0.05,H,0.05,MAT.pants); cable.position.set(x,H/2,z); shaft.add(cable);
+  // enclosed cab (floor, roof, back + 2 side walls, open front doorway)
   const car = new THREE.Group();
-  const plat = bx(2*S,0.14,2*S,MAT.steel); plat.castShadow = true; car.add(plat);
-  for (const [px,pz] of [[-S,-S],[S,-S],[-S,S],[S,S]]) { const p=bx(0.08,1.0,0.08,MAT.steel); p.position.set(px,0.55,pz); car.add(p); }
-  const back = bx(2*S,1.0,0.08,MAT.steel); back.position.set(0,0.55,-S); car.add(back);
-  const crate = new THREE.Group();
-  crate.add(bx(1.5,0.8,1.5,MAT.box));
-  const lid = bx(1.52,0.08,0.45,MAT.boxWhite); lid.position.y=0.42; crate.add(lid);
+  car.add(bx(2*S,0.14,2*S,MAT.steel));                                   // floor
+  const roof=bx(2*S,0.1,2*S,MAT.steel); roof.position.y=CH; car.add(roof);
+  const back=bx(2*S,CH,0.08,wallMat); back.position.set(0,CH/2,-S); car.add(back);
+  const lw=bx(0.08,CH,2*S,wallMat); lw.position.set(-S,CH/2,0); car.add(lw);
+  const rw=bx(0.08,CH,2*S,wallMat); rw.position.set(S,CH/2,0); car.add(rw);
+  for (const px of [-S+0.1,S-0.1]) { const j=bx(0.12,CH,0.12,MAT.steel); j.position.set(px,CH/2,S); car.add(j); }   // front jambs
+  const headr=bx(2*S,0.2,0.12,MAT.steel); headr.position.set(0,CH-0.1,S); car.add(headr);
+  // ELEVATOR sign
+  (function(){ const c=document.createElement('canvas'); c.width=256;c.height=64;const g=c.getContext('2d');
+    g.fillStyle='#1d3a66'; g.beginPath(); g.roundRect(0,0,256,64,10); g.fill(); g.fillStyle='#fff'; g.font='700 32px Arial'; g.textAlign='center'; g.textBaseline='middle'; g.fillText('ELEVATOR',128,34);
+    const tex=new THREE.CanvasTexture(c); const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true})); sp.scale.set(2.4,0.6,1); sp.position.set(0,CH+0.6,0); car.add(sp); })();
+  const crate = new THREE.Group(); crate.add(bx(1.4,0.8,1.4,MAT.box));
+  const lid = bx(1.42,0.08,0.4,MAT.boxWhite); lid.position.y=0.42; crate.add(lid);
   crate.position.y=0.5; car.add(crate);
   car.position.set(x,0.4,z); shaft.add(car);
   return { shaft, car, crate, x, z, H };
 }
-const elevator = makeElevator(-17.5, 6.0);
+const elevator = makeElevator(DECK.x0 - 1.6, 2);   // docks left edge (matches EL below)
 scene.add(elevator.shaft);
+
+// ---- forklift parked on the floor near the forklift-access corner ----
+function makeForklift(){
+  const g = new THREE.Group();
+  const yel = new THREE.MeshStandardMaterial({ color:0xd9a300, roughness:0.55, metalness:0.3 });
+  const body=bx(2.2,0.95,1.2,yel); body.position.set(0,0.7,0); g.add(body);              // body
+  const cw=bx(0.6,0.85,1.2,yel); cw.position.set(-1.25,0.62,0); g.add(cw);               // counterweight
+  for (const [px,pz] of [[-0.45,-0.55],[-0.45,0.55],[0.45,-0.55],[0.45,0.55]]) { const p=bx(0.08,1.35,0.08,MAT.steel); p.position.set(px,1.75,pz); g.add(p); }
+  const roof=bx(1.3,0.08,1.35,MAT.steel); roof.position.set(0,2.42,0); g.add(roof);      // overhead guard
+  for (const pz of [-0.42,0.42]) { const m=bx(0.1,2.3,0.1,MAT.steel); m.position.set(1.25,1.15,pz); g.add(m); }   // mast
+  for (const pz of [-0.32,0.32]) { const fk=bx(1.2,0.06,0.12,MAT.steel); fk.position.set(1.95,0.12,pz); g.add(fk); }  // forks
+  for (const [px,pz] of [[-0.9,-0.62],[-0.9,0.62],[0.95,-0.62],[0.95,0.62]]) { const w=cyl(0.33,0.26,MAT.pants); w.rotation.x=Math.PI/2; w.position.set(px,0.33,pz); g.add(w); }
+  const seat=bx(0.5,0.18,0.6,MAT.pants); seat.position.set(-0.35,1.18,0); g.add(seat);
+  const drv=makeCrewFigure(0x767d88,'Forklift'); drv.scale.set(0.85,0.7,0.85); drv.position.set(-0.35,0.95,0); g.add(drv);
+  return g;
+}
+const forklift = makeForklift();
+forklift.position.set(MX1 - 3, 0, DECK.z1 - 3); forklift.rotation.y = Math.PI; level2.add(forklift);
 
 // the single materials cart (holds all parts) — draggable; feeders pull from this one spot
 // draggable cart SPOT (front of the queue) — feeders pull parts from here
@@ -515,7 +541,7 @@ const CART_DEF = [-2, -1.2];
 cartPad.position.set(CART_DEF[0], 0, CART_DEF[1]); level2.add(cartPad);
 
 // pool of physical carts moved by the elevator/queue state machine
-const EL = [-17.5, 6];                 // elevator column (level2-local x,z)
+const EL = [DECK.x0 - 1.6, 2];         // elevator docks the left edge of the floor (level2-local x,z)
 const MAXQ = 3, LIFT_RPS = 3.0, ROLL_RPS = 3.2;   // up to 3 carts up; cart roll/elevator speed in units per REAL second (steady visual pace)
 let CART_UNITS = 1;                     // each cart carries the materials for one sofa
 const cartPool = [];
