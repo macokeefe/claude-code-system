@@ -465,15 +465,20 @@ for (const cx2 of [MX0+3, MX1-3]) for (const cz2 of [-8,0,8]) {
 level2.add(railing(MX0,DECK.z0,MX1,DECK.z0));       // mirror back
 level2.add(railing(MX0,DECK.z1,MX1,DECK.z1));       // mirror front
 level2.add(railing(MX1,DECK.z0,MX1,DECK.z1));       // mirror right (outer)
-// crossable divider line (dashed yellow, painted on the floor — not a wall)
-(function(){
+// crossable divider line (painted, not a wall) with an open crossing at the connector station
+const dividerGroup = new THREE.Group(); level2.add(dividerGroup);
+function rebuildDivider(){
+  while (dividerGroup.children.length) dividerGroup.remove(dividerGroup.children[0]);
   const dx = DECK.x1 + AISLE/2;
-  const g = new THREE.Group();
-  for (let z = DECK.z0; z < DECK.z1; z += 1.2) {       // dashed segments
-    const seg = bx(0.12, 0.02, 0.7, MAT.tape); seg.position.set(dx, 0.06, z + 0.35); g.add(seg);
+  const gapC = (typeof nodes !== 'undefined' && nodes.con) ? nodes.con.z : -8.5;   // crossing follows the connector station
+  for (let z = DECK.z0; z < DECK.z1; z += 1.2) {
+    if (Math.abs((z + 0.35) - gapC) < 2.2) continue;                                 // skip dashes = crossing opening
+    const seg = bx(0.12, 0.02, 0.7, MAT.tape); seg.position.set(dx, 0.06, z + 0.35); dividerGroup.add(seg);
   }
-  level2.add(g);
-})();
+  const cross = bx(0.6, 0.02, 4.0, new THREE.MeshStandardMaterial({ color:0x2f7d52, transparent:true, opacity:0.45 }));
+  cross.position.set(dx, 0.05, gapC); dividerGroup.add(cross);                       // green crossing marker
+}
+rebuildDivider();
 
 // proper enclosed freight elevator that docks the floor edge
 function makeElevator(x,z){
@@ -510,18 +515,30 @@ scene.add(elevator.shaft);
 // ---- forklift ACCESS POINTS (@) on the platform edge + editable elevator ----
 const elBX = DECK.x0 - 1.6, elBZ = 2;     // elevator built position (for dragging)
 function moveElevator(x,z){ elevator.shaft.position.set(x - elBX, 0, z - elBZ); EL[0]=x; EL[1]=z; if (typeof refreshPath==='function') refreshPath(); }
-function makeAccessMarker(){
-  const g=new THREE.Group();
-  const disc=new THREE.Mesh(new THREE.CylinderGeometry(0.72,0.72,0.05,20), new THREE.MeshStandardMaterial({color:0xd9a300,roughness:0.6})); disc.position.y=0.06; g.add(disc);
-  const ring=new THREE.Mesh(new THREE.TorusGeometry(0.85,0.07,8,24), new THREE.MeshStandardMaterial({color:0x1c2024})); ring.rotation.x=Math.PI/2; ring.position.y=0.08; g.add(ring);
-  const c=document.createElement('canvas'); c.width=128;c.height=128; const x=c.getContext('2d'); x.fillStyle='#1c2024'; x.font='900 96px Arial'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('@',64,70);
-  const tex=new THREE.CanvasTexture(c); const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true})); sp.scale.set(1.4,1.4,1); sp.position.y=1.4; g.add(sp);
-  return g;
+// forklift openings: gaps in the platform that furniture rides up/down through
+const forkLifts = [];
+function makeForkGap(){
+  const g = new THREE.Group();
+  const W = 2.6, D = 2.0;                                   // ~8.5' x 6.5' opening (fits a sofa)
+  const hole = new THREE.Mesh(new THREE.BoxGeometry(W, 0.5, D), new THREE.MeshStandardMaterial({ color:0x10141a, roughness:0.96 }));
+  hole.position.y = -0.24; g.add(hole);                     // dark recess = the opening
+  for (const [w,d,x,z] of [[W+0.3,0.22,0,-D/2-0.1],[W+0.3,0.22,0,D/2+0.1],[0.22,D+0.5,-W/2-0.1,0],[0.22,D+0.5,W/2+0.1,0]]) {
+    const b = bx(w,0.04,d,MAT.matEdge); b.position.set(x,0.045,z); g.add(b);          // yellow hazard border
+  }
+  for (const [x0,z0,x1,z1] of [[-W/2,-D/2,W/2,-D/2],[-W/2,-D/2,-W/2,D/2],[W/2,-D/2,W/2,D/2]]) {
+    const dx=x1-x0,dz=z1-z0,len=Math.hypot(dx,dz),ang=Math.atan2(dz,dx);
+    const r=bx(len,0.05,0.05,MAT.steel); r.position.set((x0+x1)/2,1.0,(z0+z1)/2); r.rotation.y=-ang; g.add(r);   // 3-sided guard rail
+  }
+  const lift = new THREE.Group();
+  lift.add(bx(W-0.2,0.1,D-0.2,MAT.steel));                  // lift platform
+  const sofa = makeSofaProduct(); sofa.update(1); sofa.g.scale.set(0.8,0.8,0.8); sofa.g.position.y=0.1; lift.add(sofa.g);
+  g.add(lift); forkLifts.push(lift);
+  return { g, lift };
 }
-const accessPts=[];
-function addAccess(x,z){ const g=makeAccessMarker(); g.position.set(x,0,z); level2.add(g); accessPts.push({g,x,z}); }
-function clearAccess(){ accessPts.forEach(a=>level2.remove(a.g)); accessPts.length=0; }
-[[DECK.x0+5, DECK.z1],[MX1, deckCz],[DECK.x1, DECK.z0]].forEach(p=>addAccess(p[0],p[1]));   // seed on platform edges
+const accessPts = [];
+function addAccess(x,z){ const fg = makeForkGap(); fg.g.position.set(x,0,z); level2.add(fg.g); accessPts.push({ g:fg.g, x, z, lift:fg.lift }); }
+function clearAccess(){ accessPts.forEach(a => { level2.remove(a.g); const i=forkLifts.indexOf(a.lift); if(i>=0) forkLifts.splice(i,1); }); accessPts.length=0; }
+[[DECK.x0+6, DECK.z1-3],[MX1-6, DECK.z1-3]].forEach(p=>addAccess(p[0],p[1]));   // 2 forklift openings
 
 // the single materials cart (holds all parts) — draggable; feeders pull from this one spot
 // draggable cart SPOT (front of the queue) — feeders pull parts from here
@@ -878,6 +895,7 @@ function setStationPos(id, x, z) {
   const nd = nodes[id]; if (!nd) return;
   nd.x = x; nd.z = z; POS[id] = [x, z];
   placeStation(id);
+  if (id === 'con' && typeof rebuildDivider === 'function') rebuildDivider();   // crossing follows the connector
 }
 function setStationRot(id, rot) {
   const nd = nodes[id]; if (!nd) return;
@@ -1104,6 +1122,7 @@ document.getElementById('accesspt').onclick = () => {
 loadLayout();
 refreshPath();
 buildHelp();   // render seeded/loaded help paths
+rebuildDivider();   // align the crossing to the connector station
 
 /* ---- named layouts: save / load / compare different floor plans ---- */
 const LAYOUTS_KEY = 'm3d_layouts_v2';
@@ -1265,6 +1284,11 @@ function loop(now){
   }
   updateCarts();   // carts stay parked in a line along the path
   updateHelp();    // help-movement arrows follow the stations
+  for (let i = 0; i < forkLifts.length; i++) {     // furniture rides up/down through the forklift openings
+    const ph = ((now / 1000) + i * 2.5) % 6;
+    const f = ph < 3 ? ph / 3 : (6 - ph) / 3;       // 0 (down) .. 1 (at deck)
+    forkLifts[i].position.y = -(1 - f) * (FLOOR2 - 0.3);
+  }
   update();
   controls.update();
   renderer.render(scene, camera);
