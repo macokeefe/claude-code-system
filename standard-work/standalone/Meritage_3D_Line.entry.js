@@ -340,10 +340,10 @@ function walkOf(id) {
 }
 function eff(id) { return (get(id).t || 0) + walkOf(id); }
 function helpInto(id) { return (typeof helpArrows === 'undefined') ? 0 : helpArrows.reduce((s, a) => s + (a.to === id ? (a.helpMin || 0) : 0), 0); }
-function helpFrom(id) { return (typeof helpArrows === 'undefined') ? 0 : helpArrows.reduce((s, a) => s + (a.from === id ? (a.helpMin || 0) : 0), 0); }
+function helpFromOp(id, idx) { return (typeof helpArrows === 'undefined') ? 0 : helpArrows.reduce((s, a) => s + ((a.from === id && (a.fromIdx || 0) === idx) ? (a.helpMin || 0) : 0), 0); }
 function effNet(id) { return Math.max(0.1, eff(id) - helpInto(id)); }   // a helped station's time drops by the help minutes
 function lineCyc() { return sch ? Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 1; }
-function availIdle(id) { return Math.max(0, lineCyc() - effNet(id) - helpFrom(id)); }   // spare minutes/chair an operator can give
+function availIdleOp(id, idx) { return Math.max(0, lineCyc() - effNet(id) - helpFromOp(id, idx)); }   // spare min/chair a specific operator can give
 function schedule() {
   const seaT=effNet('sea'), armT=effNet('arm'), bakT=effNet('bak'), treT=effNet('tre'), conT=effNet('con');
   const ASM=effNet('fa'), PACK=effNet('pak');
@@ -527,9 +527,9 @@ function refreshPath() {
 }
 
 // ---- help-movement arrows: where an operator goes to help after finishing ----
-let helpArrows = [                    // [{from, to, helpMin}] — starter paths (idle feeders help the bottleneck)
-  { from:'tre', to:'sea', helpMin:5 },
-  { from:'con', to:'sea', helpMin:5 },
+let helpArrows = [                    // [{from, fromIdx, to, helpMin}] — per-operator starter paths
+  { from:'tre', fromIdx:0, to:'sea', helpMin:5 },
+  { from:'con', fromIdx:0, to:'sea', helpMin:5 },
 ];
 const helpGroup = new THREE.Group(); level2.add(helpGroup);
 const HELP_COL = 0x8f3fbf;
@@ -537,8 +537,10 @@ function assignHelpers() {
   if (typeof crew === 'undefined') return;
   crew.forEach(c => { c.helpTo = null; c.helpMin = 0; });
   helpArrows.forEach(a => {
-    const cs = crew.filter(c => c.station === a.from);   // the last operator at the FROM station becomes the helper
-    if (cs.length) { cs[cs.length - 1].helpTo = a.to; cs[cs.length - 1].helpMin = a.helpMin || 0; }
+    const idx = a.fromIdx || 0;
+    const cs = crew.filter(c => c.station === a.from);
+    const c = cs.find(c => c.idx === idx) || cs[cs.length - 1];   // the specific operator on this path
+    if (c && !c.helpTo) { c.helpTo = a.to; c.helpMin = a.helpMin || 0; }
   });
 }
 function buildHelp() {
@@ -555,7 +557,9 @@ const _hy = new THREE.Vector3(0,1,0), _hd = new THREE.Vector3();
 function updateHelp() {
   const y = 0.25;
   helpArrows.forEach(a => {
-    if (!a._line) return; const A = nodes[a.from], B = nodes[a.to]; if (!A || !B) return;
+    if (!a._line) return; const B = nodes[a.to]; if (!nodes[a.from] || !B) return;
+    const hc = (typeof crew !== 'undefined') ? crew.find(c => c.station === a.from && c.idx === (a.fromIdx || 0)) : null;
+    const A = hc ? { x: hc.homeX, z: hc.homeZ } : nodes[a.from];   // start the arrow at the specific operator
     a._line.geometry.setAttribute('position', new THREE.Float32BufferAttribute([A.x, y, A.z, B.x, y, B.z], 3));
     a._line.geometry.computeBoundingSphere();
     a._cone.position.set(B.x, y, B.z);
@@ -707,15 +711,13 @@ function operatorsList() {
   for (const id of ['con','arm','bak','tre','sea']) {
     const s = get(id), base = effNet(id);          // station's per-unit time (reduced if it receives help)
     for (let i = 0; i < s.ppl; i++) {
-      let bpu = base;
-      if (i === s.ppl - 1) bpu += helpFrom(id);     // the last operator is the helper -> their time spent helping adds to their busy
+      const bpu = base + helpFromOp(id, i);         // each operator's own help time adds to their busy
       list.push({ name: FEEDNAME[id] + (s.ppl > 1 ? ' ' + (i+1) : ''), bpu });
     }
   }
   const faS = get('fa'), faBase = effNet('fa') + effNet('pak');   // FA pair also does the packing/cushions
   for (let i = 0; i < faS.ppl; i++) {
-    let bpu = faBase; if (i === faS.ppl - 1) bpu += helpFrom('fa');
-    list.push({ name: 'Full assembly ' + (i+1), bpu });
+    list.push({ name: 'Full assembly ' + (i+1), bpu: faBase + helpFromOp('fa', i) });
   }
   return list;
 }
@@ -758,11 +760,13 @@ function renderHelpPanel() {
   if (!helpArrows.length) { helpPanel.innerHTML = head + '<div class="ihint">No paths — click “➤ Help arrow”, then a FROM station and the TO station.</div>'; return; }
   let html = head;
   helpArrows.forEach((a, i) => {
-    const spare = availIdle(a.from) + (a.helpMin || 0);
+    const spare = availIdleOp(a.from, a.fromIdx || 0) + (a.helpMin || 0);
     const before = eff(a.to), after = effNet(a.to);
     const onBn = isBottleneckTarget(a.to, bn.key);
+    const fromPpl = (get(a.from) && get(a.from).ppl) || 1;
+    const fromLabel = stName(a.from) + (fromPpl > 1 ? ' ' + ((a.fromIdx || 0) + 1) : '');
     html += `<div class="hrow">
-      <div class="hnm">${stName(a.from)} → <b>${stName(a.to)}</b> ${onBn ? '<span style="color:#2f7d52">✓ bottleneck</span>' : '<span style="color:#c0552c">⚠ not bottleneck</span>'}</div>
+      <div class="hnm">${fromLabel} → <b>${stName(a.to)}</b> ${onBn ? '<span style="color:#2f7d52">✓ bottleneck</span>' : '<span style="color:#c0552c">⚠ not bottleneck</span>'}</div>
       <div class="hctl">takes <input type="number" class="hmin" data-i="${i}" min="0" max="${spare.toFixed(1)}" step="0.5" value="${(a.helpMin||0)}"> min/chair off ${stName(a.to)}
         <button class="hdel" data-i="${i}">✕</button></div>
       <div class="hsub">${stName(a.to)} step: ${before.toFixed(1)} → <b>${after.toFixed(1)} min</b> · helper has ${spare.toFixed(1)} min/chair spare${onBn ? '' : ' · won\'t raise output until the bottleneck is relieved'}</div>
@@ -770,7 +774,7 @@ function renderHelpPanel() {
   });
   helpPanel.innerHTML = html;
   helpPanel.querySelectorAll('.hmin').forEach(inp => inp.onchange = e => {
-    const a = helpArrows[+e.target.dataset.i]; const spare = availIdle(a.from) + (a.helpMin || 0);
+    const a = helpArrows[+e.target.dataset.i]; const spare = availIdleOp(a.from, a.fromIdx || 0) + (a.helpMin || 0);
     a.helpMin = Math.max(0, Math.min(spare, parseFloat(e.target.value) || 0));
     buildHelp(); schedule(); renderIdle(); saveLayout();
   });
@@ -810,8 +814,8 @@ function setStationRot(id, rot) {
   const nd = nodes[id]; if (!nd) return;
   nd.rot = rot; placeStation(id);
 }
-function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
-function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0 })); buildHelp(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); } catch (e) {} }
+function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
+function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); } catch (e) {} }
 
 // 1-yard grid on the deck
 function buildGrid() {
@@ -943,7 +947,13 @@ renderer.domElement.addEventListener('pointerdown', e => {
   if (helpArming) {                                   // drawing a help arrow: pick source, then target
     const sid = pickStation(e); if (!sid) return;
     if (!armSource) { armSource = sid; }
-    else { if (sid !== armSource) { helpArrows.push({ from: armSource, to: sid, helpMin: Math.min(5, +availIdle(armSource).toFixed(1)) }); buildHelp(); schedule(); saveLayout(); } armSource = null; }
+    else { if (sid !== armSource) {
+        const ppl = (get(armSource) && get(armSource).ppl) || 1;
+        const used = new Set(helpArrows.filter(a => a.from === armSource).map(a => a.fromIdx || 0));
+        let fromIdx = ppl - 1; for (let i = 0; i < ppl; i++) { if (!used.has(i)) { fromIdx = i; break; } }   // next free operator at this station
+        helpArrows.push({ from: armSource, fromIdx, to: sid, helpMin: Math.min(5, +availIdleOp(armSource, fromIdx).toFixed(1)) });
+        buildHelp(); schedule(); saveLayout();
+      } armSource = null; }
     return;
   }
   const wp = pickWaypoint(e);
@@ -1005,7 +1015,7 @@ function snapshot() {
   ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
   if (nodes.cart) pos.cart = [nodes.cart.x, nodes.cart.z];
   const cap = sch ? 420 / Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 0;
-  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), cap: +cap.toFixed(1) };
+  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), cap: +cap.toFixed(1) };
 }
 function applyLayout(L) {
   if (L.times) ST.forEach(s => { if (L.times[s.id] != null) get(s.id).t = L.times[s.id]; });
@@ -1015,7 +1025,7 @@ function applyLayout(L) {
   if (L.trips != null) { tripsPerUnit = L.trips; const c = document.getElementById('trips'); if (c) c.value = tripsPerUnit; }
   if (L.N) { N = L.N; nInput.value = N; }
   if (Array.isArray(L.wps)) { cartWaypoints = L.wps.map(a => ({ x: a[0], z: a[1] })); refreshPath(); }
-  if (Array.isArray(L.help)) { helpArrows = L.help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0 })); buildHelp(); }
+  if (Array.isArray(L.help)) { helpArrows = L.help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); }
   if (L.rot) Object.keys(L.rot).forEach(id => { if (nodes[id]) setStationRot(id, L.rot[id]); });
   ST.forEach(s => { const inp = timeBox.querySelector(`input[data-id="${s.id}"]`); if (inp) inp.value = get(s.id).t; });
   schedule(); T = 0; setPlay(false); saveLayout();
