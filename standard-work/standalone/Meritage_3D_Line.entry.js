@@ -515,7 +515,9 @@ scene.add(elevator.shaft);
 // ---- forklift ACCESS POINTS (@) on the platform edge + editable elevator ----
 const elBX = DECK.x0 - 1.6, elBZ = 2;     // elevator built position (for dragging)
 function moveElevator(x,z){ elevator.shaft.position.set(x - elBX, 0, z - elBZ); EL[0]=x; EL[1]=z; if (typeof refreshPath==='function') refreshPath(); }
-// forklift openings: gaps in the platform that furniture rides up/down through
+// finished-goods package (boxed sofa)
+function makePackage(){ const g=new THREE.Group(); const b=bx(1.5,0.55,0.75,MAT.box); b.position.y=0.3; g.add(b); const t=bx(1.52,0.05,0.26,MAT.boxWhite); t.position.set(0,0.58,0); g.add(t); return g; }
+// forklift openings: gaps in the platform; a forklift carries a package DOWN when triggered
 const forkLifts = [];
 function makeForkGap(){
   const g = new THREE.Group();
@@ -545,14 +547,33 @@ function makeForkGap(){
   // fork carriage + furniture that rides up/down through the gap
   const lift = new THREE.Group();
   for (const pz of [-0.35,0.35]) { const fk = bx(1.3,0.08,0.16,MAT.steel); fk.position.set(0,0,pz); lift.add(fk); }   // forks
-  const sofa = makeSofaProduct(); sofa.update(1); sofa.g.scale.set(0.8,0.8,0.8); sofa.g.position.y=0.12; lift.add(sofa.g);
-  g.add(lift); forkLifts.push(lift);
-  return { g, lift };
+  const pkg = makePackage(); pkg.scale.set(0.7,0.7,0.7); pkg.position.y=0.12; pkg.visible=false; lift.add(pkg);
+  g.add(lift);
+  const rec = { lift, busy:false, t:0, pkg }; forkLifts.push(rec);
+  return { g, rec };
 }
 const accessPts = [];
-function addAccess(x,z){ const fg = makeForkGap(); fg.g.position.set(x,0,z); level2.add(fg.g); accessPts.push({ g:fg.g, x, z, lift:fg.lift }); }
-function clearAccess(){ accessPts.forEach(a => { level2.remove(a.g); const i=forkLifts.indexOf(a.lift); if(i>=0) forkLifts.splice(i,1); }); accessPts.length=0; }
+function addAccess(x,z){ const fg = makeForkGap(); fg.g.position.set(x,0,z); level2.add(fg.g); accessPts.push({ g:fg.g, x, z, rec:fg.rec }); }
+function clearAccess(){ accessPts.forEach(a => { level2.remove(a.g); const i=forkLifts.indexOf(a.rec); if(i>=0) forkLifts.splice(i,1); }); accessPts.length=0; }
 [[DECK.x0+6, DECK.z1-3],[MX1-6, DECK.z1-3]].forEach(p=>addAccess(p[0],p[1]));   // 2 forklift openings
+
+// ---- finished-goods racks: draggable; packages populate them as sofas ship ----
+const RACK_SLOTS = 3;
+function makeRackUnit(){
+  const g=new THREE.Group(); const L=1.9, D=0.6, H=2.0;        // ~6' x 2' x 6.5'
+  for (const [px,pz] of [[-L/2,-D/2],[L/2,-D/2],[-L/2,D/2],[L/2,D/2]]) { const p=bx(0.08,H,0.08,MAT.rackPost); p.position.set(px,H/2,pz); g.add(p); }
+  for (const y of [0.55,1.3,1.95]) for (const pz of [-D/2,D/2]) { const beam=bx(L,0.07,0.07,MAT.rackBeam); beam.position.set(0,y,pz); g.add(beam); }
+  const slots=[]; const sx=[-L/2+0.55, 0, L/2-0.55];
+  for (let i=0;i<RACK_SLOTS;i++){ const pk=makePackage(); pk.scale.set(0.62,0.6,0.7); pk.position.set(sx[i],0.6,0); pk.visible=false; g.add(pk); slots.push(pk); }
+  return { g, slots };
+}
+const racks=[];
+function addRack(x,z,rot){ const r=makeRackUnit(); r.g.position.set(x,0,z); if(rot) r.g.rotation.y=rot; level2.add(r.g); racks.push({ g:r.g, x, z, slots:r.slots }); }
+function clearRacks(){ racks.forEach(r=>level2.remove(r.g)); racks.length=0; }
+[[DECK.x0+4, DECK.z0+1],[DECK.x0+8.5, DECK.z0+1]].forEach(p=>addRack(p[0],p[1]));   // seed 2 racks along the back
+let onRacks=0, lastShipped=0;                                   // packages currently stored / last ship count seen
+function triggerTakedown(){ const fl=forkLifts.find(f=>!f.busy); if(fl){ fl.busy=true; fl.t=0; fl.pkg.visible=true; } }
+function fillRacks(){ let n=onRacks; for(const r of racks) for(const s of r.slots){ s.visible = n>0; if(n>0) n--; } }
 
 // the single materials cart (holds all parts) — draggable; feeders pull from this one spot
 // draggable cart SPOT (front of the queue) — feeders pull parts from here
@@ -915,8 +936,8 @@ function setStationRot(id, rot) {
   const nd = nodes[id]; if (!nd) return;
   nd.rot = rot; placeStation(id);
 }
-function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
-function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); } catch (e) {} }
+function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
+function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } } catch (e) {} }
 
 // 1-yard grid on the deck
 function buildGrid() {
@@ -1035,9 +1056,11 @@ function pickWaypoint(e) {
   const hits = raycaster.intersectObjects(wpGroup.children, false);
   return hits.length ? hits[0].object.userData.wp : null;
 }
-function fixtureList() {   // draggable non-station objects: access points (first), then the elevator
-  const arr = accessPts.map(a => ({ root: a.g, set: (x, z) => { a.x = x; a.z = z; a.g.position.set(x, 0, z); } }));
-  arr.push({ root: elevator.shaft, set: (x, z) => moveElevator(x, z), elev: true });
+function fixtureList() {   // draggable non-station objects: access points, racks, then the elevator
+  const arr = [];
+  accessPts.forEach(a => arr.push({ root: a.g, kind: 'access', ref: a, set: (x, z) => { a.x = x; a.z = z; a.g.position.set(x, 0, z); } }));
+  racks.forEach(r => arr.push({ root: r.g, kind: 'rack', ref: r, set: (x, z) => { r.x = x; r.z = z; r.g.position.set(x, 0, z); } }));
+  arr.push({ root: elevator.shaft, kind: 'elev', set: (x, z) => moveElevator(x, z) });
   return arr;
 }
 function pickFixture(e) {
@@ -1112,7 +1135,11 @@ renderer.domElement.addEventListener('contextmenu', e => {
   if (!editing) return;
   e.preventDefault();                                  // no browser menu while editing
   const fi = pickFixture(e);
-  if (fi != null && fi < accessPts.length) { level2.remove(accessPts[fi].g); accessPts.splice(fi, 1); saveLayout(); return; }   // delete an access point
+  if (fi != null) {   // delete access point or rack on right-click
+    const f = fixtureList()[fi];
+    if (f.kind === 'access') { level2.remove(f.ref.g); const i=forkLifts.indexOf(f.ref.rec); if(i>=0) forkLifts.splice(i,1); accessPts.splice(accessPts.indexOf(f.ref), 1); saveLayout(); return; }
+    if (f.kind === 'rack') { level2.remove(f.ref.g); racks.splice(racks.indexOf(f.ref), 1); saveLayout(); return; }
+  }
   const wp = pickWaypoint(e);
   if (wp != null) { cartWaypoints.splice(wp, 1); refreshPath(); saveLayout(); return; }
   const id = pickStation(e);
@@ -1133,6 +1160,12 @@ document.getElementById('accesspt').onclick = () => {
   addAccess(deckCx, DECK.z1);
   saveLayout();
 };
+// add a finished-goods rack along the back
+document.getElementById('rackbtn').onclick = () => {
+  if (!editing) setEditing(true);
+  addRack(deckCx, DECK.z0 + 1);
+  saveLayout();
+};
 loadLayout();
 refreshPath();
 buildHelp();   // render seeded/loaded help paths
@@ -1147,7 +1180,7 @@ function snapshot() {
   ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
   if (nodes.cart) pos.cart = [nodes.cart.x, nodes.cart.z];
   const cap = sch ? 420 / Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 0;
-  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], cap: +cap.toFixed(1) };
+  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), cap: +cap.toFixed(1) };
 }
 function applyLayout(L) {
   if (L.steps) { ST.forEach(s => { if (L.steps[s.id]) { s.steps = L.steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); }
@@ -1162,6 +1195,7 @@ function applyLayout(L) {
   if (L.rot) Object.keys(L.rot).forEach(id => { if (nodes[id]) setStationRot(id, L.rot[id]); });
   if (Array.isArray(L.access)) { clearAccess(); L.access.forEach(p => addAccess(p[0], p[1])); }
   if (Array.isArray(L.elev)) moveElevator(L.elev[0], L.elev[1]);
+  if (Array.isArray(L.racks)) { clearRacks(); L.racks.forEach(p => addRack(p[0], p[1], p[2])); }
   renderTimes();
   schedule(); T = 0; setPlay(false); saveLayout();
 }
@@ -1253,6 +1287,11 @@ function update(){
   // shipped boxes appear
   shipBoxes.forEach((b,i)=> b.visible = i < shipped);
   ui.ship.textContent = shipped;
+  // finished sofas populate the racks; the forklift takes one down every 3rd
+  if (shipped < lastShipped) { lastShipped = shipped; onRacks = 0; }   // clock reset/seek
+  const rcap = racks.length * RACK_SLOTS;
+  while (lastShipped < shipped) { lastShipped++; onRacks = Math.min(rcap, onRacks + 1); if (lastShipped % 3 === 0) { onRacks = Math.max(0, onRacks - 1); triggerTakedown(); } }
+  fillRacks();
 
   // FA crew walk to packing during pack phase; help-arrow operators walk to help during their idle slack
   const packing = (cur>=0 && phase==='pack');
@@ -1298,10 +1337,12 @@ function loop(now){
   }
   updateCarts();   // carts stay parked in a line along the path
   updateHelp();    // help-movement arrows follow the stations
-  for (let i = 0; i < forkLifts.length; i++) {     // furniture rides up/down through the forklift openings
-    const ph = ((now / 1000) + i * 2.5) % 6;
-    const f = ph < 3 ? ph / 3 : (6 - ph) / 3;       // 0 (down) .. 1 (at deck)
-    forkLifts[i].position.y = -(1 - f) * (FLOOR2 - 0.3);
+  for (const fl of forkLifts) {                    // forklift carries a package DOWN when triggered, else idle at deck
+    if (fl.busy) {
+      fl.t += dt; const p = fl.t / 4;               // ~4s round trip
+      if (p >= 1) { fl.busy = false; fl.lift.position.y = 0; fl.pkg.visible = false; }
+      else { const down = p < 0.5 ? p / 0.5 : 1 - (p - 0.5) / 0.5; fl.lift.position.y = -down * (FLOOR2 - 0.3); fl.pkg.visible = p < 0.55; }
+    } else { fl.lift.position.y = 0; }
   }
   update();
   controls.update();
