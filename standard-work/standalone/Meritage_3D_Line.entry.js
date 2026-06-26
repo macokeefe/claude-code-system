@@ -301,14 +301,15 @@ function makeShipBox() {
 
 /* =========================== SIMULATION =========================== */
 const ST = [
-  { id:'con', title:'CONNECTORS',   sub:'Connectors',   ppl:1, t:19.25, role:'feeder', kind:'connectors', accent:'#1d3a66' },
-  { id:'arm', title:'ARMS',         sub:'Arm assembly', ppl:2, t:32,    role:'feeder', kind:'arm',        accent:'#1d3a66', double:true },
-  { id:'bak', title:'BACK FRAME',   sub:'Back frame',   ppl:1, t:43.5,  role:'feeder', kind:'back',       accent:'#1d3a66' },
-  { id:'tre', title:'TRELLIS',      sub:'Trellis',      ppl:1, t:22.5,  role:'feeder', kind:'trellis',    accent:'#1d3a66' },
-  { id:'sea', title:'SEAT FRAME',   sub:'Seat frame',   ppl:1, t:47,    role:'feeder', kind:'seat',       accent:'#9a3b1f', bot:true },
-  { id:'fa',  title:'FULL ASSEMBLY',sub:'Assemble frame',ppl:2, t:29,   role:'fa',     accent:'#1d3a66' },
-  { id:'pak', title:'CUSHIONS & PACK',sub:'Cushions + ship',ppl:0, t:18, role:'pack',   accent:'#236043' },
+  { id:'con', title:'CONNECTORS',   sub:'Connectors',   ppl:1, t:19.25, role:'feeder', kind:'connectors', accent:'#1d3a66', steps:[{name:'Connectors', t:19.25}] },
+  { id:'arm', title:'ARMS',         sub:'Arm assembly', ppl:2, t:32,    role:'feeder', kind:'arm',        accent:'#1d3a66', double:true, steps:[{name:'Arm assembly', t:32}] },
+  { id:'bak', title:'BACK FRAME',   sub:'Back frame',   ppl:1, t:43.5,  role:'feeder', kind:'back',       accent:'#1d3a66', steps:[{name:'Back frame', t:43.5}] },
+  { id:'tre', title:'TRELLIS',      sub:'Trellis',      ppl:1, t:22.5,  role:'feeder', kind:'trellis',    accent:'#1d3a66', steps:[{name:'Trellis', t:22.5}] },
+  { id:'sea', title:'SEAT FRAME',   sub:'Seat frame',   ppl:1, t:47,    role:'feeder', kind:'seat',       accent:'#9a3b1f', bot:true, steps:[{name:'Seat frame', t:47}] },
+  { id:'fa',  title:'FULL ASSEMBLY',sub:'Assemble frame',ppl:2, t:29,   role:'fa',     accent:'#1d3a66', steps:[{name:'Assemble frame', t:29}] },
+  { id:'pak', title:'CUSHIONS & PACK',sub:'Cushions + ship',ppl:0, t:18, role:'pack',   accent:'#236043', steps:[{name:'Cushions + pack', t:18}] },
 ];
+function recalc(id) { const s = get(id); if (s && s.steps) s.t = s.steps.reduce((a, st) => a + (parseFloat(st.t) || 0), 0); }
 const get = id => ST.find(s => s.id === id);
 
 let N = 8;
@@ -388,7 +389,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xe9edf1);
 scene.fog = new THREE.Fog(0xe9edf1, 60, 140);
 const camera = new THREE.PerspectiveCamera(44, mount.clientWidth / mount.clientHeight, 0.1, 300);
-camera.position.set(1, 26, 44);
+camera.position.set(7, 30, 52);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(mount.clientWidth, mount.clientHeight);
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
@@ -396,7 +397,7 @@ renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadow
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.06;
 mount.appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true; controls.target.set(1, 6.8, 0); controls.maxPolarAngle = Math.PI / 2.02; controls.maxDistance = 100;
+controls.enableDamping = true; controls.target.set(7, 6.8, 0); controls.maxPolarAngle = Math.PI / 2.02; controls.maxDistance = 130;
 
 scene.add(new THREE.HemisphereLight(0xffffff, 0xb8bcc2, 1.0));
 const sun = new THREE.DirectionalLight(0xfff8ee, 0.85);
@@ -449,6 +450,30 @@ level2.add(railing(DECK.x0,DECK.z1,DECK.x1,DECK.z1));   // front
 level2.add(railing(DECK.x1,DECK.z0,DECK.x1,DECK.z1));   // right
 level2.add(railing(DECK.x0,DECK.z0,DECK.x0,4));         // left (lower)
 level2.add(railing(DECK.x0,8,DECK.x0,DECK.z1));         // left (upper) — gap 4..8 = elevator opening
+
+// ---- mirrored floor to the right (a 2nd identical Meritage cell) with a crossable divider ----
+const AISLE = 1.2;                                  // crossable gap between the two floors
+const MX0 = DECK.x1 + AISLE, MX1 = MX0 + deckW, MCx = (MX0 + MX1)/2;
+const mdeck = bx(deckW, 0.3, deckD, deckMat); mdeck.position.set(MCx, -0.16, deckCz); mdeck.receiveShadow = true; level2.add(mdeck);
+for (const [w,d,x,z] of [[deckW,0.5,MCx,DECK.z0],[deckW,0.5,MCx,DECK.z1],[0.5,deckD,MX0,deckCz],[0.5,deckD,MX1,deckCz]]) {
+  const f = bx(w,0.5,d,fascia); f.position.set(x,-0.34,z); level2.add(f);
+}
+for (const cx2 of [MX0+3, MX1-3]) for (const cz2 of [-8,0,8]) {
+  const col = bx(0.4, FLOOR2, 0.4, MAT.steel); col.position.set(cx2, FLOOR2/2, cz2); col.castShadow = true; scene.add(col);
+  const base = bx(0.7,0.1,0.7,MAT.steel); base.position.set(cx2,0.05,cz2); scene.add(base);
+}
+level2.add(railing(MX0,DECK.z0,MX1,DECK.z0));       // mirror back
+level2.add(railing(MX0,DECK.z1,MX1,DECK.z1));       // mirror front
+level2.add(railing(MX1,DECK.z0,MX1,DECK.z1));       // mirror right (outer)
+// crossable divider line (dashed yellow, painted on the floor — not a wall)
+(function(){
+  const dx = DECK.x1 + AISLE/2;
+  const g = new THREE.Group();
+  for (let z = DECK.z0; z < DECK.z1; z += 1.2) {       // dashed segments
+    const seg = bx(0.12, 0.02, 0.7, MAT.tape); seg.position.set(dx, 0.06, z + 0.35); g.add(seg);
+  }
+  level2.add(g);
+})();
 
 // materials elevator where the cart was
 function makeElevator(x,z){
@@ -645,7 +670,7 @@ FEEDERS.forEach(id => {
   travelParts[id] = arr;
 });
 
-controls.target.set(1, FLOOR2 + 0.8, 0);
+controls.target.set(7, FLOOR2 + 0.8, 0);
 
 /* =========================== UI =========================== */
 const ui = {
@@ -665,7 +690,7 @@ const nInput = document.getElementById('n');
 nInput.value = N;
 nInput.onchange = e => { N = Math.max(1, Math.min(40, parseInt(e.target.value)||8)); schedule(); T=0; setPlay(false); };
 const speed = document.getElementById('speed');
-document.getElementById('cam').onclick = () => { camera.position.set(1,26,44); controls.target.set(1,FLOOR2+0.8,0); };
+document.getElementById('cam').onclick = () => { camera.position.set(7,30,52); controls.target.set(7,FLOOR2+0.8,0); };
 document.getElementById('top').onclick = () => { camera.position.set(4,FLOOR2+38,1); controls.target.set(4,FLOOR2,1); };
 // label visibility: 0 = off, 1 = names only (compact), 2 = full cards
 let labelMode = 1;
@@ -686,18 +711,38 @@ moveCtl.innerHTML = `<label class="mck"><input type="checkbox" id="walkOn" check
   <div class="mrow">Trips / unit <input type="number" id="trips" value="1" min="0" step="0.5"/></div>
   <div class="mrow" style="color:#6b7785">Each cart = 1 sofa's materials</div>`;
 timeBox.appendChild(moveCtl);
-ST.forEach(s => {
-  const row = document.createElement('div'); row.className = 'trow';
-  const lbl = s.role==='fa' ? 'ASM' : (s.role==='pack'?'PACK':'min');
-  row.innerHTML = `<span class="tn">${s.title}${s.bot?' <b style="color:#c0552c">◄</b>':''}</span>
-    <input type="number" step="0.25" min="0" value="${s.t}" data-id="${s.id}"/> <span class="tu">${lbl}</span>
-    <span class="tw" id="walk_${s.id}"></span>`;
-  timeBox.appendChild(row);
-});
-timeBox.querySelectorAll('input[data-id]').forEach(inp => inp.onchange = e => {
-  const s = get(e.target.dataset.id); s.t = parseFloat(e.target.value) || 0;
-  schedule(); T = 0; setPlay(false);
-});
+const stepsHost = document.createElement('div'); stepsHost.id = 'stepsHost'; timeBox.appendChild(stepsHost);
+function renderTimes() {
+  let html = '';
+  ST.forEach(s => {
+    html += `<div class="stblock">
+      <div class="sttitle">${s.title}${s.bot?' <b style="color:#c0552c">◄</b>':''}<span class="sttot">${s.t.toFixed(1).replace(/\.0$/,'')} min</span><span class="tw" id="walk_${s.id}"></span></div>`;
+    (s.steps||[]).forEach((st, si) => {
+      html += `<div class="strow">
+        <input class="sname" data-id="${s.id}" data-si="${si}" value="${(st.name||'').replace(/"/g,'&quot;')}"/>
+        <input class="stime" type="number" step="0.25" min="0" data-id="${s.id}" data-si="${si}" value="${st.t}"/>
+        <span class="su">min</span>
+        <button class="sdel" data-id="${s.id}" data-si="${si}">✕</button></div>`;
+    });
+    html += `<button class="sadd" data-id="${s.id}">+ add step</button></div>`;
+  });
+  stepsHost.innerHTML = html;
+  stepsHost.querySelectorAll('input.sname').forEach(inp => inp.onchange = e => {
+    get(e.target.dataset.id).steps[+e.target.dataset.si].name = e.target.value; saveLayout();
+  });
+  stepsHost.querySelectorAll('input.stime').forEach(inp => inp.onchange = e => {
+    const s = get(e.target.dataset.id); s.steps[+e.target.dataset.si].t = parseFloat(e.target.value) || 0;
+    recalc(s.id); renderTimes(); schedule(); T = 0; setPlay(false); saveLayout();
+  });
+  stepsHost.querySelectorAll('button.sadd').forEach(b => b.onclick = e => {
+    const s = get(e.target.dataset.id); s.steps.push({ name: 'New step', t: 0 }); recalc(s.id); renderTimes(); saveLayout();
+  });
+  stepsHost.querySelectorAll('button.sdel').forEach(b => b.onclick = e => {
+    const s = get(e.target.dataset.id); s.steps.splice(+e.target.dataset.si, 1); if (!s.steps.length) s.steps.push({ name: s.sub || 'Step', t: 0 });
+    recalc(s.id); renderTimes(); schedule(); T = 0; setPlay(false); saveLayout();
+  });
+}
+renderTimes();
 document.getElementById('walkOn').onchange = e => { walkOn = e.target.checked; schedule(); T = 0; setPlay(false); };
 document.getElementById('walkSpeed').onchange = e => { walkSpeed = Math.max(10, parseFloat(e.target.value) || 60); schedule(); T = 0; setPlay(false); };
 document.getElementById('trips').onchange = e => { tripsPerUnit = Math.max(0, parseFloat(e.target.value) || 0); schedule(); T = 0; setPlay(false); };
@@ -814,8 +859,8 @@ function setStationRot(id, rot) {
   const nd = nodes[id]; if (!nd) return;
   nd.rot = rot; placeStation(id);
 }
-function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
-function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); } catch (e) {} }
+function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
+function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } } catch (e) {} }
 
 // 1-yard grid on the deck
 function buildGrid() {
@@ -1015,10 +1060,11 @@ function snapshot() {
   ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
   if (nodes.cart) pos.cart = [nodes.cart.x, nodes.cart.z];
   const cap = sch ? 420 / Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 0;
-  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), cap: +cap.toFixed(1) };
+  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), cap: +cap.toFixed(1) };
 }
 function applyLayout(L) {
-  if (L.times) ST.forEach(s => { if (L.times[s.id] != null) get(s.id).t = L.times[s.id]; });
+  if (L.steps) { ST.forEach(s => { if (L.steps[s.id]) { s.steps = L.steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); }
+  else if (L.times) ST.forEach(s => { if (L.times[s.id] != null) { get(s.id).t = L.times[s.id]; get(s.id).steps = [{ name: s.sub || 'Step', t: L.times[s.id] }]; } });
   if (L.pos) Object.keys(L.pos).forEach(id => { if (nodes[id]) setStationPos(id, L.pos[id][0], L.pos[id][1]); });
   if (typeof L.walkOn === 'boolean') { walkOn = L.walkOn; const c = document.getElementById('walkOn'); if (c) c.checked = walkOn; }
   if (L.walkSpeed) { walkSpeed = L.walkSpeed; const c = document.getElementById('walkSpeed'); if (c) c.value = walkSpeed; }
@@ -1027,7 +1073,7 @@ function applyLayout(L) {
   if (Array.isArray(L.wps)) { cartWaypoints = L.wps.map(a => ({ x: a[0], z: a[1] })); refreshPath(); }
   if (Array.isArray(L.help)) { helpArrows = L.help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); }
   if (L.rot) Object.keys(L.rot).forEach(id => { if (nodes[id]) setStationRot(id, L.rot[id]); });
-  ST.forEach(s => { const inp = timeBox.querySelector(`input[data-id="${s.id}"]`); if (inp) inp.value = get(s.id).t; });
+  renderTimes();
   schedule(); T = 0; setPlay(false); saveLayout();
 }
 const layoutSel = document.getElementById('layoutSel');
