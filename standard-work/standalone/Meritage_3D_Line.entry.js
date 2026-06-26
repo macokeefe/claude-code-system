@@ -744,17 +744,28 @@ document.getElementById('idlebtn').onclick = () => {
 // ---- help-paths dashboard ----
 const helpPanel = document.getElementById('helpPanel');
 const stName = id => (get(id) ? get(id).title : id);
+function bottleneckInfo() {
+  const items = [['con', effNet('con')], ['arm', effNet('arm')], ['bak', effNet('bak')], ['tre', effNet('tre')], ['sea', effNet('sea')], ['fapak', effNet('fa') + effNet('pak')]];
+  let bn = items[0]; items.forEach(it => { if (it[1] > bn[1]) bn = it; });
+  return { key: bn[0], time: bn[1], cap: 420 / bn[1] };
+}
+function isBottleneckTarget(to, bnKey) { return bnKey === 'fapak' ? (to === 'fa' || to === 'pak') : (to === bnKey); }
 function renderHelpPanel() {
   if (!helpPanel || helpPanel.style.display === 'none') return;
-  if (!helpArrows.length) { helpPanel.innerHTML = '<h3>Help paths</h3><div class="ihint">None yet — click “➤ Help arrow”, then a FROM station and the TO station.</div>'; return; }
-  let html = '<h3>Help paths</h3><div class="ihint">Set how many minutes each helper takes off the target step. Capped by the helper\'s spare idle.</div>';
+  const bn = bottleneckInfo();
+  const bnName = bn.key === 'fapak' ? 'Full assy + pack' : FEEDNAME[bn.key];
+  const head = `<h3>Help paths</h3><div class="ihint"><b>Line now: ${bn.cap.toFixed(1)} chairs/day</b> · bottleneck: ${bnName} (${bn.time.toFixed(1)} min). Output only rises when the bottleneck drops.</div>`;
+  if (!helpArrows.length) { helpPanel.innerHTML = head + '<div class="ihint">No paths — click “➤ Help arrow”, then a FROM station and the TO station.</div>'; return; }
+  let html = head;
   helpArrows.forEach((a, i) => {
     const spare = availIdle(a.from) + (a.helpMin || 0);
+    const before = eff(a.to), after = effNet(a.to);
+    const onBn = isBottleneckTarget(a.to, bn.key);
     html += `<div class="hrow">
-      <div class="hnm">${stName(a.from)} → <b>${stName(a.to)}</b></div>
+      <div class="hnm">${stName(a.from)} → <b>${stName(a.to)}</b> ${onBn ? '<span style="color:#2f7d52">✓ bottleneck</span>' : '<span style="color:#c0552c">⚠ not bottleneck</span>'}</div>
       <div class="hctl">takes <input type="number" class="hmin" data-i="${i}" min="0" max="${spare.toFixed(1)}" step="0.5" value="${(a.helpMin||0)}"> min/chair off ${stName(a.to)}
-        <button class="hdel" data-i="${i}">✕ remove</button></div>
-      <div class="hsub">helper spends ~${(a.helpMin||0)} min/chair at ${stName(a.to)} · ${spare.toFixed(1)} min/chair spare available</div>
+        <button class="hdel" data-i="${i}">✕</button></div>
+      <div class="hsub">${stName(a.to)} step: ${before.toFixed(1)} → <b>${after.toFixed(1)} min</b> · helper has ${spare.toFixed(1)} min/chair spare${onBn ? '' : ' · won\'t raise output until the bottleneck is relieved'}</div>
     </div>`;
   });
   helpPanel.innerHTML = html;
