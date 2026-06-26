@@ -529,9 +529,23 @@ function makeForkGap(){
     const dx=x1-x0,dz=z1-z0,len=Math.hypot(dx,dz),ang=Math.atan2(dz,dx);
     const r=bx(len,0.05,0.05,MAT.steel); r.position.set((x0+x1)/2,1.0,(z0+z1)/2); r.rotation.y=-ang; g.add(r);   // 3-sided guard rail
   }
+  // forklift truck on the GROUND below the opening, doing the lifting
+  const yel = new THREE.MeshStandardMaterial({ color:0xd9a300, roughness:0.55, metalness:0.3 });
+  const groundY = -FLOOR2;
+  const truck = new THREE.Group(); truck.position.set(0, groundY, D/2 + 1.1);          // parked in front of the opening
+  const body = bx(1.8,0.9,1.1,yel); body.position.y=0.6; truck.add(body);
+  const cwt = bx(0.5,0.8,1.1,yel); cwt.position.set(0,0.55,0.85); truck.add(cwt);
+  for (const [px,pz] of [[-0.7,-0.45],[-0.7,0.45],[0.7,-0.45],[0.7,0.45]]) { const w=cyl(0.3,0.24,MAT.pants); w.rotation.x=Math.PI/2; w.position.set(px,0.3,pz); truck.add(w); }
+  for (const px of [-0.45,0.45]) { const p=bx(0.08,1.3,0.08,MAT.steel); p.position.set(px,1.6,0.3); truck.add(p); }   // overhead guard
+  const guard = bx(1.1,0.08,1.0,MAT.steel); guard.position.set(0,2.25,0.2); truck.add(guard);
+  const drv = makeCrewFigure(0x767d88,'Forklift'); drv.scale.set(0.8,0.65,0.8); drv.position.set(0,0.8,0.4); truck.add(drv);
+  g.add(truck);
+  // tall mast rails from the ground up to the deck at the opening (the lift travels these)
+  for (const px of [-0.55,0.55]) { const m=bx(0.12, FLOOR2+0.2, 0.12, MAT.steel); m.position.set(px, groundY + (FLOOR2+0.2)/2, -D/2 + 0.5); g.add(m); }
+  // fork carriage + furniture that rides up/down through the gap
   const lift = new THREE.Group();
-  lift.add(bx(W-0.2,0.1,D-0.2,MAT.steel));                  // lift platform
-  const sofa = makeSofaProduct(); sofa.update(1); sofa.g.scale.set(0.8,0.8,0.8); sofa.g.position.y=0.1; lift.add(sofa.g);
+  for (const pz of [-0.35,0.35]) { const fk = bx(1.3,0.08,0.16,MAT.steel); fk.position.set(0,0,pz); lift.add(fk); }   // forks
+  const sofa = makeSofaProduct(); sofa.update(1); sofa.g.scale.set(0.8,0.8,0.8); sofa.g.position.y=0.12; lift.add(sofa.g);
   g.add(lift); forkLifts.push(lift);
   return { g, lift };
 }
@@ -1078,11 +1092,11 @@ renderer.domElement.addEventListener('pointermove', e => {
     if (f) f.set(Math.max(DECK.x0 - 3, Math.min(MX1 + 1, snap(p.x))), Math.max(DECK.z0, Math.min(DECK.z1, snap(p.z))));
     return;
   }
-  const cx = Math.max(DECK.x0 + 0.6, Math.min(DECK.x1 - 0.6, snap(p.x)));
+  const cx = Math.max(DECK.x0 + 0.6, Math.min(MX1 - 0.6, snap(p.x)));      // span both floors so stations can cross the divider
   const cz = Math.max(DECK.z0 + 0.6, Math.min(DECK.z1 - 0.6, snap(p.z)));
   if (dragWp != null) { cartWaypoints[dragWp] = { x: cx, z: cz }; refreshPath(); return; }
   if (!dragId) return;
-  const x = Math.max(DECK.x0 + 1.4, Math.min(DECK.x1 - 1.4, cx));
+  const x = Math.max(DECK.x0 + 1.4, Math.min(MX1 - 1.4, cx));              // connector (or any table) can sit in the middle / on the other floor
   const z = Math.max(DECK.z0 + 1.4, Math.min(DECK.z1 - 1.4, cz));
   setStationPos(dragId, x, z);
   refreshMeasure(); refreshPath();
