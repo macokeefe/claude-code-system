@@ -380,6 +380,7 @@ function schedule() {
   });
   if (typeof renderIdle === 'function') renderIdle();
   if (typeof renderHelpPanel === 'function') renderHelpPanel();
+  if (typeof renderTaskChart === 'function') renderTaskChart();
 }
 
 /* =========================== SCENE =========================== */
@@ -906,6 +907,34 @@ function renderHelpPanel() {
 document.getElementById('helppaths').onclick = () => {
   helpPanel.style.display = (helpPanel.style.display === 'none') ? 'block' : 'none';
   renderHelpPanel();
+};
+
+// ---- task-distribution / operator-loading chart ----
+const taskPanel = document.getElementById('taskPanel');
+function renderTaskChart() {
+  if (!taskPanel || taskPanel.style.display === 'none') return;
+  const ids = ['con','arm','bak','tre','sea','fa','pak'];
+  const cyc = Math.max(effNet('con'), effNet('arm'), effNet('bak'), effNet('tre'), effNet('sea'), effNet('fa') + effNet('pak'));
+  const totalLabor = ids.reduce((a, id) => a + effNet(id), 0);
+  const bn = bottleneckInfo();
+  let html = `<h3>Task distribution — operator loading</h3>`;
+  html += `<div class="ihint"><b>Total labor: ${totalLabor.toFixed(1)} min/unit</b> · cycle ${cyc.toFixed(1)} min · ${(420/cyc).toFixed(1)} units/day. Bars = each station's time vs the line pace; segments = its steps.</div>`;
+  ids.forEach(id => {
+    const s = get(id), tt = effNet(id);
+    const onBn = isBottleneckTarget(id, bn.key);
+    let seg = '';
+    (s.steps || [{ name: s.title, t: tt }]).forEach((st, i) => {
+      const sw = (st.t / cyc) * 100;
+      const col = onBn ? (i % 2 ? '#c0552c' : '#d98a6e') : (i % 2 ? '#2f6df6' : '#7ba6e0');
+      seg += `<i style="width:${sw}%;background:${col}" title="${(st.name||'').replace(/"/g,'')} · ${st.t} min"></i>`;
+    });
+    html += `<div class="trow2"><span class="tn2">${s.title}${onBn?' ◄':''}</span><span class="bar2">${seg}</span><span class="v2">${tt.toFixed(1)}m</span></div>`;
+  });
+  taskPanel.innerHTML = html;
+}
+document.getElementById('taskbtn').onclick = () => {
+  taskPanel.style.display = (taskPanel.style.display === 'none') ? 'block' : 'none';
+  renderTaskChart();
 };
 
 /* =========================== EDIT LAYOUT =========================== */
