@@ -302,11 +302,11 @@ function makeShipBox() {
 /* =========================== SIMULATION =========================== */
 const ST = [
   { id:'con', title:'CONNECTORS',   sub:'Connectors',   ppl:1, t:19.25, role:'feeder', kind:'connectors', accent:'#1d3a66', steps:[{name:'Connectors', t:19.25}] },
-  { id:'arm', title:'ARMS',         sub:'Arm assembly', ppl:2, t:32,    role:'feeder', kind:'arm',        accent:'#1d3a66', double:true, steps:[{name:'Arm assembly', t:32}] },
+  { id:'arm', title:'ARMS',         sub:'Arm assembly', ppl:2, t:64,    role:'feeder', kind:'arm',        accent:'#1d3a66', double:true, steps:[{name:'Arm assembly', t:64}] },
   { id:'bak', title:'BACK FRAME',   sub:'Back frame',   ppl:1, t:43.5,  role:'feeder', kind:'back',       accent:'#1d3a66', steps:[{name:'Back frame', t:43.5}] },
   { id:'tre', title:'TRELLIS',      sub:'Trellis',      ppl:1, t:22.5,  role:'feeder', kind:'trellis',    accent:'#1d3a66', steps:[{name:'Trellis', t:22.5}] },
   { id:'sea', title:'SEAT FRAME',   sub:'Seat frame',   ppl:1, t:47,    role:'feeder', kind:'seat',       accent:'#9a3b1f', bot:true, steps:[{name:'Seat frame', t:47}] },
-  { id:'fa',  title:'FULL ASSEMBLY',sub:'Assemble frame',ppl:2, t:29,   role:'fa',     accent:'#1d3a66', steps:[{name:'Assemble frame', t:29}] },
+  { id:'fa',  title:'FULL ASSEMBLY',sub:'Assemble frame',ppl:2, t:58,   role:'fa',     accent:'#1d3a66', steps:[{name:'Assemble frame', t:58}] },
   { id:'pak', title:'CUSHIONS & PACK',sub:'Cushions + ship',ppl:0, t:18, role:'pack',   accent:'#236043', steps:[{name:'Cushions + pack', t:18}] },
 ];
 function recalc(id) { const s = get(id); if (s && s.steps) s.t = s.steps.reduce((a, st) => a + (parseFloat(st.t) || 0), 0); }
@@ -339,7 +339,7 @@ function walkOf(id) {
   for (const t of [...f.in, ...f.out]) { const p = linkPoint(t, nd); yd += dist2(nd.x, nd.z, p[0], p[1]) / YARD; }
   return yd / Math.max(1, walkSpeed) * tripsPerUnit;   // sum of linked-table distances (yd) / speed * trips
 }
-function eff(id) { return (get(id).t || 0) + walkOf(id); }
+function eff(id) { const s = get(id); return (s.t || 0) / Math.max(1, s.ppl || 1) + walkOf(id); }   // step times are TOTAL; cycle = total / people
 function helpInto(id) { return (typeof helpArrows === 'undefined') ? 0 : helpArrows.reduce((s, a) => s + (a.to === id ? (a.helpMin || 0) : 0), 0); }
 function helpFromOp(id, idx) { return (typeof helpArrows === 'undefined') ? 0 : helpArrows.reduce((s, a) => s + ((a.from === id && (a.fromIdx || 0) === idx) ? (a.helpMin || 0) : 0), 0); }
 function effNet(id) { return Math.max(0.1, eff(id) - helpInto(id)); }   // a helped station's time drops by the help minutes
@@ -367,6 +367,7 @@ function schedule() {
   ui.cap.textContent=cap.toFixed(1);
   ui.bot.textContent=`${bot} (${bv.toFixed(1).replace(/\.0$/,'')})`;
   ui.nOut.textContent=N;
+  if (ui.labor) ui.labor.textContent = ST.reduce((a,s)=>a+(s.t||0),0).toFixed(0);   // total one-person labor content/unit
   // reflect walk time on labels + times panel
   ST.forEach(s => {
     const w = walkOf(s.id), base = get(s.id).t || 0;
@@ -760,6 +761,7 @@ const ui = {
   cyc: document.getElementById('cyc'),
   cap: document.getElementById('cap'),
   bot: document.getElementById('bot'),
+  labor: document.getElementById('labor'),
 };
 let T = 0, playing = false;
 const playBtn = document.getElementById('play');
@@ -795,18 +797,26 @@ const stepsHost = document.createElement('div'); stepsHost.id = 'stepsHost'; tim
 function renderTimes() {
   let html = '';
   ST.forEach(s => {
+    const ppl = Math.max(1, s.ppl || 1), cyc = (s.t / ppl);
     html += `<div class="stblock">
-      <div class="sttitle">${s.title}${s.bot?' <b style="color:#c0552c">◄</b>':''}<span class="sttot">${s.t.toFixed(1).replace(/\.0$/,'')} min</span><span class="tw" id="walk_${s.id}"></span></div>`;
+      <div class="sttitle">${s.title}${s.bot?' <b style="color:#c0552c">◄</b>':''}<span class="sttot">${cyc.toFixed(1).replace(/\.0$/,'')} min/unit</span><span class="tw" id="walk_${s.id}"></span></div>`;
     (s.steps||[]).forEach((st, si) => {
       html += `<div class="strow">
         <input class="sname" data-id="${s.id}" data-si="${si}" value="${(st.name||'').replace(/"/g,'&quot;')}"/>
         <input class="stime" type="number" step="0.25" min="0" data-id="${s.id}" data-si="${si}" value="${st.t}"/>
-        <span class="su">min</span>
+        <span class="su">min (total)</span>
         <button class="sdel" data-id="${s.id}" data-si="${si}">✕</button></div>`;
     });
+    html += `<div class="strow"><span class="su" style="flex:1">People at station</span>
+        <input class="sppl" type="number" min="1" max="6" step="1" data-id="${s.id}" value="${ppl}"/>
+        <span class="su">→ ${s.t.toFixed(0)}÷${ppl} = ${cyc.toFixed(1)}m</span></div>`;
     html += `<button class="sadd" data-id="${s.id}">+ add step</button></div>`;
   });
   stepsHost.innerHTML = html;
+  stepsHost.querySelectorAll('input.sppl').forEach(inp => inp.onchange = e => {
+    const s = get(e.target.dataset.id); s.ppl = Math.max(1, parseInt(e.target.value) || 1);
+    rebuildCrew(s.id); placeStation(s.id); renderTimes(); schedule(); T = 0; setPlay(false); saveLayout();
+  });
   stepsHost.querySelectorAll('input.sname').forEach(inp => inp.onchange = e => {
     get(e.target.dataset.id).steps[+e.target.dataset.si].name = e.target.value; saveLayout();
   });
@@ -967,6 +977,21 @@ function placeStation(id) {
     if (!editing) { c.fig.position.x = c.homeX; c.fig.position.z = c.homeZ; }
   });
 }
+const STORDER = ['con','arm','bak','tre','sea','fa','pak'];
+function rebuildCrew(id) {              // recreate a station's operator figures to match its people count
+  for (let i = crew.length - 1; i >= 0; i--) { if (crew[i].station === id) { level2.remove(crew[i].fig); crew.splice(i, 1); } }
+  const s = get(id), nd = nodes[id]; if (!nd) return;
+  const np = s.role === 'pack' ? 0 : Math.max(0, s.ppl || 0);
+  const base = Math.max(0, STORDER.indexOf(id)), spread = s.double ? 4 * FT : 1.1;
+  for (let i = 0; i < np; i++) {
+    const color = OP_COLORS[(base * 2 + i) % OP_COLORS.length];
+    const fig = makeCrewFigure(color, s.title.split(' ')[0] + (np > 1 ? ' ' + (i + 1) : ''));
+    const bdx = (np > 1 ? (i - (np - 1) / 2) * 2 * spread : 0), bdz = 1.7;
+    fig.position.set(nd.x + bdx, 0, nd.z + bdz); level2.add(fig);
+    crew.push({ fig, station: id, bdx, bdz, homeX: nd.x + bdx, homeZ: nd.z + bdz, idx: i });
+  }
+  if (typeof assignHelpers === 'function') assignHelpers();
+}
 function setStationPos(id, x, z) {
   const nd = nodes[id]; if (!nd) return;
   nd.x = x; nd.z = z; POS[id] = [x, z];
@@ -977,8 +1002,8 @@ function setStationRot(id, rot) {
   const nd = nodes[id]; if (!nd) return;
   nd.rot = rot; placeStation(id);
 }
-function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
-function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } } catch (e) {} }
+function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
+function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } } catch (e) {} }
 
 // 1-yard grid on the deck
 function buildGrid() {
@@ -1221,10 +1246,11 @@ function snapshot() {
   ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
   if (nodes.cart) pos.cart = [nodes.cart.x, nodes.cart.z];
   const cap = sch ? 420 / Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 0;
-  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), cap: +cap.toFixed(1) };
+  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), ppl: Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), cap: +cap.toFixed(1) };
 }
 function applyLayout(L) {
   if (L.steps) { ST.forEach(s => { if (L.steps[s.id]) { s.steps = L.steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); }
+  if (L.ppl) { ST.forEach(s => { if (L.ppl[s.id] != null) { s.ppl = L.ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); }
   else if (L.times) ST.forEach(s => { if (L.times[s.id] != null) { get(s.id).t = L.times[s.id]; get(s.id).steps = [{ name: s.sub || 'Step', t: L.times[s.id] }]; } });
   if (L.pos) Object.keys(L.pos).forEach(id => { if (nodes[id]) setStationPos(id, L.pos[id][0], L.pos[id][1]); });
   if (typeof L.walkOn === 'boolean') { walkOn = L.walkOn; const c = document.getElementById('walkOn'); if (c) c.checked = walkOn; }
