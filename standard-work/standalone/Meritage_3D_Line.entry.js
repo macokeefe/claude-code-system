@@ -559,13 +559,16 @@ function clearAccess(){ accessPts.forEach(a => { level2.remove(a.g); const i=for
 [[DECK.x0+6, DECK.z1-3],[MX1-6, DECK.z1-3]].forEach(p=>addAccess(p[0],p[1]));   // 2 forklift openings
 
 // ---- finished-goods racks: draggable; packages populate them as sofas ship ----
-const RACK_SLOTS = 3;
+const RACK_LEVELS = [0.55, 1.15, 1.75, 2.35], RACK_COLS = [-0.52, 0.52];
+const RACK_SLOTS = RACK_LEVELS.length * RACK_COLS.length;     // furniture stacks UP across shelf levels
 function makeRackUnit(){
-  const g=new THREE.Group(); const L=1.9, D=0.6, H=2.0;        // ~6' x 2' x 6.5'
+  const g=new THREE.Group(); const L=1.9, D=0.7, H=2.7;        // ~6' wide, taller so it stacks up
   for (const [px,pz] of [[-L/2,-D/2],[L/2,-D/2],[-L/2,D/2],[L/2,D/2]]) { const p=bx(0.08,H,0.08,MAT.rackPost); p.position.set(px,H/2,pz); g.add(p); }
-  for (const y of [0.55,1.3,1.95]) for (const pz of [-D/2,D/2]) { const beam=bx(L,0.07,0.07,MAT.rackBeam); beam.position.set(0,y,pz); g.add(beam); }
-  const slots=[]; const sx=[-L/2+0.55, 0, L/2-0.55];
-  for (let i=0;i<RACK_SLOTS;i++){ const pk=makePackage(); pk.scale.set(0.62,0.6,0.7); pk.position.set(sx[i],0.6,0); pk.visible=false; g.add(pk); slots.push(pk); }
+  for (const y of RACK_LEVELS) for (const pz of [-D/2,D/2]) { const beam=bx(L,0.07,0.07,MAT.rackBeam); beam.position.set(0,y-0.05,pz); g.add(beam); }
+  const slots=[];                                              // fill bottom level first, then stack upward
+  for (let lv=0; lv<RACK_LEVELS.length; lv++) for (let c=0; c<RACK_COLS.length; c++){
+    const pk=makePackage(); pk.scale.set(0.6,0.55,0.7); pk.position.set(RACK_COLS[c], RACK_LEVELS[lv], 0); pk.visible=false; g.add(pk); slots.push(pk);
+  }
   return { g, slots };
 }
 const racks=[];
@@ -734,7 +737,7 @@ const MAX_UNITS = 40;
 const TRAVEL = 4.5;            // sim-minutes a part spends in transit to FA
 const FEEDERS = ['con','arm','bak','tre','sea'];
 const SLOT = { // offset from FA bench centre where each feeder's part waits
-  con:[-1.5,-0.55], arm:[-1.5,0.45], bak:[1.5,-0.55], tre:[1.5,0.45], sea:[0,1.0],
+  con:[-1.1,-0.35], arm:[-1.1,0.35], bak:[1.1,-0.35], tre:[1.1,0.35], sea:[0,0.0],   // staging spots on the full-assembly table
 };
 const travelParts = {};        // id -> array(MAX_UNITS) of part groups
 FEEDERS.forEach(id => {
