@@ -300,17 +300,50 @@ function makeShipBox() {
 }
 
 /* =========================== SIMULATION =========================== */
-const ST = [
-  { id:'con', title:'CONNECTORS',   sub:'Connectors',   ppl:1, t:19.25, role:'feeder', kind:'connectors', accent:'#1d3a66', steps:[{name:'Connectors', t:19.25}] },
-  { id:'arm', title:'ARMS',         sub:'Arm assembly', ppl:2, t:64,    role:'feeder', kind:'arm',        accent:'#1d3a66', double:true, steps:[{name:'Arm assembly', t:64}] },
-  { id:'bak', title:'BACK FRAME',   sub:'Back frame',   ppl:1, t:43.5,  role:'feeder', kind:'back',       accent:'#1d3a66', steps:[{name:'Back frame', t:43.5}] },
-  { id:'tre', title:'TRELLIS',      sub:'Trellis',      ppl:1, t:22.5,  role:'feeder', kind:'trellis',    accent:'#1d3a66', steps:[{name:'Trellis', t:22.5}] },
-  { id:'sea', title:'SEAT FRAME',   sub:'Seat frame',   ppl:1, t:47,    role:'feeder', kind:'seat',       accent:'#9a3b1f', bot:true, steps:[{name:'Seat frame', t:47}] },
-  { id:'fa',  title:'FULL ASSEMBLY',sub:'Assemble frame',ppl:2, t:58,   role:'fa',     accent:'#1d3a66', steps:[{name:'Assemble frame', t:58}] },
-  { id:'pak', title:'CUSHIONS & PACK',sub:'Cushions + ship',ppl:0, t:18, role:'pack',   accent:'#236043', steps:[{name:'Cushions + pack', t:18}] },
-];
+/* Two products share one floor: MERITAGE (5 parallel feeders -> full assembly
+   -> pack) and SOLA (3 sub-assembly feeders -> frame assembly -> seat/finish).
+   They are genuinely different processes (different stations, times, people,
+   bottleneck), expressed in the same feeders -> assembly -> finish line model.
+   Pick the active half with the header switch; the choice is saved and the
+   page reloads into that line. Station IDs are reused (con/arm/bak/[tre/sea]/
+   fa/pak) so the layout/scene/sim code stays shared. */
+const PRODUCT = (() => { try { return localStorage.getItem('m3d_product') === 'sola' ? 'sola' : 'meritage'; } catch (e) { return 'meritage'; } })();
+
+const PRODUCTS = {
+  meritage: {
+    title: 'MERITAGE 3-SEATER',
+    pos: { con:[-12,-3.2], arm:[-6,-3.2], bak:[0,-3.2], tre:[6,-3.2], sea:[12,-3.2], fa:[-2,4.2], pak:[10,4.2] },
+    stations: [
+      { id:'con', title:'CONNECTORS',   sub:'Connectors',   ppl:1, t:19.25, role:'feeder', kind:'connectors', accent:'#1d3a66', steps:[{name:'Connectors', t:19.25}] },
+      { id:'arm', title:'ARMS',         sub:'Arm assembly', ppl:2, t:64,    role:'feeder', kind:'arm',        accent:'#1d3a66', double:true, steps:[{name:'Arm assembly', t:64}] },
+      { id:'bak', title:'BACK FRAME',   sub:'Back frame',   ppl:1, t:43.5,  role:'feeder', kind:'back',       accent:'#1d3a66', steps:[{name:'Back frame', t:43.5}] },
+      { id:'tre', title:'TRELLIS',      sub:'Trellis',      ppl:1, t:22.5,  role:'feeder', kind:'trellis',    accent:'#1d3a66', steps:[{name:'Trellis', t:22.5}] },
+      { id:'sea', title:'SEAT FRAME',   sub:'Seat frame',   ppl:1, t:47,    role:'feeder', kind:'seat',       accent:'#9a3b1f', bot:true, steps:[{name:'Seat frame', t:47}] },
+      { id:'fa',  title:'FULL ASSEMBLY',sub:'Assemble frame',ppl:2, t:58,   role:'fa',     accent:'#1d3a66', steps:[{name:'Assemble frame', t:58}] },
+      { id:'pak', title:'CUSHIONS & PACK',sub:'Cushions + ship',ppl:0, t:18, role:'pack',   accent:'#236043', steps:[{name:'Cushions + pack', t:18}] },
+    ],
+  },
+  // SOLA LOUNGE (No-Arms config) — real SWI times (sec→min). Seat Support Frame
+  // Assembly and Frame Prep have no measured time in the sheets and are omitted
+  // (not invented). Connector plates depend on rivet+prep; here they are a
+  // staged feeder bench — a line-level simplification of the real precedence.
+  sola: {
+    title: 'SOLA LOUNGE (NO-ARMS)',
+    pos: { con:[-8,-3.2], arm:[0,-3.2], bak:[8,-3.2], fa:[-2,4.2], pak:[10,4.2] },
+    stations: [
+      { id:'con', title:'RIVET NUTS',     sub:'Rivet nuts',      ppl:1, t:9.55,  role:'feeder', kind:'connectors', accent:'#1d3a66', steps:[{name:'Rivet nut installation', t:9.55}] },
+      { id:'arm', title:'CONNECTOR PREP', sub:'Connector prep',  ppl:1, t:15,    role:'feeder', kind:'connectors', accent:'#1d3a66', steps:[{name:'Connector pre-assembly (18 × 0:50)', t:15}] },
+      { id:'bak', title:'CONNECTOR PLATES',sub:'Connector plates',ppl:1, t:16.74,role:'feeder', kind:'back',       accent:'#1d3a66', steps:[{name:'Connector plate installation', t:13.07},{name:'Attach connectors to legs (4 × 0:55)', t:3.67}] },
+      { id:'fa',  title:'FRAME ASSEMBLY', sub:'Assemble frame',  ppl:2, t:37.62, role:'fa',     accent:'#1d3a66', bot:true, steps:[{name:'Frame sub-assembly', t:17},{name:'Frame connection assembly', t:10.62},{name:'Middle leg sub-assembly', t:3.33},{name:'Corner & end caps', t:6.67}] },
+      { id:'pak', title:'SEAT & FINISH',  sub:'Seat install',    ppl:0, t:13.25, role:'pack',   accent:'#236043', steps:[{name:'Seat frame installation', t:13.25}] },
+    ],
+  },
+};
+const PROD = PRODUCTS[PRODUCT];
+const ST = PROD.stations;
 function recalc(id) { const s = get(id); if (s && s.steps) s.t = s.steps.reduce((a, st) => a + (parseFloat(st.t) || 0), 0); }
 const get = id => ST.find(s => s.id === id);
+const FEEDERS = ST.filter(s => s.role === 'feeder').map(s => s.id);   // parallel sub-assembly benches (varies by product)
 
 let N = 8;
 let sch = null, horizon = 0;
@@ -343,26 +376,27 @@ function eff(id) { const s = get(id); return (s.t || 0) / Math.max(1, s.ppl || 1
 function helpInto(id) { return (typeof helpArrows === 'undefined') ? 0 : helpArrows.reduce((s, a) => s + (a.to === id ? (a.helpMin || 0) : 0), 0); }
 function helpFromOp(id, idx) { return (typeof helpArrows === 'undefined') ? 0 : helpArrows.reduce((s, a) => s + ((a.from === id && (a.fromIdx || 0) === idx) ? (a.helpMin || 0) : 0), 0); }
 function effNet(id) { return Math.max(0.1, eff(id) - helpInto(id)); }   // a helped station's time drops by the help minutes
-function lineCyc() { return sch ? Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 1; }
+function lineCyc() { return sch ? Math.max(...FEEDERS.map(id => sch.fT[id]), sch.ASM + sch.PACK) : 1; }
 function availIdleOp(id, idx) { return Math.max(0, lineCyc() - effNet(id) - helpFromOp(id, idx)); }   // spare min/chair a specific operator can give
 function schedule() {
-  const seaT=effNet('sea'), armT=effNet('arm'), bakT=effNet('bak'), treT=effNet('tre'), conT=effNet('con');
-  const ASM=effNet('fa'), PACK=effNet('pak');
-  const seatEnd=[],armEnd=[],bakEnd=[],kit=[],faStart=[],faEnd=[];
+  const fT={}; FEEDERS.forEach(id => fT[id]=effNet(id));          // per-feeder per-unit cycle time
+  const ASM=effNet('fa'), PACK=get('pak')?effNet('pak'):0;
+  const fEnd={}; FEEDERS.forEach(id => fEnd[id]=[]);
+  const kit=[],faStart=[],faEnd=[];
   let prev=0;
   for (let u=0;u<N;u++){
-    seatEnd[u]=seaT*(u+1); armEnd[u]=armT*(u+1); bakEnd[u]=bakT*(u+1);
-    kit[u]=Math.max(seatEnd[u], Math.min(armEnd[u],bakEnd[u]));   // seat AND (arm OR back)
+    let k=0; FEEDERS.forEach(id => { const e=fT[id]*(u+1); fEnd[id][u]=e; if (e>k) k=e; });
+    kit[u]=k;                                                     // assembly needs all feeder sub-parts for the unit
     faStart[u]=Math.max(kit[u], prev);
     faEnd[u]=faStart[u]+ASM+PACK; prev=faEnd[u];
   }
-  sch={seaT,armT,bakT,treT,conT,ASM,PACK,seatEnd,armEnd,bakEnd,kit,faStart,faEnd};
+  sch={fT,fEnd,ASM,PACK,kit,faStart,faEnd};
   horizon=(faEnd[N-1]||0)+6;
-  const cyc=Math.max(conT,armT,bakT,treT,seaT,ASM+PACK);
+  const cyc=Math.max(...FEEDERS.map(id=>fT[id]), ASM+PACK);
   const cap=420/cyc;
-  let bot='Seat frame', bv=seaT;
-  [['Connectors',conT],['Arms',armT],['Back frame',bakT],['Trellis',treT],['Seat frame',seaT],['Full assy + pack',ASM+PACK]]
-    .forEach(([nm,v])=>{ if(v>bv){bv=v;bot=nm;} });
+  let bot=get(FEEDERS[0]).sub, bv=fT[FEEDERS[0]];                 // slowest station = bottleneck
+  FEEDERS.forEach(id => { if (fT[id]>bv){ bv=fT[id]; bot=get(id).sub; } });
+  if (ASM+PACK>bv){ bv=ASM+PACK; bot='Full assy + pack'; }
   ui.cyc.textContent=cyc.toFixed(1).replace(/\.0$/,'');
   ui.cap.textContent=cap.toFixed(1);
   ui.bot.textContent=`${bot} (${bv.toFixed(1).replace(/\.0$/,'')})`;
@@ -633,10 +667,11 @@ function refreshPath() {
 }
 
 // ---- help-movement arrows: where an operator goes to help after finishing ----
-let helpArrows = [                    // [{from, fromIdx, to, helpMin}] — per-operator starter paths
-  { from:'tre', fromIdx:0, to:'sea', helpMin:5 },
-  { from:'con', fromIdx:0, to:'sea', helpMin:5 },
-];
+// product-specific starter paths: idle feeder operators help the bottleneck.
+let helpArrows = (PRODUCT === 'sola'
+  ? [ { from:'con', fromIdx:0, to:'bak', helpMin:4 } ]              // rivet-nut op helps connector-plates
+  : [ { from:'tre', fromIdx:0, to:'sea', helpMin:5 },
+      { from:'con', fromIdx:0, to:'sea', helpMin:5 } ]);            // trellis + connectors help seat frame
 const helpGroup = new THREE.Group(); level2.add(helpGroup);
 const HELP_COL = 0x8f3fbf;
 function assignHelpers() {
@@ -675,10 +710,7 @@ function updateHelp() {
 
 /* ---- station layout: feeders in back row, FA + packing in front ---- */
 const OP_COLORS = [0x3a66a8, 0xb9772e, 0x2e7d4f, 0x8f5390, 0xa8923a, 0x3f8f8f, 0x9c4f45, 0x5c5f99];
-const POS = {
-  con:[-12, -3.2], arm:[-6, -3.2], bak:[0, -3.2], tre:[6, -3.2], sea:[12, -3.2],
-  fa:[-2, 4.2], pak:[10, 4.2],
-};
+const POS = Object.assign({}, PROD.pos);   // station floor positions (per product); mutated by Edit-layout drags
 const nodes = {};
 let opColorIdx = 0;
 const crew = []; // {fig, station, homeX, homeZ}
@@ -736,8 +768,7 @@ const movingSofa = makeSofaProduct(); movingSofa.update(1); movingSofa.g.visible
    Per-feeder staging slot around the FA bench so all 5 converge visibly. ---- */
 const MAX_UNITS = 40;
 const TRAVEL = 4.5;            // sim-minutes a part spends in transit to FA
-const FEEDERS = ['con','arm','bak','tre','sea'];
-const SLOT = { // offset from FA bench centre where each feeder's part waits
+const SLOT = { // offset from FA bench centre where each feeder's part waits (FEEDERS declared up top)
   con:[-1.1,-0.35], arm:[-1.1,0.35], bak:[1.1,-0.35], tre:[1.1,0.35], sea:[0,0.0],   // staging spots on the full-assembly table
 };
 const travelParts = {};        // id -> array(MAX_UNITS) of part groups
@@ -763,6 +794,18 @@ const ui = {
   bot: document.getElementById('bot'),
   labor: document.getElementById('labor'),
 };
+// ---- product / line switch (Meritage <-> Sola) ----
+(() => {
+  const h1 = document.querySelector('header h1');
+  if (h1) h1.textContent = PROD.title + ' — 3D LINE MODEL';
+  document.title = PROD.title + ' — 3D Line Model';
+  const btn = document.getElementById('prodSwitch');
+  if (btn) {
+    btn.textContent = '⇄ Line: ' + (PRODUCT === 'sola' ? 'Sola' : 'Meritage');
+    btn.title = 'Switch to the ' + (PRODUCT === 'sola' ? 'Meritage' : 'Sola') + ' line';
+    btn.onclick = () => { try { localStorage.setItem('m3d_product', PRODUCT === 'sola' ? 'meritage' : 'sola'); } catch (e) {} location.reload(); };
+  }
+})();
 let T = 0, playing = false;
 const playBtn = document.getElementById('play');
 function setPlay(v){ playing=v; playBtn.textContent = v ? '❚❚ Pause' : '▶ Play'; }
@@ -841,10 +884,10 @@ document.getElementById('trips').onchange = e => { tripsPerUnit = Math.max(0, pa
 let dayMin = 420;   // 7-hr working day
 let taktDemand = 10;   // units/day target for the takt line
 const idlePanel = document.getElementById('idlePanel');
-const FEEDNAME = { con:'Connectors', arm:'Arms', bak:'Back frame', tre:'Trellis', sea:'Seat frame' };
+const FEEDNAME = Object.fromEntries(ST.map(s => [s.id, s.sub || s.title]));
 function operatorsList() {
   const list = [];
-  for (const id of ['con','arm','bak','tre','sea']) {
+  for (const id of FEEDERS) {
     const s = get(id), base = effNet(id);          // station's per-unit time (reduced if it receives help)
     for (let i = 0; i < s.ppl; i++) {
       const bpu = base + helpFromOp(id, i);         // each operator's own help time adds to their busy
@@ -883,7 +926,8 @@ document.getElementById('idlebtn').onclick = () => {
 const helpPanel = document.getElementById('helpPanel');
 const stName = id => (get(id) ? get(id).title : id);
 function bottleneckInfo() {
-  const items = [['con', effNet('con')], ['arm', effNet('arm')], ['bak', effNet('bak')], ['tre', effNet('tre')], ['sea', effNet('sea')], ['fapak', effNet('fa') + effNet('pak')]];
+  const items = FEEDERS.map(id => [id, effNet(id)]);
+  items.push(['fapak', effNet('fa') + (get('pak') ? effNet('pak') : 0)]);
   let bn = items[0]; items.forEach(it => { if (it[1] > bn[1]) bn = it; });
   return { key: bn[0], time: bn[1], cap: 420 / bn[1] };
 }
@@ -927,8 +971,8 @@ document.getElementById('helppaths').onclick = () => {
 const taskPanel = document.getElementById('taskPanel');
 function renderTaskChart() {
   if (!taskPanel || taskPanel.style.display === 'none') return;
-  const ids = ['con','arm','bak','tre','sea','fa','pak'];
-  const cyc = Math.max(effNet('con'), effNet('arm'), effNet('bak'), effNet('tre'), effNet('sea'), effNet('fa') + effNet('pak'));
+  const ids = ST.map(s => s.id);
+  const cyc = Math.max(...FEEDERS.map(id => effNet(id)), effNet('fa') + (get('pak') ? effNet('pak') : 0));
   // TOTAL LABOR = combined hands-on work of every person added up (raw work
   // content per unit, NOT divided by people). The per-station bars below are
   // still operator loading (work ÷ people); this headline is the full labor.
@@ -965,7 +1009,7 @@ document.getElementById('taskbtn').onclick = () => {
 /* =========================== EDIT LAYOUT =========================== */
 const YARD = 0.9144;                       // 1 unit = 1 metre; 1 yard = 0.9144 m
 const u2y = u => u / YARD;                  // units -> yards
-const LAYOUT_KEY = 'm3d_layout_v2';   // bumped: deck rescaled to real footprint
+const LAYOUT_KEY = 'm3d_layout_v2_' + PRODUCT;   // per-product working layout (deck rescaled to real footprint)
 
 function placeStation(id) {
   const nd = nodes[id]; if (!nd) return;
@@ -1241,14 +1285,14 @@ buildHelp();   // render seeded/loaded help paths
 rebuildDivider();   // align the crossing to the connector station
 
 /* ---- named layouts: save / load / compare different floor plans ---- */
-const LAYOUTS_KEY = 'm3d_layouts_v2';
+const LAYOUTS_KEY = 'm3d_layouts_v2_' + PRODUCT;   // per-product named layouts
 const readLayouts = () => { try { return JSON.parse(localStorage.getItem(LAYOUTS_KEY)) || {}; } catch (e) { return {}; } };
 const writeLayouts = o => { try { localStorage.setItem(LAYOUTS_KEY, JSON.stringify(o)); } catch (e) {} };
 function snapshot() {
   const pos = {}, times = {};
   ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
   if (nodes.cart) pos.cart = [nodes.cart.x, nodes.cart.z];
-  const cap = sch ? 420 / Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 0;
+  const cap = sch ? 420 / lineCyc() : 0;
   return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), ppl: Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), cap: +cap.toFixed(1) };
 }
 function applyLayout(L) {
@@ -1295,11 +1339,10 @@ function update(){
   if (!sch) return;
   ui.clock.textContent = Math.round(T) + ' min';
   // feeders
-  const fmap = { con:'conT', arm:'armT', bak:'bakT', tre:'treT', sea:'seaT' };
   let shipped = 0; for (let u=0;u<N;u++) if (T>=sch.faEnd[u]) shipped++;
   const fa = nodes.fa;
-  ['con','arm','bak','tre','sea'].forEach(id => {
-    const t = sch[fmap[id]];
+  FEEDERS.forEach(id => {
+    const t = sch.fT[id];
     const built = Math.min(N, Math.floor(T / t));
     const frac = built >= N ? 1 : (T % t) / t;
     const nd = nodes[id];
@@ -1307,7 +1350,7 @@ function update(){
     nd.visual.update(built >= N ? 0 : frac, 0, N);
     setLed(nd.led, built >= N ? 'done' : (T>0 && frac>0 ? 'active':'idle'), built < N && T>0);
     // ---- traveling finished parts: feeder -> FA staging -> consumed at faStart ----
-    const t2 = t; const pool = travelParts[id]; const off = SLOT[id];
+    const t2 = t; const pool = travelParts[id]; const off = SLOT[id] || [0,0];
     const sx0 = nd.x, sz0 = nd.z;
     const tx = fa.x + off[0], tz = fa.z + off[1];
     for (let u = 0; u < N; u++) {
@@ -1365,7 +1408,7 @@ function update(){
 
   // FA crew walk to packing during pack phase; help-arrow operators walk to help during their idle slack
   const packing = (cur>=0 && phase==='pack');
-  const cyc = Math.max(0.001, sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK);
+  const cyc = Math.max(0.001, lineCyc());
   crew.forEach(c => {
     let tx = c.homeX, tz = c.homeZ;
     if (c.station === 'fa' && packing) { tx = POS.pak[0] + (c.idx - 0.5) * 1.1; tz = POS.pak[1] + 1.7; }

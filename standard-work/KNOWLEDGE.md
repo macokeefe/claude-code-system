@@ -143,6 +143,45 @@ shows cycle time / units-per-shift / operators / balance % and flags
 precedence violations. Next: a 'line mode' in the 3D floor where
 operators are fixed at stations and units flow past.
 
+## Meritage 3D Line standalone — product switch + Sola line (2026-06)
+
+`standalone/Meritage_3D_Line.entry.js` (bundled into `Meritage_3D_Line.html`)
+is a self-contained three.js line model, SEPARATE from the SKU DB — its station
+data is hand-authored, not synced. It now models BOTH halves of the floor via a
+header **⇄ Line** switch (writes `localStorage['m3d_product']` = `meritage`|
+`sola`, then reloads). Layouts are namespaced per product
+(`m3d_layout_v2_<product>`, `m3d_layouts_v2_<product>`).
+
+Engine is data-driven over a per-product config (`PRODUCTS[...]` → `title`,
+`pos`, `stations`). Topology is shared: parallel **feeders** (role `feeder`,
+derived as `FEEDERS`) stage sub-parts → one **FA** bench (role `fa`) → **pack**
+(role `pak`, ppl 0, done by the FA pair). `schedule()`/`update()` are generic
+over `FEEDERS`; `sch` carries `fT`/`fEnd` maps (was the old `conT`/`seaT`…).
+Station IDs are reused (con/arm/bak/[tre/sea]/fa/pak) so scene/sim code is shared.
+
+- **Meritage**: 5 feeders (Connectors, Arms×2p, Back, Trellis, Seat) → Full
+  Assembly (58, 2p) → Cushions & Pack (18). Total labor 272.3, cycle ~48.7
+  (with seeded help arrows), ~8.6/day. NOTE its pack is still 18 (sheet has 36
+  — middle+top boxing not yet added; see "metric clarity" gap below).
+- **Sola (No-Arms, SOLA-NA real SWI times sec→min)**: 3 feeders — Rivet Nuts
+  9.55, Connector Prep 15.0 (18×0:50), Connector Plates 16.74 (plate 13.07 +
+  attach 3.67) → Frame Assembly (37.62, 2p = sub 17 + connection 10.62 + middle
+  leg 3.33 + caps 6.67) → Seat & Finish 13.25. Total labor 92.2, cycle ~33.3,
+  ~12.6/day.
+- **Sola modeling caveats (flag before trusting):** Seat Support Frame Assembly
+  and Frame Prep have NO measured time anywhere → OMITTED (not invented).
+  Connector plates really depend on rivet+prep but are modeled as a parallel
+  feeder (line-level simplification — the engine is feeders→FA, not a full DAG).
+  Lumping the whole frame chain into one FA station loses the sequential detail.
+  If the engineer wants Sola as a true sequential flow line, generalize
+  schedule/update to a flow-shop (unit moves bench→bench) — bigger rewrite.
+
+Rebuild after editing the entry: `client/node_modules/.bin/esbuild
+standalone/Meritage_3D_Line.entry.js --bundle --format=iife --minify
+--alias:three=<abs>/client/node_modules/three` → splice the IIFE into the
+`<script>` of the HTML scaffold (lines before `<script>` are the hand-authored
+DOM/CSS; everything after is the bundle). No npm build script wired for it.
+
 ## 3D Floor presentation restyle (2026-06)
 
 The engineer wants the 3D Floor boss-presentable: "simple… super good for
