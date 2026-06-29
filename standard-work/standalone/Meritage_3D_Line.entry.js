@@ -795,6 +795,40 @@ const ui = {
   labor: document.getElementById('labor'),
 };
 // ---- product / line switch (Meritage <-> Sola) ----
+// Switching reloads into the other line, but the VIEW carries over (camera,
+// open panels, speed, labels, unit count) so Sola opens looking just like the
+// Meritage you left. Panel positions persist on their own keys. Applied once.
+function captureView() {
+  return {
+    cam: [camera.position.x, camera.position.y, camera.position.z],
+    tgt: [controls.target.x, controls.target.y, controls.target.z],
+    speed: (typeof speed !== 'undefined' && speed) ? speed.value : null,
+    labelMode: (typeof labelMode !== 'undefined') ? labelMode : 1,
+    units: N,
+    panels: {
+      idle: !!(idlePanel && idlePanel.style.display !== 'none'),
+      help: !!(helpPanel && helpPanel.style.display !== 'none'),
+      task: !!(taskPanel && taskPanel.style.display !== 'none'),
+    },
+  };
+}
+function restoreView() {
+  let v; try { v = JSON.parse(localStorage.getItem('m3d_view')); } catch (e) {}
+  if (!v) return;
+  try { localStorage.removeItem('m3d_view'); } catch (e) {}     // apply once
+  if (Array.isArray(v.cam)) camera.position.set(v.cam[0], v.cam[1], v.cam[2]);
+  if (Array.isArray(v.tgt)) controls.target.set(v.tgt[0], v.tgt[1], v.tgt[2]);
+  controls.update();
+  if (v.speed != null && typeof speed !== 'undefined' && speed) speed.value = v.speed;
+  if (typeof v.labelMode === 'number') { labelMode = v.labelMode; if (typeof applyLabels === 'function') applyLabels(); }
+  if (v.units) { N = Math.max(1, Math.min(40, v.units)); if (typeof nInput !== 'undefined' && nInput) nInput.value = N; }
+  if (v.panels) {
+    if (v.panels.idle && idlePanel) { idlePanel.style.display = 'block'; renderIdle(); }
+    if (v.panels.help && helpPanel) { helpPanel.style.display = 'block'; renderHelpPanel(); }
+    if (v.panels.task && taskPanel) { taskPanel.style.display = 'block'; renderTaskChart(); }
+  }
+  schedule();
+}
 (() => {
   const h1 = document.querySelector('header h1');
   if (h1) h1.textContent = PROD.title + ' — 3D LINE MODEL';
@@ -803,7 +837,11 @@ const ui = {
   if (btn) {
     btn.textContent = '⇄ Line: ' + (PRODUCT === 'sola' ? 'Sola' : 'Meritage');
     btn.title = 'Switch to the ' + (PRODUCT === 'sola' ? 'Meritage' : 'Sola') + ' line';
-    btn.onclick = () => { try { localStorage.setItem('m3d_product', PRODUCT === 'sola' ? 'meritage' : 'sola'); } catch (e) {} location.reload(); };
+    btn.onclick = () => {
+      try { localStorage.setItem('m3d_view', JSON.stringify(captureView())); } catch (e) {}
+      try { localStorage.setItem('m3d_product', PRODUCT === 'sola' ? 'meritage' : 'sola'); } catch (e) {}
+      location.reload();
+    };
   }
 })();
 let T = 0, playing = false;
@@ -1279,6 +1317,37 @@ document.getElementById('rackbtn').onclick = () => {
   addRack(deckCx, DECK.z0 + 1);
   saveLayout();
 };
+/* ---- draggable floating panels: grab any panel by its title bar and move it
+   around the screen; positions persist per panel in localStorage. The drag
+   listener lives on the panel (not the title), so it survives innerHTML
+   re-renders of the panel contents. ---- */
+(() => {
+  let topZ = 30;
+  const keyOf = id => 'm3d_panel_' + id;
+  ['times','idlePanel','helpPanel','taskPanel','measure'].forEach(id => {
+    const el = document.getElementById(id); if (!el) return;
+    try { const s = JSON.parse(localStorage.getItem(keyOf(id))); if (s && typeof s.left === 'number') { el.style.left = s.left + 'px'; el.style.top = s.top + 'px'; el.style.right = 'auto'; el.style.bottom = 'auto'; } } catch (e) {}
+    el.addEventListener('pointerdown', e => {
+      const h = e.target.closest('h3,h4'); if (!h || !el.contains(h) || e.button !== 0) return;   // only drag by the title bar
+      e.preventDefault();
+      el.style.zIndex = ++topZ;
+      const par = el.offsetParent || document.body;
+      const maxL = Math.max(0, par.clientWidth - el.offsetWidth), maxT = Math.max(0, par.clientHeight - el.offsetHeight);
+      const sx = e.clientX, sy = e.clientY, sl = el.offsetLeft, st = el.offsetTop;
+      const move = ev => {
+        const nl = Math.max(0, Math.min(sl + (ev.clientX - sx), maxL));
+        const nt = Math.max(0, Math.min(st + (ev.clientY - sy), maxT));
+        el.style.left = nl + 'px'; el.style.top = nt + 'px'; el.style.right = 'auto'; el.style.bottom = 'auto';
+      };
+      const up = () => {
+        window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
+        try { localStorage.setItem(keyOf(id), JSON.stringify({ left: el.offsetLeft, top: el.offsetTop })); } catch (e) {}
+      };
+      window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+    });
+  });
+})();
+
 loadLayout();
 refreshPath();
 buildHelp();   // render seeded/loaded help paths
@@ -1463,5 +1532,6 @@ function loop(now){
   requestAnimationFrame(loop);
 }
 schedule();
+restoreView();   // carry camera / open panels / speed / units over from a line switch
 update();
 requestAnimationFrame(loop);
