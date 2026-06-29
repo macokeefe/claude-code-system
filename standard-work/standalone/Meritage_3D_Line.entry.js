@@ -400,6 +400,8 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure
 mount.appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.target.set(7, 6.8, 0); controls.maxPolarAngle = Math.PI / 2.02; controls.maxDistance = 130;
+controls.enablePan = true; controls.screenSpacePanning = true;   // pan moves the camera across the floor (esp. while editing)
+renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());   // so right-drag pans without the browser menu
 
 scene.add(new THREE.HemisphereLight(0xffffff, 0xb8bcc2, 1.0));
 const sun = new THREE.DirectionalLight(0xfff8ee, 0.85);
@@ -793,10 +795,44 @@ moveCtl.innerHTML = `<label class="mck"><input type="checkbox" id="walkOn" check
   <div class="mrow">Trips / unit <input type="number" id="trips" value="1" min="0" step="0.5"/></div>
   <div class="mrow" style="color:#6b7785">Each cart = 1 sofa's materials</div>`;
 timeBox.appendChild(moveCtl);
+// Meritage station-times table (top) + a SEPARATE table for the other side.
+const mHdr = document.createElement('div'); mHdr.style.cssText = 'font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#15263a;font-weight:800;margin:4px 0 4px'; mHdr.textContent = 'Meritage — station steps'; timeBox.appendChild(mHdr);
 const stepsHost = document.createElement('div'); stepsHost.id = 'stepsHost'; timeBox.appendChild(stepsHost);
-function renderTimes() {
+const oHdr = document.createElement('div'); oHdr.style.cssText = 'font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#5c5f99;font-weight:800;margin:14px 0 4px;border-top:2px solid #e0e3ea;padding-top:10px'; oHdr.textContent = 'Other side — station steps'; timeBox.appendChild(oHdr);
+const stepsHost2 = document.createElement('div'); stepsHost2.id = 'stepsHost2'; timeBox.appendChild(stepsHost2);
+
+/* ---- ADDED STATIONS: extra benches you can drop on either side and drag where
+   you want. They are independent — NOT part of the Meritage line, so they never
+   affect its schedule/labor/bottleneck (kept out of ST). Which table a station
+   shows up in depends on which side of the middle line it sits on. ---- */
+const extraStations = [];
+let extraSeq = 0;
+const DIVIDER_X = DECK.x1;                                   // the painted middle line
+const sideOf = x => (x < DIVIDER_X ? 'meritage' : 'other');
+function addStation(name, x, z, id, t) {
+  id = id || ('x' + (++extraSeq));
+  const r = makeBench(8, 3); r.st.position.set(x, 0, z); level2.add(r.st);
+  const accent = '#5c5f99';
+  const label = makeStationLabel(name, 'Added station', t ? t + ' min' : '—', accent);
+  label.position.set(x, 2.85, z); level2.add(label);
+  const mini = makeMiniLabel(name, accent); mini.position.set(x, 2.55, z); level2.add(mini);
+  setLed(r.led, 'idle', false);
+  nodes[id] = { s: { id, title: name, sub: 'Added station', accent, steps: [{ name, t: t || 0 }], ppl: 1, t: t || 0 }, st: r.st, led: r.led, label, mini, x, z, rot: 0, extra: true, t: t || 0 };
+  POS[id] = [x, z];
+  extraStations.push(id);
+  return id;
+}
+const getAny = id => ST.find(s => s.id === id) || (nodes[id] && nodes[id].s) || null;
+const isExtra = id => !!(nodes[id] && nodes[id].extra);
+function recalcAny(id) {
+  const s = getAny(id); if (!s) return;
+  if (s.steps) s.t = s.steps.reduce((a, st) => a + (parseFloat(st.t) || 0), 0);
+  if (isExtra(id)) { nodes[id].t = s.t; const nd = nodes[id]; if (nd.label && nd.label.userData.redraw) nd.label.userData.redraw(s.t ? +s.t.toFixed(2) + ' min' : '—', s.accent); }
+}
+
+function rowsHtml(list) {
   let html = '';
-  ST.forEach(s => {
+  list.forEach(s => {
     const ppl = Math.max(1, s.ppl || 1), cyc = (s.t / ppl);
     html += `<div class="stblock">
       <div class="sttitle">${s.title}${s.bot?' <b style="color:#c0552c">◄</b>':''}<span class="sttot">${cyc.toFixed(1).replace(/\.0$/,'')} min/unit</span><span class="tw" id="walk_${s.id}"></span></div>`;
@@ -812,25 +848,39 @@ function renderTimes() {
         <span class="su">→ ${s.t.toFixed(0)}÷${ppl} = ${cyc.toFixed(1)}m</span></div>`;
     html += `<button class="sadd" data-id="${s.id}">+ add step</button></div>`;
   });
-  stepsHost.innerHTML = html;
-  stepsHost.querySelectorAll('input.sppl').forEach(inp => inp.onchange = e => {
-    const s = get(e.target.dataset.id); s.ppl = Math.max(1, parseInt(e.target.value) || 1);
-    rebuildCrew(s.id); placeStation(s.id); renderTimes(); schedule(); T = 0; setPlay(false); saveLayout();
+  return html;
+}
+function afterEdit(id) {                                     // ST stations re-pace the line; added stations don't
+  if (isExtra(id)) { renderTimes(); saveLayout(); }
+  else { renderTimes(); schedule(); T = 0; setPlay(false); saveLayout(); }
+}
+function wireRows(host) {
+  host.querySelectorAll('input.sppl').forEach(inp => inp.onchange = e => {
+    const id = e.target.dataset.id, s = getAny(id); s.ppl = Math.max(1, parseInt(e.target.value) || 1);
+    if (!isExtra(id)) { rebuildCrew(id); placeStation(id); }
+    afterEdit(id);
   });
-  stepsHost.querySelectorAll('input.sname').forEach(inp => inp.onchange = e => {
-    get(e.target.dataset.id).steps[+e.target.dataset.si].name = e.target.value; saveLayout();
+  host.querySelectorAll('input.sname').forEach(inp => inp.onchange = e => {
+    getAny(e.target.dataset.id).steps[+e.target.dataset.si].name = e.target.value; saveLayout();
   });
-  stepsHost.querySelectorAll('input.stime').forEach(inp => inp.onchange = e => {
-    const s = get(e.target.dataset.id); s.steps[+e.target.dataset.si].t = parseFloat(e.target.value) || 0;
-    recalc(s.id); renderTimes(); schedule(); T = 0; setPlay(false); saveLayout();
+  host.querySelectorAll('input.stime').forEach(inp => inp.onchange = e => {
+    const id = e.target.dataset.id; getAny(id).steps[+e.target.dataset.si].t = parseFloat(e.target.value) || 0;
+    recalcAny(id); afterEdit(id);
   });
-  stepsHost.querySelectorAll('button.sadd').forEach(b => b.onclick = e => {
-    const s = get(e.target.dataset.id); s.steps.push({ name: 'New step', t: 0 }); recalc(s.id); renderTimes(); saveLayout();
+  host.querySelectorAll('button.sadd').forEach(b => b.onclick = e => {
+    const id = e.target.dataset.id; getAny(id).steps.push({ name: 'New step', t: 0 }); recalcAny(id); renderTimes(); saveLayout();
   });
-  stepsHost.querySelectorAll('button.sdel').forEach(b => b.onclick = e => {
-    const s = get(e.target.dataset.id); s.steps.splice(+e.target.dataset.si, 1); if (!s.steps.length) s.steps.push({ name: s.sub || 'Step', t: 0 });
-    recalc(s.id); renderTimes(); schedule(); T = 0; setPlay(false); saveLayout();
+  host.querySelectorAll('button.sdel').forEach(b => b.onclick = e => {
+    const id = e.target.dataset.id, s = getAny(id); s.steps.splice(+e.target.dataset.si, 1); if (!s.steps.length) s.steps.push({ name: s.sub || 'Step', t: 0 });
+    recalcAny(id); afterEdit(id);
   });
+}
+function renderTimes() {
+  const mer = [...ST, ...extraStations.filter(id => sideOf(nodes[id].x) === 'meritage').map(id => nodes[id].s)];
+  const oth = extraStations.filter(id => sideOf(nodes[id].x) === 'other').map(id => nodes[id].s);
+  stepsHost.innerHTML = rowsHtml(mer);
+  stepsHost2.innerHTML = oth.length ? rowsHtml(oth) : '<div style="font-size:11px;color:#8a93a0">No stations on the other side yet. Add one with “＋ Add station”, or drag a station across the middle line.</div>';
+  wireRows(stepsHost); wireRows(stepsHost2);
 }
 renderTimes();
 document.getElementById('walkOn').onchange = e => { walkOn = e.target.checked; schedule(); T = 0; setPlay(false); };
@@ -1045,26 +1095,6 @@ const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 const deckPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(FLOOR2 - 0.0)); // y = FLOOR2
 let editing = false, dragId = null, savedView = null;
-
-/* ---- ADDED STATIONS: extra benches you can drop on either side and drag where
-   you want. They are independent — NOT part of the Meritage line, so they never
-   affect its schedule/labor/bottleneck (kept out of ST). The right deck is the
-   "other side"; drag one across the middle line to put it on either side. ---- */
-const extraStations = [];
-let extraSeq = 0;
-function addStation(name, x, z, id, t) {
-  id = id || ('x' + (++extraSeq));
-  const r = makeBench(8, 3); r.st.position.set(x, 0, z); level2.add(r.st);
-  const accent = '#5c5f99';
-  const label = makeStationLabel(name, 'Added station', t ? t + ' min' : '—', accent);
-  label.position.set(x, 2.85, z); level2.add(label);
-  const mini = makeMiniLabel(name, accent); mini.position.set(x, 2.55, z); level2.add(mini);
-  setLed(r.led, 'idle', false);
-  nodes[id] = { s: { id, title: name, sub: 'Added station', accent, steps: [{ name, t: t || 0 }], ppl: 1 }, st: r.st, led: r.led, label, mini, x, z, rot: 0, extra: true, t: t || 0 };
-  POS[id] = [x, z];
-  extraStations.push(id);
-  return id;
-}
 const stList = () => [...ST.map(s => nodes[s.id]), ...extraStations.map(id => nodes[id]), nodes.cart].filter(n => n && n.st);
 const measurePanel = document.getElementById('measure');
 const editBtn = document.getElementById('edit');
@@ -1076,6 +1106,7 @@ document.getElementById('addStation').onclick = () => {
   const x = 16, z = -5 + n * 2.5;                               // drop in the open area on the OTHER (right) side; drag it anywhere
   addStation(name, x, z);
   if (!editing) setEditing(true);                               // enter edit mode so you can drag it where you want
+  renderTimes();                                               // show it in the side's steps table
   saveLayout();
 };
 
@@ -1125,7 +1156,7 @@ function setEditing(on) {
   if (on) {
     // keep zoom + pan in edit mode, but disable rotate and free the left button for dragging stations
     controls.enabled = true; controls.enableRotate = false; controls.enableZoom = true; controls.enablePan = true;
-    controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.PAN, RIGHT: null };
+    controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };   // left = drag stations; right/middle = pan
     controls.touches = { ONE: null, TWO: THREE.TOUCH.DOLLY_PAN };
   } else {
     controls.enabled = true; controls.enableRotate = true; controls.enableZoom = true; controls.enablePan = true;
@@ -1227,7 +1258,7 @@ renderer.domElement.addEventListener('pointermove', e => {
 renderer.domElement.addEventListener('pointerup', () => {
   if (dragFix != null) { dragFix = null; saveLayout(); }
   if (dragWp != null) { dragWp = null; saveLayout(); }
-  if (dragId) { dragId = null; measure.visible = false; measurePanel.innerHTML = ''; saveLayout(); }
+  if (dragId) { dragId = null; measure.visible = false; measurePanel.innerHTML = ''; renderTimes(); saveLayout(); }   // dragging across the middle line re-routes a station to the other side's table
 });
 // right-click a waypoint to delete it; right-click a station to delete its help arrows
 renderer.domElement.addEventListener('contextmenu', e => {
@@ -1266,6 +1297,7 @@ document.getElementById('rackbtn').onclick = () => {
   saveLayout();
 };
 loadLayout();
+renderTimes();   // populate both side tables after restoring added stations
 refreshPath();
 buildHelp();   // render seeded/loaded help paths
 rebuildDivider();   // align the crossing to the connector station

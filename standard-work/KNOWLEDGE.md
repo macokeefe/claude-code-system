@@ -158,15 +158,23 @@ rejected it as over-built; it was REVERTED to the plain Meritage app. Do not
 re-add Sola/two-line machinery unless asked. (Sola SWI data still lives in
 `shared/seedData.js` and the Sola-rules sections above.)
 
-**Add station (2026-06):** a header **＋ Add station** button drops an extra
-bench (`addStation`, tracked in `extraStations`, ids `x1,x2,…`). Added stations
-are INDEPENDENT — kept OUT of `ST`, so `schedule()`/`update()` never touch them
-and they do NOT affect Meritage's labor/cycle/bottleneck. They're included in
+**Add station + side tables (2026-06):** a header **＋ Add station** button drops
+an extra bench (`addStation`, tracked in `extraStations`, ids `x1,x2,…`). Added
+stations are INDEPENDENT — kept OUT of `ST`, so `schedule()`/`update()` never
+touch them; they do NOT affect Meritage's labor/cycle/bottleneck. Included in
 `stList()` so they're draggable in Edit-layout (default drop is the open area on
-the right/"other" side at x≈16; drag across the middle line to either side).
-Persisted in the layout via `o.__extras` (recreated in `loadLayout`). NEXT STEP
-(planned): make stations placed on the Meritage side actually join its workflow;
-right now ALL added stations are independent regardless of side.
+the right/"other" side at x≈16). Persisted via `o.__extras` (recreated in
+`loadLayout`). The `#times` panel now has TWO editable step/time tables:
+"MERITAGE — station steps" (`stepsHost` = ST + added stations on the Meritage
+side) and "OTHER SIDE — station steps" (`stepsHost2` = added stations on the
+other side). Side = `sideOf(x)` vs `DIVIDER_X` (= `DECK.x1`, the painted middle
+line); dragging a station across the line re-routes it between tables (drag-end
+calls `renderTimes()`). Edits use `getAny`/`recalcAny`/`afterEdit` — ST edits
+re-pace the line, added-station edits just update the bench label (no schedule).
+Camera: `controls.enablePan + screenSpacePanning`; in Edit mode right/middle-drag
+pans (left = drag stations), and `contextmenu` is suppressed on the canvas.
+NEXT STEP (planned): make Meritage-side added stations actually join the sim
+(labor/cycle), not just the table.
 
 Rebuild after editing the entry: `client/node_modules/.bin/esbuild
 standalone/Meritage_3D_Line.entry.js --bundle --format=iife --minify
