@@ -929,7 +929,10 @@ function renderTaskChart() {
   if (!taskPanel || taskPanel.style.display === 'none') return;
   const ids = ['con','arm','bak','tre','sea','fa','pak'];
   const cyc = Math.max(effNet('con'), effNet('arm'), effNet('bak'), effNet('tre'), effNet('sea'), effNet('fa') + effNet('pak'));
-  const totalLabor = ids.reduce((a, id) => a + effNet(id), 0);
+  // TOTAL LABOR = combined hands-on work of every person added up (raw work
+  // content per unit, NOT divided by people). The per-station bars below are
+  // still operator loading (work ÷ people); this headline is the full labor.
+  const totalLabor = ids.reduce((a, id) => a + (get(id).t || 0), 0);
   const bn = bottleneckInfo();
   const takt = dayMin / Math.max(1, taktDemand);
   const scaleMax = Math.max(cyc, takt) * 1.04;            // fit both the bars and the takt line
