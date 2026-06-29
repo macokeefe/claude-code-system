@@ -346,9 +346,12 @@ const PRODUCTS = {
 // The other line stays visible (staged, static) for context. Active is saved.
 const ACTIVE = (() => { try { return localStorage.getItem('m3d_product') === 'sola' ? 'sola' : 'meritage'; } catch (e) { return 'meritage'; } })();
 const PRODUCT = ACTIVE;   // existing per-line keys/logic key off this
+// Each line is confined to its deck. Meritage has 5 feeders incl. the double-
+// width ARMS bench, so it uses two staggered feeder rows to avoid overlap on the
+// narrow (40') deck; Sola's 3 feeders fit one row. fa/pak sit in a front row.
 const DECKPOS = {
-  meritage: { con:[-4,-3.2], arm:[-1.5,-3.2], bak:[1,-3.2], tre:[3.5,-3.2], sea:[6,-3.2], fa:[-1,4.2], pak:[4.6,4.2] },   // left deck
-  sola:     { con:[9.2,-3.2], arm:[13.2,-3.2], bak:[17.2,-3.2], fa:[11.5,4.2], pak:[16.5,4.2] },                          // right deck
+  meritage: { con:[-3.5,-6], bak:[0.5,-6], sea:[4.5,-6], arm:[-2,-1], tre:[3.5,-1], fa:[0,5], pak:[5,5] },   // left deck (2 feeder rows)
+  sola:     { con:[9.5,-3.2], arm:[13,-3.2], bak:[16.5,-3.2], fa:[11.5,4.2], pak:[16,4.2] },                 // right deck
 };
 const LTITLE = { meritage: 'Meritage', sola: 'Sola' };
 const OTHER = ACTIVE === 'meritage' ? 'sola' : 'meritage';
@@ -733,8 +736,10 @@ const nodes = {};
 let opColorIdx = 0;
 const crew = []; // {fig, station, homeX, homeZ}
 
-ST.forEach(s => {
-  const [x, z] = POS[s.id];
+// ONE station builder, used for BOTH lines (active engine line AND the other,
+// context line) so they render identically — same benches (incl. the double
+// ARMS table), labels, WIP, and crew spacing. Returns the meshes + crew specs.
+function buildStationMeshes(s, x, z) {
   let st, led;
   if (s.double) {                                  // Arms = two 8'x3' benches joined end-to-end (16' x 3')
     const g = new THREE.Group();
@@ -758,9 +763,7 @@ ST.forEach(s => {
   if (s.role === 'feeder') { visual = makeFeederWIP(s.kind); visual.g.position.set(x, 1.04, z); level2.add(visual.g); }
   if (s.role === 'fa') { visual = makeSofaProduct(); visual.g.position.set(x, 1.04, z); visual.update(0); level2.add(visual.g); }
 
-  nodes[s.id] = { s, st, led, visual, label, mini, x, z, rot: 0 };
-
-  // crew figures
+  const figs = [];
   const np = s.role === 'pack' ? 0 : s.ppl;
   for (let i = 0; i < np; i++) {
     const color = OP_COLORS[opColorIdx % OP_COLORS.length]; opColorIdx++;
@@ -769,8 +772,16 @@ ST.forEach(s => {
     const bdx = (np > 1 ? (i - (np-1)/2) * 2 * spread : 0), bdz = 1.7;   // base offset from station (rotates with the table)
     fig.position.set(x + bdx, 0, z + bdz);
     level2.add(fig);
-    crew.push({ fig, station: s.id, bdx, bdz, homeX: x + bdx, homeZ: z + bdz, idx: i });
+    figs.push({ fig, bdx, bdz, idx: i, homeX: x + bdx, homeZ: z + bdz });
   }
+  return { st, led, label, mini, visual, figs };
+}
+
+ST.forEach(s => {
+  const [x, z] = POS[s.id];
+  const m = buildStationMeshes(s, x, z);
+  nodes[s.id] = { s, st: m.st, led: m.led, visual: m.visual, label: m.label, mini: m.mini, x, z, rot: 0 };
+  m.figs.forEach(f => crew.push({ fig: f.fig, station: s.id, bdx: f.bdx, bdz: f.bdz, homeX: f.homeX, homeZ: f.homeZ, idx: f.idx }));
 });
 // register the materials cart as a draggable source node (nodes/POS now exist)
 nodes.cart = { id:'cart', x:CART_DEF[0], z:CART_DEF[1], st:cartPad, s:{ id:'cart', title:'Materials cart' } };
@@ -809,20 +820,11 @@ function buildSecondLine(cfg) {
   if (!cfg) return;
   cfg.stations.forEach(s => {
     const p = cfg.pos[s.id]; if (!p) return;
-    const [x, z] = p;
-    const r = makeBench(s.role === 'fa' ? 10 : 8, s.role === 'fa' ? 4 : 3);
-    r.st.position.set(x, 0, z); level2.add(r.st);
-    const label = makeStationLabel(s.title, s.sub, s.t ? s.t + ' min' : '—', s.accent);
-    label.position.set(x, 2.85, z); level2.add(label);
-    if (s.role === 'feeder') { const v = makeFeederWIP(s.kind); v.g.position.set(x, 1.04, z); v.update(0, N, N); level2.add(v.g); }   // staged pile, none in progress
-    if (s.role === 'fa') { const v = makeSofaProduct(); v.g.position.set(x, 1.04, z); v.update(0); v.g.visible = false; level2.add(v.g); }
-    const np = s.role === 'pack' ? 0 : Math.max(0, s.ppl || 0);
-    for (let i = 0; i < np; i++) {
-      const fig = makeCrewFigure(OP_COLORS[(secondLine.length * 2 + i) % OP_COLORS.length], s.title.split(' ')[0] + (np > 1 ? ' ' + (i + 1) : ''));
-      fig.position.set(x + (np > 1 ? (i - (np - 1) / 2) * 2.2 : 0), 0, z + 1.7); level2.add(fig);
-    }
-    setLed(r.led, 'idle', false);   // neutral: this line is not the one running
-    secondLine.push({ s, led: r.led });
+    const m = buildStationMeshes(s, p[0], p[1]);                 // SAME builder as the active line
+    if (s.role === 'feeder' && m.visual) m.visual.update(0, N, N);   // staged pile, none in progress
+    if (s.role === 'fa' && m.visual) m.visual.g.visible = false;
+    setLed(m.led, 'idle', false);                               // neutral: this line isn't the one running
+    secondLine.push({ s, led: m.led });
   });
 }
 buildSecondLine(PROD.second);

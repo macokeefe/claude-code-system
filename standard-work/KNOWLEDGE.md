@@ -180,7 +180,14 @@ animation) for context. So pressing Play runs only the active line. `PROD` is
 built at load from `ACTIVE` (localStorage `m3d_product` = meritage|sola): `pos`/
 `stations` = active line on its deck, `second:{pos,stations}` = other line.
 Single-line full-width view no longer exists (both decks are always populated).
-Same one file/app (`Meritage_3D_Line.html`) — not separate programs. To give the
+Same one file/app (`Meritage_3D_Line.html`) — not separate programs. BOTH lines
+render through ONE shared builder (`buildStationMeshes`) so the active and the
+other line look identical (incl. the double-width ARMS bench + crew spacing) —
+the earlier bug was a simplified second-line builder. Meritage uses a 2-row
+feeder layout on its narrow (40') deck so the 5 feeders + double ARMS don't
+overlap (`DECKPOS`). TODO (engineer, planned): the **connectors table feeds BOTH
+lines** — model one shared connectors station (combined demand → likely the
+shared bottleneck), not one per line. To give the
 inactive line a live editable sim too would need the per-line schedule/update
 refactor (deferred; only one line plays by design per the engineer).
 
