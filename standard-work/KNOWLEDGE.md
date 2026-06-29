@@ -168,18 +168,21 @@ Station IDs are reused (con/arm/bak/[tre/sea]/fa/pak) so scene/sim code is share
   attach 3.67) → Frame Assembly (37.62, 2p = sub 17 + connection 10.62 + middle
   leg 3.33 + caps 6.67) → Seat & Finish 13.25. Total labor 92.2, cycle ~33.3,
   ~12.6/day.
-**Both view (2026-06):** the toggle now cycles Meritage → Sola → **Both**. The
-two lines run in parallel IRL on two decks split by the central divider, sharing
-the one elevator (the floor was already built as two decks + a painted middle
-line; the right deck was empty). Both mode keeps the FULL Meritage engine on the
-LEFT deck (primary — editable, simulated, drives the readouts/panels) and adds
-the Sola line on the RIGHT deck via a self-contained visual animator
-(`buildSecondLine`/`updateSecond`) — NOT a full precedence sim (each feeder
-cycles its WIP, the FA loops a build, paced to per-operator times). Single
-Meritage/Sola modes are unchanged (engine untouched). `PRODUCTS.both` holds the
-left-deck `pos` (Meritage), `stations` (Meritage), and `second:{pos,stations}`
-(Sola, right deck). To give the right line a full editable simulation too, it
-would need the per-line schedule/update refactor (deferred).
+**Two lines, always shown (2026-06):** the two lines run in parallel IRL on two
+decks split by the central divider, sharing the one elevator (the floor was
+already built as two decks + a painted middle line; the right deck was empty).
+The view ALWAYS shows BOTH: Meritage on the LEFT deck, Sola on the RIGHT deck
+(fixed `DECKPOS`). The `✎ Editing` toggle only changes which line is **active** —
+the active line runs the full engine (editable times, schedule, readouts/panels,
+and it's the one that simulates when you press Play); the OTHER line is drawn by
+`buildSecondLine` as a static staged line (same meshes/look, neutral LEDs, no
+animation) for context. So pressing Play runs only the active line. `PROD` is
+built at load from `ACTIVE` (localStorage `m3d_product` = meritage|sola): `pos`/
+`stations` = active line on its deck, `second:{pos,stations}` = other line.
+Single-line full-width view no longer exists (both decks are always populated).
+Same one file/app (`Meritage_3D_Line.html`) — not separate programs. To give the
+inactive line a live editable sim too would need the per-line schedule/update
+refactor (deferred; only one line plays by design per the engineer).
 
 - **Sola modeling caveats (flag before trusting):** Seat Support Frame Assembly
   and Frame Prep have NO measured time anywhere → OMITTED (not invented).

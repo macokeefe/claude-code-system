@@ -307,7 +307,7 @@ function makeShipBox() {
    Pick the active half with the header switch; the choice is saved and the
    page reloads into that line. Station IDs are reused (con/arm/bak/[tre/sea]/
    fa/pak) so the layout/scene/sim code stays shared. */
-const PRODUCT = (() => { try { const p = localStorage.getItem('m3d_product'); return (p === 'sola' || p === 'both') ? p : 'meritage'; } catch (e) { return 'meritage'; } })();
+// ACTIVE line (the one you edit + that plays on Play) resolved after PRODUCTS below.
 
 const PRODUCTS = {
   meritage: {
@@ -339,22 +339,25 @@ const PRODUCTS = {
     ],
   },
 };
-// BOTH: the two lines run in parallel on the real floor, one per deck, split by
-// the central divider, sharing the one elevator. The LEFT deck runs the full
-// Meritage engine (primary — editable, simulated, drives the panels); the RIGHT
-// deck shows the Sola line via a self-contained visual animator (`second`). Both
-// animate together. Positions are confined to each deck so they sit either side
-// of the middle line. Toggle to Meritage/Sola for a single line's full sim.
-PRODUCTS.both = {
-  title: 'BOTH LINES — PARALLEL (Meritage ▏ Sola)',
-  pos: { con:[-4,-3.2], arm:[-1.5,-3.2], bak:[1,-3.2], tre:[3.5,-3.2], sea:[6,-3.2], fa:[-1,4.2], pak:[4.6,4.2] },   // left deck
-  stations: PRODUCTS.meritage.stations,
-  second: {                                                                                                          // right deck (Sola)
-    pos: { con:[9.2,-3.2], arm:[13.2,-3.2], bak:[17.2,-3.2], fa:[11.5,4.2], pak:[16.5,4.2] },
-    stations: PRODUCTS.sola.stations,
-  },
+// BOTH lines are ALWAYS on the floor: Meritage on the LEFT deck, Sola on the
+// RIGHT deck, split by the central divider, sharing the one elevator. The toggle
+// only changes which line is ACTIVE — the active line is editable, drives the
+// readouts/panels, and is the one that actually simulates when you press Play.
+// The other line stays visible (staged, static) for context. Active is saved.
+const ACTIVE = (() => { try { return localStorage.getItem('m3d_product') === 'sola' ? 'sola' : 'meritage'; } catch (e) { return 'meritage'; } })();
+const PRODUCT = ACTIVE;   // existing per-line keys/logic key off this
+const DECKPOS = {
+  meritage: { con:[-4,-3.2], arm:[-1.5,-3.2], bak:[1,-3.2], tre:[3.5,-3.2], sea:[6,-3.2], fa:[-1,4.2], pak:[4.6,4.2] },   // left deck
+  sola:     { con:[9.2,-3.2], arm:[13.2,-3.2], bak:[17.2,-3.2], fa:[11.5,4.2], pak:[16.5,4.2] },                          // right deck
 };
-const PROD = PRODUCTS[PRODUCT];
+const LTITLE = { meritage: 'Meritage', sola: 'Sola' };
+const OTHER = ACTIVE === 'meritage' ? 'sola' : 'meritage';
+const PROD = {
+  title: 'MERITAGE ▏ SOLA',
+  pos: DECKPOS[ACTIVE],
+  stations: PRODUCTS[ACTIVE].stations,
+  second: { pos: DECKPOS[OTHER], stations: PRODUCTS[OTHER].stations },
+};
 const ST = PROD.stations;
 function recalc(id) { const s = get(id); if (s && s.steps) s.t = s.steps.reduce((a, st) => a + (parseFloat(st.t) || 0), 0); }
 const get = id => ST.find(s => s.id === id);
@@ -797,11 +800,10 @@ FEEDERS.forEach(id => {
   travelParts[id] = arr;
 });
 
-/* ---- second (parallel) line for BOTH mode: built on the right deck, animated
-   by its own lightweight loop (`updateSecond`). Not the full precedence sim —
-   each feeder cycles its WIP and the FA repeatedly builds a sofa, paced to the
-   line's own per-operator times — enough to read as "running in parallel". The
-   right line's full simulation/editing lives in the Sola-only toggle. ---- */
+/* ---- the OTHER (inactive) line: always shown on its deck for context, but
+   STATIC — it doesn't run when you press Play (only the active line does). Built
+   with staged sub-parts and neutral LEDs so it reads as "set up, idle". Toggle
+   to make it the active line to edit/simulate it. ---- */
 const secondLine = [];
 function buildSecondLine(cfg) {
   if (!cfg) return;
@@ -812,32 +814,15 @@ function buildSecondLine(cfg) {
     r.st.position.set(x, 0, z); level2.add(r.st);
     const label = makeStationLabel(s.title, s.sub, s.t ? s.t + ' min' : '—', s.accent);
     label.position.set(x, 2.85, z); level2.add(label);
-    let visual = null;
-    if (s.role === 'feeder') { visual = makeFeederWIP(s.kind); visual.g.position.set(x, 1.04, z); level2.add(visual.g); }
-    if (s.role === 'fa') { visual = makeSofaProduct(); visual.g.position.set(x, 1.04, z); visual.update(0); level2.add(visual.g); }
+    if (s.role === 'feeder') { const v = makeFeederWIP(s.kind); v.g.position.set(x, 1.04, z); v.update(0, N, N); level2.add(v.g); }   // staged pile, none in progress
+    if (s.role === 'fa') { const v = makeSofaProduct(); v.g.position.set(x, 1.04, z); v.update(0); v.g.visible = false; level2.add(v.g); }
     const np = s.role === 'pack' ? 0 : Math.max(0, s.ppl || 0);
     for (let i = 0; i < np; i++) {
       const fig = makeCrewFigure(OP_COLORS[(secondLine.length * 2 + i) % OP_COLORS.length], s.title.split(' ')[0] + (np > 1 ? ' ' + (i + 1) : ''));
       fig.position.set(x + (np > 1 ? (i - (np - 1) / 2) * 2.2 : 0), 0, z + 1.7); level2.add(fig);
     }
-    secondLine.push({ s, led: r.led, visual, role: s.role, cyc: Math.max(0.1, (s.t || 0) / Math.max(1, s.ppl || 1)) });
-  });
-}
-function updateSecond() {
-  if (!secondLine.length) return;
-  const fa = secondLine.find(o => o.role === 'fa');
-  secondLine.forEach(o => {
-    if (o.role === 'feeder') {
-      const frac = (T % o.cyc) / o.cyc;
-      if (o.visual) o.visual.update(T > 0 ? frac : 0, 0, N);
-      setLed(o.led, T > 0 ? 'active' : 'idle', T > 0);
-    } else if (o.role === 'fa') {
-      const frac = (T % o.cyc) / o.cyc;
-      if (o.visual) { o.visual.g.visible = true; o.visual.update(T > 0 ? frac : 0); }
-      setLed(o.led, T > 0 ? 'active' : 'idle', T > 0);
-    } else {
-      setLed(o.led, T > 0 ? 'done' : 'idle', false);
-    }
+    setLed(r.led, 'idle', false);   // neutral: this line is not the one running
+    secondLine.push({ s, led: r.led });
   });
 }
 buildSecondLine(PROD.second);
@@ -895,13 +880,11 @@ function restoreView() {
   document.title = PROD.title + ' — 3D Line Model';
   const btn = document.getElementById('prodSwitch');
   if (btn) {
-    const NEXT = { meritage: 'sola', sola: 'both', both: 'meritage' };
-    const LABEL = { meritage: 'Meritage', sola: 'Sola', both: 'Both' };
-    btn.textContent = '⇄ Line: ' + LABEL[PRODUCT];
-    btn.title = 'Switch line (→ ' + LABEL[NEXT[PRODUCT]] + ')';
+    btn.textContent = '✎ Editing: ' + LTITLE[ACTIVE];
+    btn.title = 'Both lines are shown. Click to edit / play the ' + LTITLE[OTHER] + ' line instead.';
     btn.onclick = () => {
       try { localStorage.setItem('m3d_view', JSON.stringify(captureView())); } catch (e) {}
-      try { localStorage.setItem('m3d_product', NEXT[PRODUCT]); } catch (e) {}
+      try { localStorage.setItem('m3d_product', OTHER); } catch (e) {}
       location.reload();
     };
   }
@@ -1589,7 +1572,6 @@ function loop(now){
     } else { fl.lift.position.y = 0; }
   }
   update();
-  updateSecond();   // animate the parallel line (BOTH mode)
   controls.update();
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
