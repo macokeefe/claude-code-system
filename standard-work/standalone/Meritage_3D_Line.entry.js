@@ -1329,8 +1329,8 @@ document.getElementById('rackbtn').onclick = () => {
   saveLayout();
 };
 loadLayout();
-renderTimes();   // populate both side tables after restoring added stations
-recalcCon(); renderShared();  // connector-lady tasks restored (con steps + sides) inside loadLayout
+try { recalcCon(); schedule(); } catch (e) { console.error('schedule failed', e); }   // set labor/cycle/readouts FIRST so a bad saved layout can't leave them stuck on the placeholder
+try { renderTimes(); renderShared(); } catch (e) { console.error('panel render failed', e); }
 
 /* ---- draggable floating windows: grab any panel by its title bar and move it;
    positions persist per panel. The listener is on the panel (not the title) so
@@ -1536,6 +1536,5 @@ function loop(now){
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
 }
-schedule();
-update();
-requestAnimationFrame(loop);
+try { schedule(); update(); } catch (e) { console.error('init schedule/update failed', e); }
+requestAnimationFrame(loop);   // always start the render loop
