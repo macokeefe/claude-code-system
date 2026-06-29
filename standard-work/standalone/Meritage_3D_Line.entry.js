@@ -366,6 +366,30 @@ function recalc(id) { const s = get(id); if (s && s.steps) s.t = s.steps.reduce(
 const get = id => ST.find(s => s.id === id);
 const FEEDERS = ST.filter(s => s.role === 'feeder').map(s => s.id);   // parallel sub-assembly benches (varies by product)
 
+// ---- SHARED CONNECTORS table (one table on the divider feeds BOTH lines) ----
+// Connector pre-assembly for both lines is done at one shared table on the
+// central divider. Its load is the COMBINED demand (Meritage + Sola), so it
+// tends to be the shared bottleneck (esp. for Sola). Per line the connector-prep
+// station is: Meritage 'con' (CONNECTORS), Sola 'arm' (CONNECTOR PREP). The
+// active line's connector station becomes the shared table (moved to centre,
+// retimed to the combined total); the other line's is not drawn twice.
+const CONN_ID = { meritage: 'con', sola: 'arm' };
+const _connT = (prod, id) => { const s = PRODUCTS[prod].stations.find(x => x.id === id); return s ? s.t : 0; };
+const COMBINED_CONN = +(_connT('meritage', CONN_ID.meritage) + _connT('sola', CONN_ID.sola)).toFixed(2);
+const CONN_CENTER = [7.0, -1];   // on the central divider, between the two lines
+(() => {
+  const cs = get(CONN_ID[ACTIVE]);            // active line's connector station -> the shared table
+  if (cs) {
+    cs.title = 'CONNECTORS (BOTH LINES)';
+    cs.sub = 'Shared · M+S';
+    cs.steps = [{ name: 'Connector pre-assembly — Meritage + Sola', t: COMBINED_CONN }];
+    cs.t = COMBINED_CONN;
+    cs.shared = true;
+    PROD.pos[CONN_ID[ACTIVE]] = CONN_CENTER;   // move it onto the divider
+  }
+  PROD.second.skip = CONN_ID[OTHER];           // the other line's connectors = the same shared table; don't draw twice
+})();
+
 let N = 8;
 let sch = null, horizon = 0;
 // distance-based walk time — only the tables a station gets parts FROM and gives parts TO matter
@@ -819,6 +843,7 @@ const secondLine = [];
 function buildSecondLine(cfg) {
   if (!cfg) return;
   cfg.stations.forEach(s => {
+    if (s.id === cfg.skip) return;                              // its connectors = the shared central table
     const p = cfg.pos[s.id]; if (!p) return;
     const m = buildStationMeshes(s, p[0], p[1]);                 // SAME builder as the active line
     if (s.role === 'feeder' && m.visual) m.visual.update(0, N, N);   // staged pile, none in progress
@@ -828,6 +853,18 @@ function buildSecondLine(cfg) {
   });
 }
 buildSecondLine(PROD.second);
+
+// show the shared connectors table feeding the OTHER line too: a static feed
+// line from the central table to the other line's assembly bench.
+(() => {
+  if (!PROD.second || !PROD.second.pos) return;
+  const fa = PROD.second.pos.fa; if (!fa) return;
+  const y = 0.32;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute([CONN_CENTER[0], y, CONN_CENTER[1], fa[0], y, fa[1]], 3));
+  const ln = new THREE.Line(geo, new THREE.LineDashedMaterial({ color: 0x1d3a66, dashSize: 0.4, gapSize: 0.25, transparent: true, opacity: 0.7 }));
+  ln.computeLineDistances(); level2.add(ln);
+})();
 
 controls.target.set(7, FLOOR2 + 0.8, 0);
 

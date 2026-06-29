@@ -185,9 +185,21 @@ render through ONE shared builder (`buildStationMeshes`) so the active and the
 other line look identical (incl. the double-width ARMS bench + crew spacing) —
 the earlier bug was a simplified second-line builder. Meritage uses a 2-row
 feeder layout on its narrow (40') deck so the 5 feeders + double ARMS don't
-overlap (`DECKPOS`). TODO (engineer, planned): the **connectors table feeds BOTH
-lines** — model one shared connectors station (combined demand → likely the
-shared bottleneck), not one per line. To give the
+overlap (`DECKPOS`).
+
+**Shared connectors table (2026-06, engineer):** ONE connectors table on the
+central divider does connector pre-assembly for BOTH lines, so its load is the
+COMBINED demand (`COMBINED_CONN` = Meritage CONNECTORS 19.25 + Sola CONNECTOR
+PREP 15 = 34.25 min). The per-line connector-prep station is `CONN_ID`
+(meritage→`con`, sola→`arm`); the active line's connector station is retitled
+"CONNECTORS (BOTH LINES)", moved to `CONN_CENTER` on the divider, and retimed to
+the combined total — so it tends to be the shared bottleneck (it IS Sola's
+bottleneck at ~34.5). The other line's connector station isn't drawn twice
+(`PROD.second.skip`); a dashed feed line links the shared table to its assembly.
+Caveat: the combined time lands in the ACTIVE line's total-labor sum, so that
+readout is slightly inflated (the shared work is counted on whichever line is
+active). Only the active line simulates, so true two-line contention isn't
+modeled — the combined time is the standing representation of the shared load. To give the
 inactive line a live editable sim too would need the per-line schedule/update
 refactor (deferred; only one line plays by design per the engineer).
 
