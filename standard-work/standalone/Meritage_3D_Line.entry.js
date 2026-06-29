@@ -635,10 +635,7 @@ function refreshPath() {
 }
 
 // ---- help-movement arrows: where an operator goes to help after finishing ----
-let helpArrows = [                    // [{from, fromIdx, to, helpMin}] — per-operator starter paths
-  { from:'tre', fromIdx:0, to:'sea', helpMin:5 },
-  { from:'con', fromIdx:0, to:'sea', helpMin:5 },
-];
+let helpArrows = [];                  // [{from, fromIdx, to, helpMin}] — added via the “Help arrow” tool (no demo defaults, so chart times match the station times)
 const helpGroup = new THREE.Group(); level2.add(helpGroup);
 const HELP_COL = 0x8f3fbf;
 function assignHelpers() {
@@ -1037,7 +1034,11 @@ function renderTaskChart() {
   });
   taskPanel.innerHTML = html;
   const td = document.getElementById('taktDemand');
-  if (td) td.onchange = e => { taktDemand = Math.max(1, parseInt(e.target.value) || 10); renderTaskChart(); };
+  if (td) td.oninput = e => {                               // live: takt line + minutes move as you type/spin
+    taktDemand = Math.max(1, parseInt(e.target.value) || 1);
+    renderTaskChart();
+    const n = document.getElementById('taktDemand'); if (n) { n.focus(); }   // keep focus through the re-render
+  };
 }
 document.getElementById('taskbtn').onclick = () => {
   taskPanel.style.display = (taskPanel.style.display === 'none') ? 'block' : 'none';
