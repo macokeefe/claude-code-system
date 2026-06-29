@@ -826,6 +826,7 @@ document.getElementById('trips').onchange = e => { tripsPerUnit = Math.max(0, pa
 
 // ---- idle-time-per-operator chart (full day) ----
 let dayMin = 420;   // 7-hr working day
+let taktDemand = 10;   // units/day target for the takt line
 const idlePanel = document.getElementById('idlePanel');
 const FEEDNAME = { con:'Connectors', arm:'Arms', bak:'Back frame', tre:'Trellis', sea:'Seat frame' };
 function operatorsList() {
@@ -917,20 +918,25 @@ function renderTaskChart() {
   const cyc = Math.max(effNet('con'), effNet('arm'), effNet('bak'), effNet('tre'), effNet('sea'), effNet('fa') + effNet('pak'));
   const totalLabor = ids.reduce((a, id) => a + effNet(id), 0);
   const bn = bottleneckInfo();
+  const takt = dayMin / Math.max(1, taktDemand);
+  const scaleMax = Math.max(cyc, takt) * 1.04;            // fit both the bars and the takt line
+  const taktPct = (takt / scaleMax) * 100;
   let html = `<h3>Task distribution — operator loading</h3>`;
-  html += `<div class="ihint"><b>Total labor: ${totalLabor.toFixed(1)} min/unit</b> · cycle ${cyc.toFixed(1)} min · ${(420/cyc).toFixed(1)} units/day. Bars = each station's time vs the line pace; segments = its steps.</div>`;
+  html += `<div class="ihint"><b>Total labor: ${totalLabor.toFixed(1)} min/unit</b> · cycle ${cyc.toFixed(1)} · <span style="color:#d11;font-weight:700">takt ${takt.toFixed(1)} min</span> (<input type="number" id="taktDemand" value="${taktDemand}" min="1" style="width:44px"> units / ${(dayMin/60).toFixed(1)}-hr day). Red line = takt.</div>`;
   ids.forEach(id => {
     const s = get(id), tt = effNet(id);
     const onBn = isBottleneckTarget(id, bn.key);
     let seg = '';
     (s.steps || [{ name: s.title, t: tt }]).forEach((st, i) => {
-      const sw = (st.t / cyc) * 100;
+      const sw = (st.t / scaleMax) * 100;
       const col = onBn ? (i % 2 ? '#c0552c' : '#d98a6e') : (i % 2 ? '#2f6df6' : '#7ba6e0');
       seg += `<i style="width:${sw}%;background:${col}" title="${(st.name||'').replace(/"/g,'')} · ${st.t} min"></i>`;
     });
-    html += `<div class="trow2"><span class="tn2">${s.title}${onBn?' ◄':''}</span><span class="bar2">${seg}</span><span class="v2">${tt.toFixed(1)}m</span></div>`;
+    html += `<div class="trow2"><span class="tn2">${s.title}${onBn?' ◄':''}</span><span class="bar2">${seg}<span class="takt2" style="left:${taktPct}%"></span></span><span class="v2">${tt.toFixed(1)}m</span></div>`;
   });
   taskPanel.innerHTML = html;
+  const td = document.getElementById('taktDemand');
+  if (td) td.onchange = e => { taktDemand = Math.max(1, parseInt(e.target.value) || 10); renderTaskChart(); };
 }
 document.getElementById('taskbtn').onclick = () => {
   taskPanel.style.display = (taskPanel.style.display === 'none') ? 'block' : 'none';
