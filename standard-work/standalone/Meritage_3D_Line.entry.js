@@ -800,6 +800,8 @@ const mHdr = document.createElement('div'); mHdr.style.cssText = 'font-size:11px
 const stepsHost = document.createElement('div'); stepsHost.id = 'stepsHost'; timeBox.appendChild(stepsHost);
 const oHdr = document.createElement('div'); oHdr.style.cssText = 'font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#5c5f99;font-weight:800;margin:14px 0 4px;border-top:2px solid #e0e3ea;padding-top:10px'; oHdr.textContent = 'Other side — station steps'; timeBox.appendChild(oHdr);
 const stepsHost2 = document.createElement('div'); stepsHost2.id = 'stepsHost2'; timeBox.appendChild(stepsHost2);
+const sHdr = document.createElement('div'); sHdr.style.cssText = 'font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#7a5b1f;font-weight:800;margin:14px 0 4px;border-top:2px solid #e0e3ea;padding-top:10px'; sHdr.textContent = 'Shared — connector station'; timeBox.appendChild(sHdr);
+const stepsHost3 = document.createElement('div'); stepsHost3.id = 'stepsHost3'; timeBox.appendChild(stepsHost3);
 
 /* ---- ADDED STATIONS: extra benches you can drop on either side and drag where
    you want. They are independent — NOT part of the Meritage line, so they never
@@ -883,6 +885,40 @@ function renderTimes() {
   wireRows(stepsHost); wireRows(stepsHost2);
 }
 renderTimes();
+
+/* ---- SHARED connector station: one bench on the middle line where the
+   "connector lady" works for BOTH sides. Her tasks are listed in the Shared
+   table; each task is assigned to the Meritage side or the Other side. ---- */
+let sharedTasks = [{ name: 'Connector pre-assembly', t: 10, side: 'meritage' }];
+const sharedNode = (() => {
+  const x = DIVIDER_X, z = 0;                                  // on the painted middle line, between the two sides
+  const r = makeBench(8, 3); r.st.position.set(x, 0, z); level2.add(r.st);
+  const label = makeStationLabel('CONNECTORS (SHARED)', 'Connector lady — both sides', '', '#7a5b1f');
+  label.position.set(x, 2.85, z); level2.add(label);
+  const fig = makeCrewFigure(0xb9772e, 'Connectors'); fig.position.set(x, 0, z + 1.7); level2.add(fig);
+  setLed(r.led, 'idle', false);
+  return { x, z, label, led: r.led };
+})();
+function renderShared() {
+  const mer = sharedTasks.filter(t => t.side === 'meritage').reduce((a, t) => a + (parseFloat(t.t) || 0), 0);
+  const oth = sharedTasks.filter(t => t.side === 'other').reduce((a, t) => a + (parseFloat(t.t) || 0), 0);
+  let html = `<div style="font-size:10.5px;color:#6b7785;margin-bottom:5px">Assign each connector task to a side. → Meritage <b>${(+mer.toFixed(2))}</b> min · Other <b>${(+oth.toFixed(2))}</b> min</div>`;
+  sharedTasks.forEach((t, i) => {
+    html += `<div class="shrow">
+      <input class="sname" data-i="${i}" value="${(t.name || '').replace(/"/g, '&quot;')}"/>
+      <input class="stime" type="number" step="0.25" min="0" data-i="${i}" value="${t.t}"/>
+      <select class="sside" data-i="${i}"><option value="meritage"${t.side === 'meritage' ? ' selected' : ''}>Meritage</option><option value="other"${t.side === 'other' ? ' selected' : ''}>Other</option></select>
+      <button class="sdel" data-i="${i}">✕</button></div>`;
+  });
+  html += `<button class="sadd" id="shAdd">+ add task</button>`;
+  stepsHost3.innerHTML = html;
+  stepsHost3.querySelectorAll('input.sname').forEach(inp => inp.onchange = e => { sharedTasks[+e.target.dataset.i].name = e.target.value; saveLayout(); });
+  stepsHost3.querySelectorAll('input.stime').forEach(inp => inp.onchange = e => { sharedTasks[+e.target.dataset.i].t = parseFloat(e.target.value) || 0; renderShared(); saveLayout(); });
+  stepsHost3.querySelectorAll('select.sside').forEach(s => s.onchange = e => { sharedTasks[+e.target.dataset.i].side = e.target.value; renderShared(); saveLayout(); });
+  stepsHost3.querySelectorAll('button.sdel').forEach(b => b.onclick = e => { sharedTasks.splice(+e.target.dataset.i, 1); renderShared(); saveLayout(); });
+  const add = document.getElementById('shAdd'); if (add) add.onclick = () => { sharedTasks.push({ name: 'New task', t: 0, side: 'meritage' }); renderShared(); saveLayout(); };
+}
+renderShared();
 document.getElementById('walkOn').onchange = e => { walkOn = e.target.checked; schedule(); T = 0; setPlay(false); };
 document.getElementById('walkSpeed').onchange = e => { walkSpeed = Math.max(10, parseFloat(e.target.value) || 60); schedule(); T = 0; setPlay(false); };
 document.getElementById('trips').onchange = e => { tripsPerUnit = Math.max(0, parseFloat(e.target.value) || 0); schedule(); T = 0; setPlay(false); };
@@ -1055,8 +1091,8 @@ function setStationRot(id, rot) {
   const nd = nodes[id]; if (!nd) return;
   nd.rot = rot; placeStation(id);
 }
-function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraStations.map(id => { const n = nodes[id]; return { id, name: n.s.title, x: n.x, z: n.z, t: n.t || 0 }; }); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
-function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__extras)) o.__extras.forEach(e => { if (!nodes[e.id]) { addStation(e.name, e.x, e.z, e.id, e.t); const num = parseInt(String(e.id).replace(/\D/g, '')) || 0; if (num > extraSeq) extraSeq = num; } }); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } } catch (e) {} }
+function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraStations.map(id => { const n = nodes[id]; return { id, name: n.s.title, x: n.x, z: n.z, t: n.t || 0 }; }); o.__shared = sharedTasks; localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
+function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__shared)) sharedTasks = o.__shared; if (Array.isArray(o.__extras)) o.__extras.forEach(e => { if (!nodes[e.id]) { addStation(e.name, e.x, e.z, e.id, e.t); const num = parseInt(String(e.id).replace(/\D/g, '')) || 0; if (num > extraSeq) extraSeq = num; } }); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } } catch (e) {} }
 
 // 1-yard grid on the deck
 function buildGrid() {
@@ -1298,6 +1334,29 @@ document.getElementById('rackbtn').onclick = () => {
 };
 loadLayout();
 renderTimes();   // populate both side tables after restoring added stations
+renderShared();  // (sharedTasks restored inside loadLayout)
+
+/* ---- draggable floating windows: grab any panel by its title bar and move it;
+   positions persist per panel. The listener is on the panel (not the title) so
+   it survives the panels' innerHTML re-renders. ---- */
+(() => {
+  let topZ = 30;
+  const keyOf = id => 'm3d_panel_' + id;
+  ['times', 'idlePanel', 'helpPanel', 'taskPanel', 'measure'].forEach(id => {
+    const el = document.getElementById(id); if (!el) return;
+    try { const s = JSON.parse(localStorage.getItem(keyOf(id))); if (s && typeof s.left === 'number') { el.style.left = s.left + 'px'; el.style.top = s.top + 'px'; el.style.right = 'auto'; el.style.bottom = 'auto'; } } catch (e) {}
+    el.addEventListener('pointerdown', e => {
+      const h = e.target.closest('h3,h4'); if (!h || !el.contains(h) || e.button !== 0) return;   // drag only by the title bar
+      e.preventDefault(); el.style.zIndex = ++topZ;
+      const par = el.offsetParent || document.body;
+      const maxL = Math.max(0, par.clientWidth - el.offsetWidth), maxT = Math.max(0, par.clientHeight - el.offsetHeight);
+      const sx = e.clientX, sy = e.clientY, sl = el.offsetLeft, st = el.offsetTop;
+      const move = ev => { el.style.left = Math.max(0, Math.min(sl + (ev.clientX - sx), maxL)) + 'px'; el.style.top = Math.max(0, Math.min(st + (ev.clientY - sy), maxT)) + 'px'; el.style.right = 'auto'; el.style.bottom = 'auto'; };
+      const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); try { localStorage.setItem(keyOf(id), JSON.stringify({ left: el.offsetLeft, top: el.offsetTop })); } catch (e) {} };
+      window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+    });
+  });
+})();
 refreshPath();
 buildHelp();   // render seeded/loaded help paths
 rebuildDivider();   // align the crossing to the connector station

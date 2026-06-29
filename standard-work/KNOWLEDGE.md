@@ -173,8 +173,21 @@ calls `renderTimes()`). Edits use `getAny`/`recalcAny`/`afterEdit` — ST edits
 re-pace the line, added-station edits just update the bench label (no schedule).
 Camera: `controls.enablePan + screenSpacePanning`; in Edit mode right/middle-drag
 pans (left = drag stations), and `contextmenu` is suppressed on the canvas.
-NEXT STEP (planned): make Meritage-side added stations actually join the sim
-(labor/cycle), not just the table.
+
+**Draggable windows + shared connector station (2026-06):** the floating panels
+(Station times, Idle/day, Help paths, Task chart, Measure) are draggable by their
+title bar (CSS `cursor:move` + a `pointerdown` delegation IIFE near the end of
+the entry; positions persist in `localStorage['m3d_panel_<id>']`). There's also a
+SHARED connector station — one bench + a "connector lady" crew figure on the
+middle line (`sharedNode` at `DIVIDER_X, z=0`) — plus a third panel table
+"Shared — connector station" (`stepsHost3` / `renderShared`). `sharedTasks` =
+`[{name,t,side}]`; each task is assigned to `meritage` or `other` via a per-row
+dropdown, and the header shows the per-side minute totals. Persisted via
+`o.__shared`. Like the added stations, it's documentation/planning — not yet
+wired into the line sim.
+
+NEXT STEP (planned): make Meritage-side added stations (and the shared lady's
+per-side load) actually join the sim (labor/cycle), not just the tables.
 
 Rebuild after editing the entry: `client/node_modules/.bin/esbuild
 standalone/Meritage_3D_Line.entry.js --bundle --format=iife --minify
