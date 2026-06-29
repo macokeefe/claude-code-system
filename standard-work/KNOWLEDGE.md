@@ -143,73 +143,30 @@ shows cycle time / units-per-shift / operators / balance % and flags
 precedence violations. Next: a 'line mode' in the 3D floor where
 operators are fixed at stations and units flow past.
 
-## Meritage 3D Line standalone — product switch + Sola line (2026-06)
+## Meritage 3D Line standalone (2026-06)
 
 `standalone/Meritage_3D_Line.entry.js` (bundled into `Meritage_3D_Line.html`)
 is a self-contained three.js line model, SEPARATE from the SKU DB — its station
-data is hand-authored, not synced. It now models BOTH halves of the floor via a
-header **⇄ Line** switch (writes `localStorage['m3d_product']` = `meritage`|
-`sola`, then reloads). Layouts are namespaced per product
-(`m3d_layout_v2_<product>`, `m3d_layouts_v2_<product>`).
+data is hand-authored, not synced. It is the single **Meritage** line: 5 feeders
+(Connectors 19.25, Arms 64×2p, Back 43.5, Trellis 22.5, Seat 47) → Full Assembly
+(58, 2p) → Cushions & Pack (18). Total labor 272.3, cycle ~48.7 (with seeded help
+arrows), ~8.6/day.
 
-Engine is data-driven over a per-product config (`PRODUCTS[...]` → `title`,
-`pos`, `stations`). Topology is shared: parallel **feeders** (role `feeder`,
-derived as `FEEDERS`) stage sub-parts → one **FA** bench (role `fa`) → **pack**
-(role `pak`, ppl 0, done by the FA pair). `schedule()`/`update()` are generic
-over `FEEDERS`; `sch` carries `fT`/`fEnd` maps (was the old `conT`/`seaT`…).
-Station IDs are reused (con/arm/bak/[tre/sea]/fa/pak) so scene/sim code is shared.
+NOTE: an earlier session built a two-line (Meritage + Sola) experiment here —
+a product toggle, a "Both" view, and a shared connectors table. The engineer
+rejected it as over-built; it was REVERTED to the plain Meritage app. Do not
+re-add Sola/two-line machinery unless asked. (Sola SWI data still lives in
+`shared/seedData.js` and the Sola-rules sections above.)
 
-- **Meritage**: 5 feeders (Connectors, Arms×2p, Back, Trellis, Seat) → Full
-  Assembly (58, 2p) → Cushions & Pack (18). Total labor 272.3, cycle ~48.7
-  (with seeded help arrows), ~8.6/day. NOTE its pack is still 18 (sheet has 36
-  — middle+top boxing not yet added; see "metric clarity" gap below).
-- **Sola (No-Arms, SOLA-NA real SWI times sec→min)**: 3 feeders — Rivet Nuts
-  9.55, Connector Prep 15.0 (18×0:50), Connector Plates 16.74 (plate 13.07 +
-  attach 3.67) → Frame Assembly (37.62, 2p = sub 17 + connection 10.62 + middle
-  leg 3.33 + caps 6.67) → Seat & Finish 13.25. Total labor 92.2, cycle ~33.3,
-  ~12.6/day.
-**Two lines, always shown (2026-06):** the two lines run in parallel IRL on two
-decks split by the central divider, sharing the one elevator (the floor was
-already built as two decks + a painted middle line; the right deck was empty).
-The view ALWAYS shows BOTH: Meritage on the LEFT deck, Sola on the RIGHT deck
-(fixed `DECKPOS`). The `✎ Editing` toggle only changes which line is **active** —
-the active line runs the full engine (editable times, schedule, readouts/panels,
-and it's the one that simulates when you press Play); the OTHER line is drawn by
-`buildSecondLine` as a static staged line (same meshes/look, neutral LEDs, no
-animation) for context. So pressing Play runs only the active line. `PROD` is
-built at load from `ACTIVE` (localStorage `m3d_product` = meritage|sola): `pos`/
-`stations` = active line on its deck, `second:{pos,stations}` = other line.
-Single-line full-width view no longer exists (both decks are always populated).
-Same one file/app (`Meritage_3D_Line.html`) — not separate programs. BOTH lines
-render through ONE shared builder (`buildStationMeshes`) so the active and the
-other line look identical (incl. the double-width ARMS bench + crew spacing) —
-the earlier bug was a simplified second-line builder. Meritage uses a 2-row
-feeder layout on its narrow (40') deck so the 5 feeders + double ARMS don't
-overlap (`DECKPOS`).
-
-**Shared connectors table (2026-06, engineer):** ONE connectors table on the
-central divider does connector pre-assembly for BOTH lines, so its load is the
-COMBINED demand (`COMBINED_CONN` = Meritage CONNECTORS 19.25 + Sola CONNECTOR
-PREP 15 = 34.25 min). The per-line connector-prep station is `CONN_ID`
-(meritage→`con`, sola→`arm`); the active line's connector station is retitled
-"CONNECTORS (BOTH LINES)", moved to `CONN_CENTER` on the divider, and retimed to
-the combined total — so it tends to be the shared bottleneck (it IS Sola's
-bottleneck at ~34.5). The other line's connector station isn't drawn twice
-(`PROD.second.skip`); a dashed feed line links the shared table to its assembly.
-Caveat: the combined time lands in the ACTIVE line's total-labor sum, so that
-readout is slightly inflated (the shared work is counted on whichever line is
-active). Only the active line simulates, so true two-line contention isn't
-modeled — the combined time is the standing representation of the shared load. To give the
-inactive line a live editable sim too would need the per-line schedule/update
-refactor (deferred; only one line plays by design per the engineer).
-
-- **Sola modeling caveats (flag before trusting):** Seat Support Frame Assembly
-  and Frame Prep have NO measured time anywhere → OMITTED (not invented).
-  Connector plates really depend on rivet+prep but are modeled as a parallel
-  feeder (line-level simplification — the engine is feeders→FA, not a full DAG).
-  Lumping the whole frame chain into one FA station loses the sequential detail.
-  If the engineer wants Sola as a true sequential flow line, generalize
-  schedule/update to a flow-shop (unit moves bench→bench) — bigger rewrite.
+**Add station (2026-06):** a header **＋ Add station** button drops an extra
+bench (`addStation`, tracked in `extraStations`, ids `x1,x2,…`). Added stations
+are INDEPENDENT — kept OUT of `ST`, so `schedule()`/`update()` never touch them
+and they do NOT affect Meritage's labor/cycle/bottleneck. They're included in
+`stList()` so they're draggable in Edit-layout (default drop is the open area on
+the right/"other" side at x≈16; drag across the middle line to either side).
+Persisted in the layout via `o.__extras` (recreated in `loadLayout`). NEXT STEP
+(planned): make stations placed on the Meritage side actually join its workflow;
+right now ALL added stations are independent regardless of side.
 
 Rebuild after editing the entry: `client/node_modules/.bin/esbuild
 standalone/Meritage_3D_Line.entry.js --bundle --format=iife --minify

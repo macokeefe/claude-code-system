@@ -300,95 +300,17 @@ function makeShipBox() {
 }
 
 /* =========================== SIMULATION =========================== */
-/* Two products share one floor: MERITAGE (5 parallel feeders -> full assembly
-   -> pack) and SOLA (3 sub-assembly feeders -> frame assembly -> seat/finish).
-   They are genuinely different processes (different stations, times, people,
-   bottleneck), expressed in the same feeders -> assembly -> finish line model.
-   Pick the active half with the header switch; the choice is saved and the
-   page reloads into that line. Station IDs are reused (con/arm/bak/[tre/sea]/
-   fa/pak) so the layout/scene/sim code stays shared. */
-// ACTIVE line (the one you edit + that plays on Play) resolved after PRODUCTS below.
-
-const PRODUCTS = {
-  meritage: {
-    title: 'MERITAGE 3-SEATER',
-    pos: { con:[-12,-3.2], arm:[-6,-3.2], bak:[0,-3.2], tre:[6,-3.2], sea:[12,-3.2], fa:[-2,4.2], pak:[10,4.2] },
-    stations: [
-      { id:'con', title:'CONNECTORS',   sub:'Connectors',   ppl:1, t:19.25, role:'feeder', kind:'connectors', accent:'#1d3a66', steps:[{name:'Connectors', t:19.25}] },
-      { id:'arm', title:'ARMS',         sub:'Arm assembly', ppl:2, t:64,    role:'feeder', kind:'arm',        accent:'#1d3a66', double:true, steps:[{name:'Arm assembly', t:64}] },
-      { id:'bak', title:'BACK FRAME',   sub:'Back frame',   ppl:1, t:43.5,  role:'feeder', kind:'back',       accent:'#1d3a66', steps:[{name:'Back frame', t:43.5}] },
-      { id:'tre', title:'TRELLIS',      sub:'Trellis',      ppl:1, t:22.5,  role:'feeder', kind:'trellis',    accent:'#1d3a66', steps:[{name:'Trellis', t:22.5}] },
-      { id:'sea', title:'SEAT FRAME',   sub:'Seat frame',   ppl:1, t:47,    role:'feeder', kind:'seat',       accent:'#9a3b1f', bot:true, steps:[{name:'Seat frame', t:47}] },
-      { id:'fa',  title:'FULL ASSEMBLY',sub:'Assemble frame',ppl:2, t:58,   role:'fa',     accent:'#1d3a66', steps:[{name:'Assemble frame', t:58}] },
-      { id:'pak', title:'CUSHIONS & PACK',sub:'Cushions + ship',ppl:0, t:18, role:'pack',   accent:'#236043', steps:[{name:'Cushions + pack', t:18}] },
-    ],
-  },
-  // SOLA LOUNGE (No-Arms config) — real SWI times (sec→min). Seat Support Frame
-  // Assembly and Frame Prep have no measured time in the sheets and are omitted
-  // (not invented). Connector plates depend on rivet+prep; here they are a
-  // staged feeder bench — a line-level simplification of the real precedence.
-  sola: {
-    title: 'SOLA LOUNGE (NO-ARMS)',
-    pos: { con:[-8,-3.2], arm:[0,-3.2], bak:[8,-3.2], fa:[-2,4.2], pak:[10,4.2] },
-    stations: [
-      { id:'con', title:'RIVET NUTS',     sub:'Rivet nuts',      ppl:1, t:9.55,  role:'feeder', kind:'connectors', accent:'#1d3a66', steps:[{name:'Rivet nut installation', t:9.55}] },
-      { id:'arm', title:'CONNECTOR PREP', sub:'Connector prep',  ppl:1, t:15,    role:'feeder', kind:'connectors', accent:'#1d3a66', steps:[{name:'Connector pre-assembly (18 × 0:50)', t:15}] },
-      { id:'bak', title:'CONNECTOR PLATES',sub:'Connector plates',ppl:1, t:16.74,role:'feeder', kind:'back',       accent:'#1d3a66', steps:[{name:'Connector plate installation', t:13.07},{name:'Attach connectors to legs (4 × 0:55)', t:3.67}] },
-      { id:'fa',  title:'FRAME ASSEMBLY', sub:'Assemble frame',  ppl:2, t:37.62, role:'fa',     accent:'#1d3a66', bot:true, steps:[{name:'Frame sub-assembly', t:17},{name:'Frame connection assembly', t:10.62},{name:'Middle leg sub-assembly', t:3.33},{name:'Corner & end caps', t:6.67}] },
-      { id:'pak', title:'SEAT & FINISH',  sub:'Seat install',    ppl:0, t:13.25, role:'pack',   accent:'#236043', steps:[{name:'Seat frame installation', t:13.25}] },
-    ],
-  },
-};
-// BOTH lines are ALWAYS on the floor: Meritage on the LEFT deck, Sola on the
-// RIGHT deck, split by the central divider, sharing the one elevator. The toggle
-// only changes which line is ACTIVE — the active line is editable, drives the
-// readouts/panels, and is the one that actually simulates when you press Play.
-// The other line stays visible (staged, static) for context. Active is saved.
-const ACTIVE = (() => { try { return localStorage.getItem('m3d_product') === 'sola' ? 'sola' : 'meritage'; } catch (e) { return 'meritage'; } })();
-const PRODUCT = ACTIVE;   // existing per-line keys/logic key off this
-// Each line is confined to its deck. Meritage has 5 feeders incl. the double-
-// width ARMS bench, so it uses two staggered feeder rows to avoid overlap on the
-// narrow (40') deck; Sola's 3 feeders fit one row. fa/pak sit in a front row.
-const DECKPOS = {
-  meritage: { con:[-3.5,-6], bak:[0.5,-6], sea:[4.5,-6], arm:[-2,-1], tre:[3.5,-1], fa:[0,5], pak:[5,5] },   // left deck (2 feeder rows)
-  sola:     { con:[9.5,-3.2], arm:[13,-3.2], bak:[16.5,-3.2], fa:[11.5,4.2], pak:[16,4.2] },                 // right deck
-};
-const LTITLE = { meritage: 'Meritage', sola: 'Sola' };
-const OTHER = ACTIVE === 'meritage' ? 'sola' : 'meritage';
-const PROD = {
-  title: 'MERITAGE ▏ SOLA',
-  pos: DECKPOS[ACTIVE],
-  stations: PRODUCTS[ACTIVE].stations,
-  second: { pos: DECKPOS[OTHER], stations: PRODUCTS[OTHER].stations },
-};
-const ST = PROD.stations;
+const ST = [
+  { id:'con', title:'CONNECTORS',   sub:'Connectors',   ppl:1, t:19.25, role:'feeder', kind:'connectors', accent:'#1d3a66', steps:[{name:'Connectors', t:19.25}] },
+  { id:'arm', title:'ARMS',         sub:'Arm assembly', ppl:2, t:64,    role:'feeder', kind:'arm',        accent:'#1d3a66', double:true, steps:[{name:'Arm assembly', t:64}] },
+  { id:'bak', title:'BACK FRAME',   sub:'Back frame',   ppl:1, t:43.5,  role:'feeder', kind:'back',       accent:'#1d3a66', steps:[{name:'Back frame', t:43.5}] },
+  { id:'tre', title:'TRELLIS',      sub:'Trellis',      ppl:1, t:22.5,  role:'feeder', kind:'trellis',    accent:'#1d3a66', steps:[{name:'Trellis', t:22.5}] },
+  { id:'sea', title:'SEAT FRAME',   sub:'Seat frame',   ppl:1, t:47,    role:'feeder', kind:'seat',       accent:'#9a3b1f', bot:true, steps:[{name:'Seat frame', t:47}] },
+  { id:'fa',  title:'FULL ASSEMBLY',sub:'Assemble frame',ppl:2, t:58,   role:'fa',     accent:'#1d3a66', steps:[{name:'Assemble frame', t:58}] },
+  { id:'pak', title:'CUSHIONS & PACK',sub:'Cushions + ship',ppl:0, t:18, role:'pack',   accent:'#236043', steps:[{name:'Cushions + pack', t:18}] },
+];
 function recalc(id) { const s = get(id); if (s && s.steps) s.t = s.steps.reduce((a, st) => a + (parseFloat(st.t) || 0), 0); }
 const get = id => ST.find(s => s.id === id);
-const FEEDERS = ST.filter(s => s.role === 'feeder').map(s => s.id);   // parallel sub-assembly benches (varies by product)
-
-// ---- SHARED CONNECTORS table (one table on the divider feeds BOTH lines) ----
-// Connector pre-assembly for both lines is done at one shared table on the
-// central divider. Its load is the COMBINED demand (Meritage + Sola), so it
-// tends to be the shared bottleneck (esp. for Sola). Per line the connector-prep
-// station is: Meritage 'con' (CONNECTORS), Sola 'arm' (CONNECTOR PREP). The
-// active line's connector station becomes the shared table (moved to centre,
-// retimed to the combined total); the other line's is not drawn twice.
-const CONN_ID = { meritage: 'con', sola: 'arm' };
-const _connT = (prod, id) => { const s = PRODUCTS[prod].stations.find(x => x.id === id); return s ? s.t : 0; };
-const COMBINED_CONN = +(_connT('meritage', CONN_ID.meritage) + _connT('sola', CONN_ID.sola)).toFixed(2);
-const CONN_CENTER = [7.0, -1];   // on the central divider, between the two lines
-(() => {
-  const cs = get(CONN_ID[ACTIVE]);            // active line's connector station -> the shared table
-  if (cs) {
-    cs.title = 'CONNECTORS (BOTH LINES)';
-    cs.sub = 'Shared · M+S';
-    cs.steps = [{ name: 'Connector pre-assembly — Meritage + Sola', t: COMBINED_CONN }];
-    cs.t = COMBINED_CONN;
-    cs.shared = true;
-    PROD.pos[CONN_ID[ACTIVE]] = CONN_CENTER;   // move it onto the divider
-  }
-  PROD.second.skip = CONN_ID[OTHER];           // the other line's connectors = the same shared table; don't draw twice
-})();
 
 let N = 8;
 let sch = null, horizon = 0;
@@ -421,27 +343,26 @@ function eff(id) { const s = get(id); return (s.t || 0) / Math.max(1, s.ppl || 1
 function helpInto(id) { return (typeof helpArrows === 'undefined') ? 0 : helpArrows.reduce((s, a) => s + (a.to === id ? (a.helpMin || 0) : 0), 0); }
 function helpFromOp(id, idx) { return (typeof helpArrows === 'undefined') ? 0 : helpArrows.reduce((s, a) => s + ((a.from === id && (a.fromIdx || 0) === idx) ? (a.helpMin || 0) : 0), 0); }
 function effNet(id) { return Math.max(0.1, eff(id) - helpInto(id)); }   // a helped station's time drops by the help minutes
-function lineCyc() { return sch ? Math.max(...FEEDERS.map(id => sch.fT[id]), sch.ASM + sch.PACK) : 1; }
+function lineCyc() { return sch ? Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 1; }
 function availIdleOp(id, idx) { return Math.max(0, lineCyc() - effNet(id) - helpFromOp(id, idx)); }   // spare min/chair a specific operator can give
 function schedule() {
-  const fT={}; FEEDERS.forEach(id => fT[id]=effNet(id));          // per-feeder per-unit cycle time
-  const ASM=effNet('fa'), PACK=get('pak')?effNet('pak'):0;
-  const fEnd={}; FEEDERS.forEach(id => fEnd[id]=[]);
-  const kit=[],faStart=[],faEnd=[];
+  const seaT=effNet('sea'), armT=effNet('arm'), bakT=effNet('bak'), treT=effNet('tre'), conT=effNet('con');
+  const ASM=effNet('fa'), PACK=effNet('pak');
+  const seatEnd=[],armEnd=[],bakEnd=[],kit=[],faStart=[],faEnd=[];
   let prev=0;
   for (let u=0;u<N;u++){
-    let k=0; FEEDERS.forEach(id => { const e=fT[id]*(u+1); fEnd[id][u]=e; if (e>k) k=e; });
-    kit[u]=k;                                                     // assembly needs all feeder sub-parts for the unit
+    seatEnd[u]=seaT*(u+1); armEnd[u]=armT*(u+1); bakEnd[u]=bakT*(u+1);
+    kit[u]=Math.max(seatEnd[u], Math.min(armEnd[u],bakEnd[u]));   // seat AND (arm OR back)
     faStart[u]=Math.max(kit[u], prev);
     faEnd[u]=faStart[u]+ASM+PACK; prev=faEnd[u];
   }
-  sch={fT,fEnd,ASM,PACK,kit,faStart,faEnd};
+  sch={seaT,armT,bakT,treT,conT,ASM,PACK,seatEnd,armEnd,bakEnd,kit,faStart,faEnd};
   horizon=(faEnd[N-1]||0)+6;
-  const cyc=Math.max(...FEEDERS.map(id=>fT[id]), ASM+PACK);
+  const cyc=Math.max(conT,armT,bakT,treT,seaT,ASM+PACK);
   const cap=420/cyc;
-  let bot=get(FEEDERS[0]).sub, bv=fT[FEEDERS[0]];                 // slowest station = bottleneck
-  FEEDERS.forEach(id => { if (fT[id]>bv){ bv=fT[id]; bot=get(id).sub; } });
-  if (ASM+PACK>bv){ bv=ASM+PACK; bot='Full assy + pack'; }
+  let bot='Seat frame', bv=seaT;
+  [['Connectors',conT],['Arms',armT],['Back frame',bakT],['Trellis',treT],['Seat frame',seaT],['Full assy + pack',ASM+PACK]]
+    .forEach(([nm,v])=>{ if(v>bv){bv=v;bot=nm;} });
   ui.cyc.textContent=cyc.toFixed(1).replace(/\.0$/,'');
   ui.cap.textContent=cap.toFixed(1);
   ui.bot.textContent=`${bot} (${bv.toFixed(1).replace(/\.0$/,'')})`;
@@ -712,11 +633,10 @@ function refreshPath() {
 }
 
 // ---- help-movement arrows: where an operator goes to help after finishing ----
-// product-specific starter paths: idle feeder operators help the bottleneck.
-let helpArrows = (PRODUCT === 'sola'
-  ? [ { from:'con', fromIdx:0, to:'bak', helpMin:4 } ]              // rivet-nut op helps connector-plates
-  : [ { from:'tre', fromIdx:0, to:'sea', helpMin:5 },
-      { from:'con', fromIdx:0, to:'sea', helpMin:5 } ]);            // trellis + connectors help seat frame
+let helpArrows = [                    // [{from, fromIdx, to, helpMin}] — per-operator starter paths
+  { from:'tre', fromIdx:0, to:'sea', helpMin:5 },
+  { from:'con', fromIdx:0, to:'sea', helpMin:5 },
+];
 const helpGroup = new THREE.Group(); level2.add(helpGroup);
 const HELP_COL = 0x8f3fbf;
 function assignHelpers() {
@@ -755,15 +675,16 @@ function updateHelp() {
 
 /* ---- station layout: feeders in back row, FA + packing in front ---- */
 const OP_COLORS = [0x3a66a8, 0xb9772e, 0x2e7d4f, 0x8f5390, 0xa8923a, 0x3f8f8f, 0x9c4f45, 0x5c5f99];
-const POS = Object.assign({}, PROD.pos);   // station floor positions (per product); mutated by Edit-layout drags
+const POS = {
+  con:[-12, -3.2], arm:[-6, -3.2], bak:[0, -3.2], tre:[6, -3.2], sea:[12, -3.2],
+  fa:[-2, 4.2], pak:[10, 4.2],
+};
 const nodes = {};
 let opColorIdx = 0;
 const crew = []; // {fig, station, homeX, homeZ}
 
-// ONE station builder, used for BOTH lines (active engine line AND the other,
-// context line) so they render identically — same benches (incl. the double
-// ARMS table), labels, WIP, and crew spacing. Returns the meshes + crew specs.
-function buildStationMeshes(s, x, z) {
+ST.forEach(s => {
+  const [x, z] = POS[s.id];
   let st, led;
   if (s.double) {                                  // Arms = two 8'x3' benches joined end-to-end (16' x 3')
     const g = new THREE.Group();
@@ -787,7 +708,9 @@ function buildStationMeshes(s, x, z) {
   if (s.role === 'feeder') { visual = makeFeederWIP(s.kind); visual.g.position.set(x, 1.04, z); level2.add(visual.g); }
   if (s.role === 'fa') { visual = makeSofaProduct(); visual.g.position.set(x, 1.04, z); visual.update(0); level2.add(visual.g); }
 
-  const figs = [];
+  nodes[s.id] = { s, st, led, visual, label, mini, x, z, rot: 0 };
+
+  // crew figures
   const np = s.role === 'pack' ? 0 : s.ppl;
   for (let i = 0; i < np; i++) {
     const color = OP_COLORS[opColorIdx % OP_COLORS.length]; opColorIdx++;
@@ -796,16 +719,8 @@ function buildStationMeshes(s, x, z) {
     const bdx = (np > 1 ? (i - (np-1)/2) * 2 * spread : 0), bdz = 1.7;   // base offset from station (rotates with the table)
     fig.position.set(x + bdx, 0, z + bdz);
     level2.add(fig);
-    figs.push({ fig, bdx, bdz, idx: i, homeX: x + bdx, homeZ: z + bdz });
+    crew.push({ fig, station: s.id, bdx, bdz, homeX: x + bdx, homeZ: z + bdz, idx: i });
   }
-  return { st, led, label, mini, visual, figs };
-}
-
-ST.forEach(s => {
-  const [x, z] = POS[s.id];
-  const m = buildStationMeshes(s, x, z);
-  nodes[s.id] = { s, st: m.st, led: m.led, visual: m.visual, label: m.label, mini: m.mini, x, z, rot: 0 };
-  m.figs.forEach(f => crew.push({ fig: f.fig, station: s.id, bdx: f.bdx, bdz: f.bdz, homeX: f.homeX, homeZ: f.homeZ, idx: f.idx }));
 });
 // register the materials cart as a draggable source node (nodes/POS now exist)
 nodes.cart = { id:'cart', x:CART_DEF[0], z:CART_DEF[1], st:cartPad, s:{ id:'cart', title:'Materials cart' } };
@@ -821,7 +736,8 @@ const movingSofa = makeSofaProduct(); movingSofa.update(1); movingSofa.g.visible
    Per-feeder staging slot around the FA bench so all 5 converge visibly. ---- */
 const MAX_UNITS = 40;
 const TRAVEL = 4.5;            // sim-minutes a part spends in transit to FA
-const SLOT = { // offset from FA bench centre where each feeder's part waits (FEEDERS declared up top)
+const FEEDERS = ['con','arm','bak','tre','sea'];
+const SLOT = { // offset from FA bench centre where each feeder's part waits
   con:[-1.1,-0.35], arm:[-1.1,0.35], bak:[1.1,-0.35], tre:[1.1,0.35], sea:[0,0.0],   // staging spots on the full-assembly table
 };
 const travelParts = {};        // id -> array(MAX_UNITS) of part groups
@@ -835,37 +751,6 @@ FEEDERS.forEach(id => {
   travelParts[id] = arr;
 });
 
-/* ---- the OTHER (inactive) line: always shown on its deck for context, but
-   STATIC — it doesn't run when you press Play (only the active line does). Built
-   with staged sub-parts and neutral LEDs so it reads as "set up, idle". Toggle
-   to make it the active line to edit/simulate it. ---- */
-const secondLine = [];
-function buildSecondLine(cfg) {
-  if (!cfg) return;
-  cfg.stations.forEach(s => {
-    if (s.id === cfg.skip) return;                              // its connectors = the shared central table
-    const p = cfg.pos[s.id]; if (!p) return;
-    const m = buildStationMeshes(s, p[0], p[1]);                 // SAME builder as the active line
-    if (s.role === 'feeder' && m.visual) m.visual.update(0, N, N);   // staged pile, none in progress
-    if (s.role === 'fa' && m.visual) m.visual.g.visible = false;
-    setLed(m.led, 'idle', false);                               // neutral: this line isn't the one running
-    secondLine.push({ s, led: m.led });
-  });
-}
-buildSecondLine(PROD.second);
-
-// show the shared connectors table feeding the OTHER line too: a static feed
-// line from the central table to the other line's assembly bench.
-(() => {
-  if (!PROD.second || !PROD.second.pos) return;
-  const fa = PROD.second.pos.fa; if (!fa) return;
-  const y = 0.32;
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute([CONN_CENTER[0], y, CONN_CENTER[1], fa[0], y, fa[1]], 3));
-  const ln = new THREE.Line(geo, new THREE.LineDashedMaterial({ color: 0x1d3a66, dashSize: 0.4, gapSize: 0.25, transparent: true, opacity: 0.7 }));
-  ln.computeLineDistances(); level2.add(ln);
-})();
-
 controls.target.set(7, FLOOR2 + 0.8, 0);
 
 /* =========================== UI =========================== */
@@ -878,56 +763,6 @@ const ui = {
   bot: document.getElementById('bot'),
   labor: document.getElementById('labor'),
 };
-// ---- product / line switch (Meritage <-> Sola) ----
-// Switching reloads into the other line, but the VIEW carries over (camera,
-// open panels, speed, labels, unit count) so Sola opens looking just like the
-// Meritage you left. Panel positions persist on their own keys. Applied once.
-function captureView() {
-  return {
-    cam: [camera.position.x, camera.position.y, camera.position.z],
-    tgt: [controls.target.x, controls.target.y, controls.target.z],
-    speed: (typeof speed !== 'undefined' && speed) ? speed.value : null,
-    labelMode: (typeof labelMode !== 'undefined') ? labelMode : 1,
-    units: N,
-    panels: {
-      idle: !!(idlePanel && idlePanel.style.display !== 'none'),
-      help: !!(helpPanel && helpPanel.style.display !== 'none'),
-      task: !!(taskPanel && taskPanel.style.display !== 'none'),
-    },
-  };
-}
-function restoreView() {
-  let v; try { v = JSON.parse(localStorage.getItem('m3d_view')); } catch (e) {}
-  if (!v) return;
-  try { localStorage.removeItem('m3d_view'); } catch (e) {}     // apply once
-  if (Array.isArray(v.cam)) camera.position.set(v.cam[0], v.cam[1], v.cam[2]);
-  if (Array.isArray(v.tgt)) controls.target.set(v.tgt[0], v.tgt[1], v.tgt[2]);
-  controls.update();
-  if (v.speed != null && typeof speed !== 'undefined' && speed) speed.value = v.speed;
-  if (typeof v.labelMode === 'number') { labelMode = v.labelMode; if (typeof applyLabels === 'function') applyLabels(); }
-  if (v.units) { N = Math.max(1, Math.min(40, v.units)); if (typeof nInput !== 'undefined' && nInput) nInput.value = N; }
-  if (v.panels) {
-    if (v.panels.idle && idlePanel) { idlePanel.style.display = 'block'; renderIdle(); }
-    if (v.panels.help && helpPanel) { helpPanel.style.display = 'block'; renderHelpPanel(); }
-    if (v.panels.task && taskPanel) { taskPanel.style.display = 'block'; renderTaskChart(); }
-  }
-  schedule();
-}
-(() => {
-  const h1 = document.querySelector('header h1');
-  if (h1) h1.textContent = PROD.title + ' — 3D LINE MODEL';
-  document.title = PROD.title + ' — 3D Line Model';
-  const btn = document.getElementById('prodSwitch');
-  if (btn) {
-    btn.textContent = '✎ Editing: ' + LTITLE[ACTIVE];
-    btn.title = 'Both lines are shown. Click to edit / play the ' + LTITLE[OTHER] + ' line instead.';
-    btn.onclick = () => {
-      try { localStorage.setItem('m3d_view', JSON.stringify(captureView())); } catch (e) {}
-      try { localStorage.setItem('m3d_product', OTHER); } catch (e) {}
-      location.reload();
-    };
-  }
-})();
 let T = 0, playing = false;
 const playBtn = document.getElementById('play');
 function setPlay(v){ playing=v; playBtn.textContent = v ? '❚❚ Pause' : '▶ Play'; }
@@ -1006,10 +841,10 @@ document.getElementById('trips').onchange = e => { tripsPerUnit = Math.max(0, pa
 let dayMin = 420;   // 7-hr working day
 let taktDemand = 10;   // units/day target for the takt line
 const idlePanel = document.getElementById('idlePanel');
-const FEEDNAME = Object.fromEntries(ST.map(s => [s.id, s.sub || s.title]));
+const FEEDNAME = { con:'Connectors', arm:'Arms', bak:'Back frame', tre:'Trellis', sea:'Seat frame' };
 function operatorsList() {
   const list = [];
-  for (const id of FEEDERS) {
+  for (const id of ['con','arm','bak','tre','sea']) {
     const s = get(id), base = effNet(id);          // station's per-unit time (reduced if it receives help)
     for (let i = 0; i < s.ppl; i++) {
       const bpu = base + helpFromOp(id, i);         // each operator's own help time adds to their busy
@@ -1048,8 +883,7 @@ document.getElementById('idlebtn').onclick = () => {
 const helpPanel = document.getElementById('helpPanel');
 const stName = id => (get(id) ? get(id).title : id);
 function bottleneckInfo() {
-  const items = FEEDERS.map(id => [id, effNet(id)]);
-  items.push(['fapak', effNet('fa') + (get('pak') ? effNet('pak') : 0)]);
+  const items = [['con', effNet('con')], ['arm', effNet('arm')], ['bak', effNet('bak')], ['tre', effNet('tre')], ['sea', effNet('sea')], ['fapak', effNet('fa') + effNet('pak')]];
   let bn = items[0]; items.forEach(it => { if (it[1] > bn[1]) bn = it; });
   return { key: bn[0], time: bn[1], cap: 420 / bn[1] };
 }
@@ -1093,8 +927,8 @@ document.getElementById('helppaths').onclick = () => {
 const taskPanel = document.getElementById('taskPanel');
 function renderTaskChart() {
   if (!taskPanel || taskPanel.style.display === 'none') return;
-  const ids = ST.map(s => s.id);
-  const cyc = Math.max(...FEEDERS.map(id => effNet(id)), effNet('fa') + (get('pak') ? effNet('pak') : 0));
+  const ids = ['con','arm','bak','tre','sea','fa','pak'];
+  const cyc = Math.max(effNet('con'), effNet('arm'), effNet('bak'), effNet('tre'), effNet('sea'), effNet('fa') + effNet('pak'));
   // TOTAL LABOR = combined hands-on work of every person added up (raw work
   // content per unit, NOT divided by people). The per-station bars below are
   // still operator loading (work ÷ people); this headline is the full labor.
@@ -1131,7 +965,7 @@ document.getElementById('taskbtn').onclick = () => {
 /* =========================== EDIT LAYOUT =========================== */
 const YARD = 0.9144;                       // 1 unit = 1 metre; 1 yard = 0.9144 m
 const u2y = u => u / YARD;                  // units -> yards
-const LAYOUT_KEY = 'm3d_layout_v2_' + PRODUCT;   // per-product working layout (deck rescaled to real footprint)
+const LAYOUT_KEY = 'm3d_layout_v2';   // bumped: deck rescaled to real footprint
 
 function placeStation(id) {
   const nd = nodes[id]; if (!nd) return;
@@ -1171,8 +1005,8 @@ function setStationRot(id, rot) {
   const nd = nodes[id]; if (!nd) return;
   nd.rot = rot; placeStation(id);
 }
-function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
-function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } } catch (e) {} }
+function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraStations.map(id => { const n = nodes[id]; return { id, name: n.s.title, x: n.x, z: n.z, t: n.t || 0 }; }); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
+function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__extras)) o.__extras.forEach(e => { if (!nodes[e.id]) { addStation(e.name, e.x, e.z, e.id, e.t); const num = parseInt(String(e.id).replace(/\D/g, '')) || 0; if (num > extraSeq) extraSeq = num; } }); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } } catch (e) {} }
 
 // 1-yard grid on the deck
 function buildGrid() {
@@ -1211,9 +1045,39 @@ const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 const deckPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(FLOOR2 - 0.0)); // y = FLOOR2
 let editing = false, dragId = null, savedView = null;
-const stList = () => [...ST.map(s => nodes[s.id]), nodes.cart].filter(n => n && n.st);
+
+/* ---- ADDED STATIONS: extra benches you can drop on either side and drag where
+   you want. They are independent — NOT part of the Meritage line, so they never
+   affect its schedule/labor/bottleneck (kept out of ST). The right deck is the
+   "other side"; drag one across the middle line to put it on either side. ---- */
+const extraStations = [];
+let extraSeq = 0;
+function addStation(name, x, z, id, t) {
+  id = id || ('x' + (++extraSeq));
+  const r = makeBench(8, 3); r.st.position.set(x, 0, z); level2.add(r.st);
+  const accent = '#5c5f99';
+  const label = makeStationLabel(name, 'Added station', t ? t + ' min' : '—', accent);
+  label.position.set(x, 2.85, z); level2.add(label);
+  const mini = makeMiniLabel(name, accent); mini.position.set(x, 2.55, z); level2.add(mini);
+  setLed(r.led, 'idle', false);
+  nodes[id] = { s: { id, title: name, sub: 'Added station', accent, steps: [{ name, t: t || 0 }], ppl: 1 }, st: r.st, led: r.led, label, mini, x, z, rot: 0, extra: true, t: t || 0 };
+  POS[id] = [x, z];
+  extraStations.push(id);
+  return id;
+}
+const stList = () => [...ST.map(s => nodes[s.id]), ...extraStations.map(id => nodes[id]), nodes.cart].filter(n => n && n.st);
 const measurePanel = document.getElementById('measure');
 const editBtn = document.getElementById('edit');
+
+document.getElementById('addStation').onclick = () => {
+  const name = (prompt('New station name:', 'New station') || '').trim();
+  if (!name) return;
+  const n = extraStations.length;
+  const x = 16, z = -5 + n * 2.5;                               // drop in the open area on the OTHER (right) side; drag it anywhere
+  addStation(name, x, z);
+  if (!editing) setEditing(true);                               // enter edit mode so you can drag it where you want
+  saveLayout();
+};
 
 function pointerNDC(e) {
   const r = renderer.domElement.getBoundingClientRect();
@@ -1401,51 +1265,20 @@ document.getElementById('rackbtn').onclick = () => {
   addRack(deckCx, DECK.z0 + 1);
   saveLayout();
 };
-/* ---- draggable floating panels: grab any panel by its title bar and move it
-   around the screen; positions persist per panel in localStorage. The drag
-   listener lives on the panel (not the title), so it survives innerHTML
-   re-renders of the panel contents. ---- */
-(() => {
-  let topZ = 30;
-  const keyOf = id => 'm3d_panel_' + id;
-  ['times','idlePanel','helpPanel','taskPanel','measure'].forEach(id => {
-    const el = document.getElementById(id); if (!el) return;
-    try { const s = JSON.parse(localStorage.getItem(keyOf(id))); if (s && typeof s.left === 'number') { el.style.left = s.left + 'px'; el.style.top = s.top + 'px'; el.style.right = 'auto'; el.style.bottom = 'auto'; } } catch (e) {}
-    el.addEventListener('pointerdown', e => {
-      const h = e.target.closest('h3,h4'); if (!h || !el.contains(h) || e.button !== 0) return;   // only drag by the title bar
-      e.preventDefault();
-      el.style.zIndex = ++topZ;
-      const par = el.offsetParent || document.body;
-      const maxL = Math.max(0, par.clientWidth - el.offsetWidth), maxT = Math.max(0, par.clientHeight - el.offsetHeight);
-      const sx = e.clientX, sy = e.clientY, sl = el.offsetLeft, st = el.offsetTop;
-      const move = ev => {
-        const nl = Math.max(0, Math.min(sl + (ev.clientX - sx), maxL));
-        const nt = Math.max(0, Math.min(st + (ev.clientY - sy), maxT));
-        el.style.left = nl + 'px'; el.style.top = nt + 'px'; el.style.right = 'auto'; el.style.bottom = 'auto';
-      };
-      const up = () => {
-        window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
-        try { localStorage.setItem(keyOf(id), JSON.stringify({ left: el.offsetLeft, top: el.offsetTop })); } catch (e) {}
-      };
-      window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
-    });
-  });
-})();
-
 loadLayout();
 refreshPath();
 buildHelp();   // render seeded/loaded help paths
 rebuildDivider();   // align the crossing to the connector station
 
 /* ---- named layouts: save / load / compare different floor plans ---- */
-const LAYOUTS_KEY = 'm3d_layouts_v2_' + PRODUCT;   // per-product named layouts
+const LAYOUTS_KEY = 'm3d_layouts_v2';
 const readLayouts = () => { try { return JSON.parse(localStorage.getItem(LAYOUTS_KEY)) || {}; } catch (e) { return {}; } };
 const writeLayouts = o => { try { localStorage.setItem(LAYOUTS_KEY, JSON.stringify(o)); } catch (e) {} };
 function snapshot() {
   const pos = {}, times = {};
   ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
   if (nodes.cart) pos.cart = [nodes.cart.x, nodes.cart.z];
-  const cap = sch ? 420 / lineCyc() : 0;
+  const cap = sch ? 420 / Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 0;
   return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), ppl: Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), cap: +cap.toFixed(1) };
 }
 function applyLayout(L) {
@@ -1492,10 +1325,11 @@ function update(){
   if (!sch) return;
   ui.clock.textContent = Math.round(T) + ' min';
   // feeders
+  const fmap = { con:'conT', arm:'armT', bak:'bakT', tre:'treT', sea:'seaT' };
   let shipped = 0; for (let u=0;u<N;u++) if (T>=sch.faEnd[u]) shipped++;
   const fa = nodes.fa;
-  FEEDERS.forEach(id => {
-    const t = sch.fT[id];
+  ['con','arm','bak','tre','sea'].forEach(id => {
+    const t = sch[fmap[id]];
     const built = Math.min(N, Math.floor(T / t));
     const frac = built >= N ? 1 : (T % t) / t;
     const nd = nodes[id];
@@ -1503,7 +1337,7 @@ function update(){
     nd.visual.update(built >= N ? 0 : frac, 0, N);
     setLed(nd.led, built >= N ? 'done' : (T>0 && frac>0 ? 'active':'idle'), built < N && T>0);
     // ---- traveling finished parts: feeder -> FA staging -> consumed at faStart ----
-    const t2 = t; const pool = travelParts[id]; const off = SLOT[id] || [0,0];
+    const t2 = t; const pool = travelParts[id]; const off = SLOT[id];
     const sx0 = nd.x, sz0 = nd.z;
     const tx = fa.x + off[0], tz = fa.z + off[1];
     for (let u = 0; u < N; u++) {
@@ -1561,7 +1395,7 @@ function update(){
 
   // FA crew walk to packing during pack phase; help-arrow operators walk to help during their idle slack
   const packing = (cur>=0 && phase==='pack');
-  const cyc = Math.max(0.001, lineCyc());
+  const cyc = Math.max(0.001, sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK);
   crew.forEach(c => {
     let tx = c.homeX, tz = c.homeZ;
     if (c.station === 'fa' && packing) { tx = POS.pak[0] + (c.idx - 0.5) * 1.1; tz = POS.pak[1] + 1.7; }
@@ -1616,6 +1450,5 @@ function loop(now){
   requestAnimationFrame(loop);
 }
 schedule();
-restoreView();   // carry camera / open panels / speed / units over from a line switch
 update();
 requestAnimationFrame(loop);
