@@ -929,9 +929,12 @@ function renderTaskChart() {
   ids.forEach(id => {
     const s = get(id), tt = effNet(id);
     const onBn = isBottleneckTarget(id, bn.key);
+    const stepsArr = s.steps || [{ name: s.title, t: tt }];
+    const baseSum = stepsArr.reduce((a, st) => a + (parseFloat(st.t) || 0), 0) || tt;
+    const f = tt / baseSum;                                   // scale steps so the bar totals the NET station time (matches the label + takt line)
     let seg = '';
-    (s.steps || [{ name: s.title, t: tt }]).forEach((st, i) => {
-      const sw = (st.t / scaleMax) * 100;
+    stepsArr.forEach((st, i) => {
+      const sw = ((parseFloat(st.t) || 0) * f / scaleMax) * 100;
       const col = onBn ? (i % 2 ? '#c0552c' : '#d98a6e') : (i % 2 ? '#2f6df6' : '#7ba6e0');
       seg += `<i style="width:${sw}%;background:${col}" title="${(st.name||'').replace(/"/g,'')} · ${st.t} min"></i>`;
     });
