@@ -168,6 +168,19 @@ Station IDs are reused (con/arm/bak/[tre/sea]/fa/pak) so scene/sim code is share
   attach 3.67) → Frame Assembly (37.62, 2p = sub 17 + connection 10.62 + middle
   leg 3.33 + caps 6.67) → Seat & Finish 13.25. Total labor 92.2, cycle ~33.3,
   ~12.6/day.
+**Both view (2026-06):** the toggle now cycles Meritage → Sola → **Both**. The
+two lines run in parallel IRL on two decks split by the central divider, sharing
+the one elevator (the floor was already built as two decks + a painted middle
+line; the right deck was empty). Both mode keeps the FULL Meritage engine on the
+LEFT deck (primary — editable, simulated, drives the readouts/panels) and adds
+the Sola line on the RIGHT deck via a self-contained visual animator
+(`buildSecondLine`/`updateSecond`) — NOT a full precedence sim (each feeder
+cycles its WIP, the FA loops a build, paced to per-operator times). Single
+Meritage/Sola modes are unchanged (engine untouched). `PRODUCTS.both` holds the
+left-deck `pos` (Meritage), `stations` (Meritage), and `second:{pos,stations}`
+(Sola, right deck). To give the right line a full editable simulation too, it
+would need the per-line schedule/update refactor (deferred).
+
 - **Sola modeling caveats (flag before trusting):** Seat Support Frame Assembly
   and Frame Prep have NO measured time anywhere → OMITTED (not invented).
   Connector plates really depend on rivet+prep but are modeled as a parallel
