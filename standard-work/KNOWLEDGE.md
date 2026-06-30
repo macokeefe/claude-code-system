@@ -198,6 +198,30 @@ standalone/Meritage_3D_Line.entry.js --bundle --format=iife --minify
 `<script>` of the HTML scaffold (lines before `<script>` are the hand-authored
 DOM/CSS; everything after is the bundle). No npm build script wired for it.
 
+## Sola No-Arms updated SWI + material flow (2026-06)
+
+Newer "Sola_Lounge_no_armSWI_in_progress.csv" (No Arms, **No middle leg**) —
+total **132.73 min**, 9 timed steps (supersedes the older partial seed values):
+1 PPE; 2 Rivet nut install **8.5**; 3 Connector Pre-Assembly **11.66** (14
+connectors — the connector lady); 4 Connector Plate Install **13**; 5 Connector
+Attachment **3.66** (4 connectors); 6 Frame Sub-Assembly **17** (2×4-leg); 7
+Frame Connection Assembly **17.5**; 8 Seat Support Frame / trellis **33** (now
+MEASURED — was missing); 9 Trellis Frame Installation **13.41**; 10 Corner & End
+Caps **15**. No middle leg, no separate Frame Prep.
+
+Material flow (parts come-from → go-to), engineer's CSV:
+- cart → Rivet Nuts, Connector Pre-Assembly, Seat Support (all prereq-free).
+- Rivet Nuts + Connector Pre-Assembly → Connector Plate Install AND Connector
+  Attachment (two branches).
+- Connector Plate + Connector Attachment → Frame Sub-Assembly → Frame Connection.
+- Frame Connection → Corner Caps AND Trellis Frame Installation.
+- Seat Support → Trellis Frame Installation. → finished sofa → ship.
+The shared connector lady, when a task is set to the Sola side, sends Sola
+connectors to the Sola Connector Plate / Attachment stations.
+
+App naming: the "other side" is now labelled **"Sola (no arms)"** throughout the
+UI (internal side value stays `other`).
+
 ## 3D Floor presentation restyle (2026-06)
 
 The engineer wants the 3D Floor boss-presentable: "simple… super good for

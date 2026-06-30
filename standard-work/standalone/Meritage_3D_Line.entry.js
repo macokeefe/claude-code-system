@@ -795,7 +795,7 @@ timeBox.appendChild(moveCtl);
 // Meritage station-times table (top) + a SEPARATE table for the other side.
 const mHdr = document.createElement('div'); mHdr.style.cssText = 'font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#15263a;font-weight:800;margin:4px 0 4px'; mHdr.textContent = 'Meritage — station steps'; timeBox.appendChild(mHdr);
 const stepsHost = document.createElement('div'); stepsHost.id = 'stepsHost'; timeBox.appendChild(stepsHost);
-const oHdr = document.createElement('div'); oHdr.style.cssText = 'font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#5c5f99;font-weight:800;margin:14px 0 4px;border-top:2px solid #e0e3ea;padding-top:10px'; oHdr.textContent = 'Other side — station steps'; timeBox.appendChild(oHdr);
+const oHdr = document.createElement('div'); oHdr.style.cssText = 'font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#5c5f99;font-weight:800;margin:14px 0 4px;border-top:2px solid #e0e3ea;padding-top:10px'; oHdr.textContent = 'Sola (no arms) — station steps'; timeBox.appendChild(oHdr);
 const stepsHost2 = document.createElement('div'); stepsHost2.id = 'stepsHost2'; timeBox.appendChild(stepsHost2);
 const sHdr = document.createElement('div'); sHdr.style.cssText = 'font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#7a5b1f;font-weight:800;margin:14px 0 4px;border-top:2px solid #e0e3ea;padding-top:10px'; sHdr.textContent = 'Shared — connector station'; timeBox.appendChild(sHdr);
 const stepsHost3 = document.createElement('div'); stepsHost3.id = 'stepsHost3'; timeBox.appendChild(stepsHost3);
@@ -891,7 +891,7 @@ function renderTimes() {
   const mer = [...ST.filter(s => s.id !== 'con'), ...extraStations.filter(id => sideOf(nodes[id].x) === 'meritage').map(id => nodes[id].s)];   // con shown in the Shared table
   const oth = extraStations.filter(id => sideOf(nodes[id].x) === 'other').map(id => nodes[id].s);
   stepsHost.innerHTML = rowsHtml(mer);
-  stepsHost2.innerHTML = oth.length ? rowsHtml(oth) : '<div style="font-size:11px;color:#8a93a0">No stations on the other side yet. Add one with “＋ Add station”, or drag a station across the middle line.</div>';
+  stepsHost2.innerHTML = oth.length ? rowsHtml(oth) : '<div style="font-size:11px;color:#8a93a0">No Sola (no arms) stations yet. Add one with “＋ Add station”, or drag a station across the middle line.</div>';
   wireRows(stepsHost); wireRows(stepsHost2);
 }
 renderTimes();
@@ -907,12 +907,12 @@ function renderShared() {
   (c.steps || []).forEach(s => { if (!s.side) s.side = 'meritage'; });
   const mer = c.steps.filter(s => s.side !== 'other').reduce((a, s) => a + (parseFloat(s.t) || 0), 0);
   const oth = c.steps.filter(s => s.side === 'other').reduce((a, s) => a + (parseFloat(s.t) || 0), 0);
-  let html = `<div style="font-size:10.5px;color:#6b7785;margin-bottom:5px">${c.title} — the connector lady. Assign each task to a side. → Meritage <b>${+mer.toFixed(2)}</b> min · Other <b>${+oth.toFixed(2)}</b> min</div>`;
+  let html = `<div style="font-size:10.5px;color:#6b7785;margin-bottom:5px">${c.title} — the connector lady. Assign each task to a side. → Meritage <b>${+mer.toFixed(2)}</b> min · Sola (no arms) <b>${+oth.toFixed(2)}</b> min. Sola-side tasks send Sola connectors.</div>`;
   c.steps.forEach((st, i) => {
     html += `<div class="shrow">
       <input class="sname" data-i="${i}" value="${(st.name || '').replace(/"/g, '&quot;')}"/>
       <input class="stime" type="number" step="0.25" min="0" data-i="${i}" value="${st.t}"/>
-      <select class="sside" data-i="${i}"><option value="meritage"${st.side !== 'other' ? ' selected' : ''}>Meritage</option><option value="other"${st.side === 'other' ? ' selected' : ''}>Other</option></select>
+      <select class="sside" data-i="${i}"><option value="meritage"${st.side !== 'other' ? ' selected' : ''}>Meritage</option><option value="other"${st.side === 'other' ? ' selected' : ''}>Sola (no arms)</option></select>
       <button class="sdel" data-i="${i}">✕</button></div>`;
   });
   html += `<button class="sadd" id="shAdd">+ add task</button>`;
