@@ -1410,6 +1410,28 @@ document.getElementById('delLayout').onclick = () => {
 };
 refreshLayoutSel();
 
+// ---- Export / Import a layout as a file (so a layout can be shared between
+// computers — localStorage doesn't travel with the HTML file) ----
+document.getElementById('exportLayout').onclick = () => {
+  saveLayout();                                              // capture the current on-screen arrangement
+  const data = localStorage.getItem(LAYOUT_KEY) || '{}';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+  a.download = 'meritage-line-layout.json'; document.body.appendChild(a); a.click();
+  a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+const importFile = document.getElementById('importFile');
+document.getElementById('importLayout').onclick = () => importFile.click();
+importFile.onchange = e => {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try { JSON.parse(reader.result); localStorage.setItem(LAYOUT_KEY, reader.result); location.reload(); }
+    catch (err) { alert('That file isn’t a valid layout export.'); }
+  };
+  reader.readAsText(f); importFile.value = '';
+};
+
 /* =========================== UPDATE =========================== */
 function setLed(mat, state, active){ (Array.isArray(mat)?mat:[mat]).forEach(m=>{ m.color.setHex(RING[state]); m.emissive.setHex(state==='idle'?0x000000:RING[state]); m.emissiveIntensity = active?1.1:0.5; }); }
 
