@@ -1034,10 +1034,26 @@ document.getElementById('trips').onchange = e => { tripsPerUnit = Math.max(0, pa
 // ---- idle-time-per-operator chart (full day) ----
 let dayMin = 420;   // 7-hr working day
 let taktDemand = 10;   // units/day target for the takt line
+let chartLine = 'meritage';   // which line the Idle / Task / Help panels show
+function lineSel() {
+  return `<select class="lineSel" style="font-size:11px;padding:2px 4px;margin:0 0 7px">
+    <option value="meritage"${chartLine === 'meritage' ? ' selected' : ''}>Meritage</option>
+    <option value="sola"${chartLine === 'sola' ? ' selected' : ''}>Sola (no arms)</option></select>`;
+}
+function wireLineSel(panel) {
+  const s = panel.querySelector('.lineSel');
+  if (s) s.onchange = e => { chartLine = e.target.value; renderIdle(); renderHelpPanel(); renderTaskChart(); };
+}
 const idlePanel = document.getElementById('idlePanel');
 const FEEDNAME = { con:'Connectors', arm:'Arms', bak:'Back frame', tre:'Trellis', sea:'Seat frame' };
-function operatorsList() {
+function operatorsList(line) {
   const list = [];
+  if (line === 'sola') {
+    orderedSola().forEach(id => { const s = nodes[id].s, ppl = Math.max(1, s.ppl || 1), per = (s.t || 0) / ppl; for (let i = 0; i < ppl; i++) list.push({ name: s.title + (ppl > 1 ? ' ' + (i + 1) : ''), bpu: per }); });
+    const conSola = (get('con').steps || []).filter(s => s.side === 'other').reduce((a, s) => a + (parseFloat(s.t) || 0), 0);
+    if (conSola > 0) list.push({ name: 'Connectors (Sola)', bpu: conSola });
+    return list;
+  }
   for (const id of ['con','arm','bak','tre','sea']) {
     const s = get(id), base = effNet(id);          // station's per-unit time (reduced if it receives help)
     for (let i = 0; i < s.ppl; i++) {
@@ -1053,10 +1069,11 @@ function operatorsList() {
 }
 function renderIdle() {
   if (!idlePanel || idlePanel.style.display === 'none') return;
-  const ops = operatorsList();
+  const ops = operatorsList(chartLine);
+  if (!ops.length) { idlePanel.innerHTML = `<h3>Idle time per operator</h3>` + lineSel() + '<div class="ihint">No Sola stations yet.</div>'; wireLineSel(idlePanel); return; }
   const cyc = Math.max(0.001, ...ops.map(o => o.bpu));     // line paces at the busiest operator
   const units = dayMin / cyc;
-  let html = `<h3>Idle time per operator — ${(dayMin/60).toFixed(1)}-hr day</h3>`;
+  let html = `<h3>Idle time per operator — ${(dayMin/60).toFixed(1)}-hr day</h3>` + lineSel();
   html += `<div class="ihint">~${units.toFixed(1)} units/day · day length <input type="number" id="dayHrs" value="${(dayMin/60)}" min="1" max="16" step="0.5" style="width:46px"> hr · blue = working</div>`;
   ops.forEach(o => {
     const busy = Math.min(dayMin, o.bpu * units), idle = Math.max(0, dayMin - busy), util = busy / dayMin * 100;
@@ -1065,6 +1082,7 @@ function renderIdle() {
          +  `<span class="iv"><b>${Math.round(idle)} min</b> idle (${Math.round(100-util)}%)</span></div>`;
   });
   idlePanel.innerHTML = html;
+  wireLineSel(idlePanel);
   const dh = document.getElementById('dayHrs');
   if (dh) dh.onchange = e => { dayMin = Math.max(60, (parseFloat(e.target.value) || 7) * 60); renderIdle(); };
 }
@@ -1084,10 +1102,16 @@ function bottleneckInfo() {
 function isBottleneckTarget(to, bnKey) { return bnKey === 'fapak' ? (to === 'fa' || to === 'pak') : (to === bnKey); }
 function renderHelpPanel() {
   if (!helpPanel || helpPanel.style.display === 'none') return;
+  if (chartLine === 'sola') {
+    const ids = orderedSola();
+    const cyc = Math.max(0.001, ...ids.map(id => (nodes[id].s.t || 0) / Math.max(1, nodes[id].s.ppl || 1)), 0.001);
+    helpPanel.innerHTML = `<h3>Help paths</h3>` + lineSel() + `<div class="ihint"><b>Sola line: ${ids.length ? (420 / cyc).toFixed(1) : '—'} units/day</b>. Help paths (operators relieving the bottleneck) are modeled on the Meritage line; the Sola line runs as a simple flow-shop for now.</div>`;
+    wireLineSel(helpPanel); return;
+  }
   const bn = bottleneckInfo();
   const bnName = bn.key === 'fapak' ? 'Full assy + pack' : FEEDNAME[bn.key];
-  const head = `<h3>Help paths</h3><div class="ihint"><b>Line now: ${bn.cap.toFixed(1)} chairs/day</b> · bottleneck: ${bnName} (${bn.time.toFixed(1)} min). Output only rises when the bottleneck drops.</div>`;
-  if (!helpArrows.length) { helpPanel.innerHTML = head + '<div class="ihint">No paths — click “➤ Help arrow”, then a FROM station and the TO station.</div>'; return; }
+  const head = `<h3>Help paths</h3>` + lineSel() + `<div class="ihint"><b>Line now: ${bn.cap.toFixed(1)} chairs/day</b> · bottleneck: ${bnName} (${bn.time.toFixed(1)} min). Output only rises when the bottleneck drops.</div>`;
+  if (!helpArrows.length) { helpPanel.innerHTML = head + '<div class="ihint">No paths — click “➤ Help arrow”, then a FROM station and the TO station.</div>'; wireLineSel(helpPanel); return; }
   let html = head;
   helpArrows.forEach((a, i) => {
     const spare = availIdleOp(a.from, a.fromIdx || 0) + (a.helpMin || 0);
@@ -1111,6 +1135,7 @@ function renderHelpPanel() {
   helpPanel.querySelectorAll('.hdel').forEach(b => b.onclick = e => {
     helpArrows.splice(+e.target.dataset.i, 1); buildHelp(); schedule(); renderIdle(); saveLayout();
   });
+  wireLineSel(helpPanel);
 }
 document.getElementById('helppaths').onclick = () => {
   helpPanel.style.display = (helpPanel.style.display === 'none') ? 'block' : 'none';
@@ -1121,25 +1146,30 @@ document.getElementById('helppaths').onclick = () => {
 const taskPanel = document.getElementById('taskPanel');
 function renderTaskChart() {
   if (!taskPanel || taskPanel.style.display === 'none') return;
-  const ids = ['con','arm','bak','tre','sea','fa','pak'];
-  // Full assembly + pack are done by the SAME 2 people back-to-back, so they're
-  // one bar in this chart (their combined time is the real bottleneck vs takt).
-  const rows = ['con','arm','bak','tre','sea'].map(id => ({ title: get(id).title, key: id, tt: effNet(id), steps: get(id).steps }));
-  rows.push({ title: 'FULL ASSEMBLY + PACK', key: 'fapak', tt: effNet('fa') + effNet('pak'), steps: [...(get('fa').steps || []), ...(get('pak').steps || [])] });
-  const cyc = Math.max(effNet('con'), effNet('arm'), effNet('bak'), effNet('tre'), effNet('sea'), effNet('fa') + effNet('pak'));
-  // TOTAL LABOR = combined hands-on work of every person added up (raw work
-  // content per unit, NOT divided by people). The per-station bars below are
-  // still operator loading (work ÷ people); this headline is the full labor.
-  const totalLabor = ids.reduce((a, id) => a + (get(id).t || 0), 0);
-  const bn = bottleneckInfo();
+  let rows, totalLabor;
+  if (chartLine === 'sola') {
+    const ids = orderedSola();
+    rows = ids.map(id => { const s = nodes[id].s; return { title: s.title, tt: (s.t || 0) / Math.max(1, s.ppl || 1), steps: s.steps, bn: false }; });
+    const conSola = (get('con').steps || []).filter(s => s.side === 'other').reduce((a, s) => a + (parseFloat(s.t) || 0), 0);
+    if (conSola > 0) rows.unshift({ title: 'CONNECTORS (Sola)', tt: conSola, steps: [{ name: 'Sola connectors', t: conSola }], bn: false });
+    totalLabor = ids.reduce((a, id) => a + (nodes[id].s.t || 0), 0) + conSola;
+  } else {
+    // Full assembly + pack are done by the SAME 2 people back-to-back → one bar.
+    rows = ['con','arm','bak','tre','sea'].map(id => ({ title: get(id).title, tt: effNet(id), steps: get(id).steps, bn: false }));
+    rows.push({ title: 'FULL ASSEMBLY + PACK', tt: effNet('fa') + effNet('pak'), steps: [...(get('fa').steps || []), ...(get('pak').steps || [])], bn: false });
+    totalLabor = ['con','arm','bak','tre','sea','fa','pak'].reduce((a, id) => a + (get(id).t || 0), 0);
+  }
+  let bnR = null; rows.forEach(r => { if (!bnR || r.tt > bnR.tt) bnR = r; }); if (bnR) bnR.bn = true;
+  const cyc = Math.max(0.001, ...rows.map(r => r.tt));
   const takt = dayMin / Math.max(1, taktDemand);
   const scaleMax = Math.max(cyc, takt) * 1.04;            // fit both the bars and the takt line
   const taktPct = (takt / scaleMax) * 100;
-  let html = `<h3>Task distribution — operator loading</h3>`;
+  let html = `<h3>Task distribution — operator loading</h3>` + lineSel();
+  if (!rows.length) { taskPanel.innerHTML = html + '<div class="ihint">No Sola stations yet.</div>'; wireLineSel(taskPanel); return; }
   html += `<div class="ihint"><b>Total labor: ${totalLabor.toFixed(1)} min/unit</b> · cycle ${cyc.toFixed(1)} · <span style="color:#d11;font-weight:700">takt ${takt.toFixed(1)} min</span> (<input type="number" id="taktDemand" value="${taktDemand}" min="1" style="width:44px"> units / ${(dayMin/60).toFixed(1)}-hr day). Red line = takt.</div>`;
   rows.forEach(row => {
     const tt = row.tt;
-    const onBn = row.key === 'fapak' ? bn.key === 'fapak' : isBottleneckTarget(row.key, bn.key);
+    const onBn = row.bn;
     const stepsArr = (row.steps && row.steps.length) ? row.steps : [{ name: row.title, t: tt }];
     const baseSum = stepsArr.reduce((a, st) => a + (parseFloat(st.t) || 0), 0) || tt;
     const f = tt / baseSum;                                   // scale steps so the bar totals the NET station time (matches the label + takt line)
@@ -1152,6 +1182,7 @@ function renderTaskChart() {
     html += `<div class="trow2"><span class="tn2">${row.title}${onBn?' ◄':''}</span><span class="bar2">${seg}<span class="takt2" style="left:${taktPct}%"></span></span><span class="v2">${tt.toFixed(1)}m</span></div>`;
   });
   taskPanel.innerHTML = html;
+  wireLineSel(taskPanel);
   const td = document.getElementById('taktDemand');
   if (td) td.oninput = e => {                               // live: takt line + minutes move as you type/spin
     taktDemand = Math.max(1, parseInt(e.target.value) || 1);
