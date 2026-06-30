@@ -809,13 +809,16 @@ const ui = {
   labor: document.getElementById('labor'),
 };
 let T = 0, playing = false;
+let Ts = 0, solaSched = null, solaHorizon = 0, playScope = 'both';   // Sola has its own clock so the lines can run together or separately
 const playBtn = document.getElementById('play');
 function setPlay(v){ playing=v; playBtn.textContent = v ? '❚❚ Pause' : '▶ Play'; }
-playBtn.onclick = () => { if (T >= horizon) T = 0; setPlay(!playing); };
-document.getElementById('reset').onclick = () => { T = 0; setPlay(false); };
+playBtn.onclick = () => { if (playScope !== 'sola' && T >= horizon) T = 0; if (playScope !== 'meritage' && Ts >= solaHorizon) Ts = 0; setPlay(!playing); };
+document.getElementById('reset').onclick = () => { T = 0; Ts = 0; setPlay(false); };
+const playScopeSel = document.getElementById('playScope');
+if (playScopeSel) playScopeSel.onchange = e => { playScope = e.target.value; T = 0; Ts = 0; setPlay(false); };
 const nInput = document.getElementById('n');
 nInput.value = N;
-nInput.onchange = e => { N = Math.max(1, Math.min(40, parseInt(e.target.value)||8)); schedule(); T=0; setPlay(false); };
+nInput.onchange = e => { N = Math.max(1, Math.min(40, parseInt(e.target.value)||8)); schedule(); if (typeof buildSolaSched==='function') buildSolaSched(); T=0; Ts=0; setPlay(false); };
 const speed = document.getElementById('speed');
 document.getElementById('cam').onclick = () => { camera.position.set(7,30,52); controls.target.set(7,FLOOR2+0.8,0); };
 document.getElementById('top').onclick = () => { camera.position.set(4,FLOOR2+38,1); controls.target.set(4,FLOOR2,1); };
@@ -847,6 +850,36 @@ function renderSolaData() {
   set('solaCap', cap > 0 ? cap.toFixed(1) : '—');
   set('solaBot', cyc > 0 ? `${bot} (${cyc.toFixed(1).replace(/\.0$/, '')})` : '— none yet —');
   set('solaCount', ids.length);
+  buildSolaSched();
+}
+// Sola flow-shop simulation (its own clock Ts): units flow through the Sola
+// stations in left-to-right order; each station = its per-operator time.
+function orderedSola() {
+  return extraStations.filter(id => sideOf(nodes[id].x) === 'other').sort((a, b) => nodes[a].x - nodes[b].x);
+}
+function buildSolaSched() {
+  const ids = orderedSola();
+  const time = ids.map(id => { const s = nodes[id].s; return Math.max(0.1, (s.t || 0) / Math.max(1, s.ppl || 1)); });
+  const finish = ids.map(() => []);
+  for (let u = 0; u < N; u++) for (let k = 0; k < ids.length; k++) {
+    const pk = k > 0 ? finish[k - 1][u] : 0, pu = u > 0 ? finish[k][u - 1] : 0;
+    finish[k][u] = Math.max(pk, pu) + time[k];
+  }
+  solaSched = { ids, time, finish, N };
+  solaHorizon = ids.length ? ((finish[ids.length - 1][N - 1] || 0) + 4) : 0;
+}
+function solaUpdate() {
+  if (!solaSched) return;
+  const { ids, time, finish, N: sn } = solaSched; if (!ids.length) return;
+  let shipped = 0; for (let u = 0; u < sn; u++) if (Ts >= finish[ids.length - 1][u]) shipped++;
+  ids.forEach((id, k) => {
+    const nd = nodes[id]; if (!nd) return;
+    if (Ts <= 0) { setLed(nd.led, 'idle', false); return; }
+    let active = false, allDone = true;
+    for (let u = 0; u < sn; u++) { const f = finish[k][u], st = f - time[k]; if (Ts >= st && Ts < f) active = true; if (Ts < f) allDone = false; }
+    setLed(nd.led, active ? 'active' : (allDone ? 'done' : 'idle'), active);
+  });
+  const el = document.getElementById('solaShip'); if (el) el.textContent = shipped;
 }
 
 // build editable time rows
@@ -1652,12 +1685,17 @@ let last = performance.now();
 function loop(now){
   const dt = (now - last) / 1000; last = now;
   if (playing) {
-    T += dt * parseFloat(speed.value);
-    if (T >= horizon) { T = horizon; setPlay(false); }
+    const spd = dt * parseFloat(speed.value);
+    if (playScope !== 'sola' && T < horizon) T = Math.min(horizon, T + spd);          // Meritage clock
+    if (playScope !== 'meritage' && Ts < solaHorizon) Ts = Math.min(solaHorizon, Ts + spd);  // Sola clock
+    const merDone = playScope === 'sola' || T >= horizon;
+    const solDone = playScope === 'meritage' || Ts >= solaHorizon;
+    if (merDone && solDone) setPlay(false);
   }
   updateCarts();   // carts stay parked in a line along the path
   updateHelp();    // help-movement arrows follow the stations
   updateFlow();    // part-flow arrows follow the stations
+  solaUpdate();    // animate the Sola line on its own clock
   for (const fl of forkLifts) {                    // forklift carries a package DOWN when triggered, else idle at deck
     if (fl.busy) {
       fl.t += dt; const p = fl.t / 4;               // ~4s round trip
