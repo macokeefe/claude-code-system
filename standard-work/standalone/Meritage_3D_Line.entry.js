@@ -1409,7 +1409,7 @@ function setEditing(on) {
   if (on) {
     // keep zoom + pan in edit mode, but disable rotate and free the left button for dragging stations
     controls.enabled = true; controls.enableRotate = false; controls.enableZoom = true; controls.enablePan = true;
-    controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };   // left = drag stations; right/middle = pan
+    controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };   // drag empty floor to pan; grabbing a station disables pan for that drag
     controls.touches = { ONE: null, TWO: THREE.TOUCH.DOLLY_PAN };
   } else {
     controls.enabled = true; controls.enableRotate = true; controls.enableZoom = true; controls.enablePan = true;
@@ -1498,11 +1498,12 @@ renderer.domElement.addEventListener('pointerdown', e => {
     return;
   }
   const fi = pickFixture(e);
-  if (fi != null) { dragFix = fi; renderer.domElement.setPointerCapture(e.pointerId); return; }
+  if (fi != null) { dragFix = fi; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId); return; }   // grabbed something -> don't pan
   const wp = pickWaypoint(e);
-  if (wp != null) { dragWp = wp; renderer.domElement.setPointerCapture(e.pointerId); return; }
+  if (wp != null) { dragWp = wp; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId); return; }
   const id = pickStation(e);
-  if (id) { dragId = id; selectedStation = id; renderer.domElement.setPointerCapture(e.pointerId); refreshMeasure(); }
+  if (id) { dragId = id; selectedStation = id; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId); refreshMeasure(); }
+  // else: clicked empty floor -> OrbitControls pans the camera
 });
 document.getElementById('rotbtn').onclick = () => {
   if (!editing) setEditing(true);
@@ -1529,6 +1530,7 @@ renderer.domElement.addEventListener('pointermove', e => {
   schedule();                 // walk times + cycle/capacity update live as you move
 });
 renderer.domElement.addEventListener('pointerup', () => {
+  if (editing) controls.enabled = true;                  // re-enable camera pan after a station/waypoint drag
   if (dragFix != null) { dragFix = null; saveLayout(); }
   if (dragWp != null) { dragWp = null; saveLayout(); }
   if (dragId) { dragId = null; measure.visible = false; measurePanel.innerHTML = ''; renderTimes(); saveLayout(); }   // dragging across the middle line re-routes a station to the other side's table
