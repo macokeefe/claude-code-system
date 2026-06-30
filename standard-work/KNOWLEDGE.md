@@ -177,17 +177,11 @@ pans (left = drag stations), and `contextmenu` is suppressed on the canvas.
 **Draggable windows + shared connector station (2026-06):** the floating panels
 (Station times, Idle/day, Help paths, Task chart, Measure) are draggable by their
 title bar (CSS `cursor:move` + a `pointerdown` delegation IIFE near the end of
-the entry; positions persist in `localStorage['m3d_panel_<id>']`). The SHARED
-connector station is NOT a new bench — it's the EXISTING Meritage CONNECTORS
-station (`con`, the connector lady), now default-positioned on the middle line
-(`POS.con = [DECK.x1, 0]`) so it's shared between both sides. It's removed from
-the Meritage table and shown only in the third panel table "Shared — connector
-station" (`stepsHost3` / `renderShared`), driven by `con.steps`. Each step gets a
-`.side` (`meritage`|`other`) via a per-row dropdown; the header shows per-side
-minute totals. `recalcCon()` sets `con.t` = sum of MERITAGE-side steps only, so
-assigning a task to the other side actually offloads the Meritage line (labor/
-cycle drop). Persisted via `o.__conSteps` ([name,t,side]); the generic `__steps`
-loader skips `con` so sides aren't lost.
+the entry; positions persist in `localStorage['m3d_panel_<id>']`). The SHARED connector station idea was REMOVED (engineer, 2026-06): CONNECTORS is
+just a normal Meritage feeder again (`POS.con` back on the left feeder row, shown
+in the Meritage table). No middle-line "connector lady" bench, no "Shared —
+connector station" table, no per-side connector assignment. Sola connectors, if
+needed, are their own Sola-side station.
 
 NEXT STEP (planned): make Meritage-side added stations join the sim too, and let
 the connector lady's other-side load feed an actual other-side line.

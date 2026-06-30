@@ -700,7 +700,7 @@ function updateHelp() {
 /* ---- station layout: feeders in back row, FA + packing in front ---- */
 const OP_COLORS = [0x3a66a8, 0xb9772e, 0x2e7d4f, 0x8f5390, 0xa8923a, 0x3f8f8f, 0x9c4f45, 0x5c5f99];
 const POS = {
-  con:[DECK.x1, 0], arm:[-6, -3.2], bak:[0, -3.2], tre:[6, -3.2], sea:[12, -3.2],   // CONNECTORS (the connector lady) sits on the middle line — shared between both sides
+  con:[-12, -3.2], arm:[-6, -3.2], bak:[0, -3.2], tre:[6, -3.2], sea:[12, -3.2],
   fa:[-2, 4.2], pak:[10, 4.2],
 };
 const nodes = {};
@@ -836,8 +836,7 @@ applyLabels();
 // lines are always shown; each panel shows that line's totals independently. ----
 function renderSolaData() {
   const ids = extraStations.filter(id => sideOf(nodes[id].x) === 'other');
-  const conSola = (get('con').steps || []).filter(s => s.side === 'other').reduce((a, s) => a + (parseFloat(s.t) || 0), 0);
-  let labor = conSola, cyc = conSola > 0 ? conSola : 0, bot = conSola > 0 ? 'Connectors (Sola)' : '—';
+  let labor = 0, cyc = 0, bot = '—';
   ids.forEach(id => {
     const s = nodes[id].s, ppl = Math.max(1, s.ppl || 1), per = (s.t || 0) / ppl;
     labor += (s.t || 0);
@@ -932,8 +931,6 @@ const mHdr = document.createElement('div'); mHdr.style.cssText = 'font-size:11px
 const stepsHost = document.createElement('div'); stepsHost.id = 'stepsHost'; timeBox.appendChild(stepsHost);
 const oHdr = document.createElement('div'); oHdr.style.cssText = 'font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#5c5f99;font-weight:800;margin:14px 0 4px;border-top:2px solid #e0e3ea;padding-top:10px'; oHdr.textContent = 'Sola (no arms) — station steps'; timeBox.appendChild(oHdr);
 const stepsHost2 = document.createElement('div'); stepsHost2.id = 'stepsHost2'; timeBox.appendChild(stepsHost2);
-const sHdr = document.createElement('div'); sHdr.style.cssText = 'font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#7a5b1f;font-weight:800;margin:14px 0 4px;border-top:2px solid #e0e3ea;padding-top:10px'; sHdr.textContent = 'Shared — connector station'; timeBox.appendChild(sHdr);
-const stepsHost3 = document.createElement('div'); stepsHost3.id = 'stepsHost3'; timeBox.appendChild(stepsHost3);
 
 /* ---- ADDED STATIONS: extra benches you can drop on either side and drag where
    you want. They are independent — NOT part of the Meritage line, so they never
@@ -1041,7 +1038,7 @@ function wireRows(host) {
   });
 }
 function renderTimes() {
-  const mer = [...ST.filter(s => s.id !== 'con'), ...extraStations.filter(id => sideOf(nodes[id].x) === 'meritage').map(id => nodes[id].s)];   // con shown in the Shared table
+  const mer = [...ST, ...extraStations.filter(id => sideOf(nodes[id].x) === 'meritage').map(id => nodes[id].s)];
   const oth = extraStations.filter(id => sideOf(nodes[id].x) === 'other').map(id => nodes[id].s);
   stepsHost.innerHTML = rowsHtml(mer);
   stepsHost2.innerHTML = oth.length ? rowsHtml(oth) : '<div style="font-size:11px;color:#8a93a0">No Sola (no arms) stations yet. Add one with “＋ Add station”, or drag a station across the middle line.</div>';
@@ -1050,36 +1047,6 @@ function renderTimes() {
 }
 renderTimes();
 
-/* ---- SHARED connector station = the EXISTING CONNECTORS station (the connector
-   lady), now sitting on the middle line so it's shared between both sides. Her
-   tasks are the station's steps; each is assigned to the Meritage side or the
-   Other side. Only Meritage-side tasks load the Meritage line (recalcCon). It is
-   shown ONLY in this Shared table (removed from the Meritage table above). ---- */
-function recalcCon() { const c = get('con'); if (c) c.t = (c.steps || []).filter(s => s.side !== 'other').reduce((a, s) => a + (parseFloat(s.t) || 0), 0); }
-function renderShared() {
-  const c = get('con'); if (!c) { stepsHost3.innerHTML = ''; return; }
-  (c.steps || []).forEach(s => { if (!s.side) s.side = 'meritage'; });
-  const mer = c.steps.filter(s => s.side !== 'other').reduce((a, s) => a + (parseFloat(s.t) || 0), 0);
-  const oth = c.steps.filter(s => s.side === 'other').reduce((a, s) => a + (parseFloat(s.t) || 0), 0);
-  let html = `<div style="font-size:10.5px;color:#6b7785;margin-bottom:5px">${c.title} — the connector lady. Assign each task to a side. → Meritage <b>${+mer.toFixed(2)}</b> min · Sola (no arms) <b>${+oth.toFixed(2)}</b> min. Sola-side tasks send Sola connectors.</div>`;
-  c.steps.forEach((st, i) => {
-    html += `<div class="shrow">
-      <input class="sname" data-i="${i}" value="${(st.name || '').replace(/"/g, '&quot;')}"/>
-      <input class="stime" type="number" step="0.25" min="0" data-i="${i}" value="${st.t}"/>
-      <select class="sside" data-i="${i}"><option value="meritage"${st.side !== 'other' ? ' selected' : ''}>Meritage</option><option value="other"${st.side === 'other' ? ' selected' : ''}>Sola (no arms)</option></select>
-      <button class="sdel" data-i="${i}">✕</button></div>`;
-  });
-  html += `<button class="sadd" id="shAdd">+ add task</button>`;
-  stepsHost3.innerHTML = html;
-  const after = () => { recalcCon(); renderShared(); renderTimes(); schedule(); T = 0; setPlay(false); saveLayout(); };
-  stepsHost3.querySelectorAll('input.sname').forEach(inp => inp.onchange = e => { c.steps[+e.target.dataset.i].name = e.target.value; saveLayout(); });
-  stepsHost3.querySelectorAll('input.stime').forEach(inp => inp.onchange = e => { c.steps[+e.target.dataset.i].t = parseFloat(e.target.value) || 0; after(); });
-  stepsHost3.querySelectorAll('select.sside').forEach(s => s.onchange = e => { c.steps[+e.target.dataset.i].side = e.target.value; after(); });
-  stepsHost3.querySelectorAll('button.sdel').forEach(b => b.onclick = e => { c.steps.splice(+e.target.dataset.i, 1); if (!c.steps.length) c.steps.push({ name: 'Connectors', t: 0, side: 'meritage' }); after(); });
-  const add = document.getElementById('shAdd'); if (add) add.onclick = () => { c.steps.push({ name: 'New task', t: 0, side: 'meritage' }); after(); };
-  if (typeof renderSolaData === 'function') renderSolaData();
-}
-recalcCon(); renderShared();
 document.getElementById('walkOn').onchange = e => { walkOn = e.target.checked; schedule(); T = 0; setPlay(false); };
 document.getElementById('walkSpeed').onchange = e => { walkSpeed = Math.max(10, parseFloat(e.target.value) || 60); schedule(); T = 0; setPlay(false); };
 document.getElementById('trips').onchange = e => { tripsPerUnit = Math.max(0, parseFloat(e.target.value) || 0); schedule(); T = 0; setPlay(false); };
@@ -1103,8 +1070,6 @@ function operatorsList(line) {
   const list = [];
   if (line === 'sola') {
     orderedSola().forEach(id => { const s = nodes[id].s, ppl = Math.max(1, s.ppl || 1), per = (s.t || 0) / ppl; for (let i = 0; i < ppl; i++) list.push({ name: s.title + (ppl > 1 ? ' ' + (i + 1) : ''), bpu: per }); });
-    const conSola = (get('con').steps || []).filter(s => s.side === 'other').reduce((a, s) => a + (parseFloat(s.t) || 0), 0);
-    if (conSola > 0) list.push({ name: 'Connectors (Sola)', bpu: conSola });
     return list;
   }
   for (const id of ['con','arm','bak','tre','sea']) {
@@ -1203,9 +1168,7 @@ function renderTaskChart() {
   if (chartLine === 'sola') {
     const ids = orderedSola();
     rows = ids.map(id => { const s = nodes[id].s; return { title: s.title, tt: (s.t || 0) / Math.max(1, s.ppl || 1), steps: s.steps, bn: false }; });
-    const conSola = (get('con').steps || []).filter(s => s.side === 'other').reduce((a, s) => a + (parseFloat(s.t) || 0), 0);
-    if (conSola > 0) rows.unshift({ title: 'CONNECTORS (Sola)', tt: conSola, steps: [{ name: 'Sola connectors', t: conSola }], bn: false });
-    totalLabor = ids.reduce((a, id) => a + (nodes[id].s.t || 0), 0) + conSola;
+    totalLabor = ids.reduce((a, id) => a + (nodes[id].s.t || 0), 0);
   } else {
     // Full assembly + pack are done by the SAME 2 people back-to-back → one bar.
     rows = ['con','arm','bak','tre','sea'].map(id => ({ title: get(id).title, tt: effNet(id), steps: get(id).steps, bn: false }));
@@ -1298,8 +1261,8 @@ function setStationRot(id, rot) {
   const nd = nodes[id]; if (!nd) return;
   nd.rot = rot; placeStation(id);
 }
-function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraStations.map(id => { const n = nodes[id]; return { id, name: n.s.title, x: n.x, z: n.z, t: n.t || 0 }; }); o.__conSteps = (get('con').steps || []).map(s => [s.name, s.t, s.side || 'meritage']); o.__flow = flowArrows.map(a => [a.from, a.to]); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
-function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__conSteps)) { get('con').steps = o.__conSteps.map(a => ({ name: a[0], t: +a[1] || 0, side: a[2] || 'meritage' })); recalcCon(); } if (Array.isArray(o.__extras)) o.__extras.forEach(e => { if (!nodes[e.id]) { addStation(e.name, e.x, e.z, e.id, e.t); const num = parseInt(String(e.id).replace(/\D/g, '')) || 0; if (num > extraSeq) extraSeq = num; } }); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) { flowArrows = o.__flow.map(a => ({ from: a[0], to: a[1] })); buildFlow(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (s.id !== 'con' && o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } } catch (e) {} }
+function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraStations.map(id => { const n = nodes[id]; return { id, name: n.s.title, x: n.x, z: n.z, t: n.t || 0 }; }); o.__flow = flowArrows.map(a => [a.from, a.to]); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
+function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__extras)) o.__extras.forEach(e => { if (!nodes[e.id]) { addStation(e.name, e.x, e.z, e.id, e.t); const num = parseInt(String(e.id).replace(/\D/g, '')) || 0; if (num > extraSeq) extraSeq = num; } }); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) { flowArrows = o.__flow.map(a => ({ from: a[0], to: a[1] })); buildFlow(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } } catch (e) {} }
 
 // 1-yard grid on the deck
 function buildGrid() {
@@ -1563,8 +1526,8 @@ document.getElementById('rackbtn').onclick = () => {
   saveLayout();
 };
 loadLayout();
-try { recalcCon(); schedule(); } catch (e) { console.error('schedule failed', e); }   // set labor/cycle/readouts FIRST so a bad saved layout can't leave them stuck on the placeholder
-try { renderTimes(); renderShared(); renderSolaData(); } catch (e) { console.error('panel render failed', e); }
+try { schedule(); } catch (e) { console.error('schedule failed', e); }   // set labor/cycle/readouts FIRST so a bad saved layout can't leave them stuck on the placeholder
+try { renderTimes(); renderSolaData(); } catch (e) { console.error('panel render failed', e); }
 
 /* ---- draggable floating windows: grab any panel by its title bar and move it;
    positions persist per panel. The listener is on the panel (not the title) so
