@@ -445,7 +445,7 @@ for (const [cx, cz] of [[-28,-12],[28,-12],[-28,12],[28,12]]) { const col = bx(0
 const FLOOR2 = 6.0;                                  // floor-to-deck height (~20 ft)
 const level2 = new THREE.Group(); level2.position.y = FLOOR2; scene.add(level2);
 
-const DECK = { x0:-5.1, x1:-5.1 + 40*FT, z0:-10.4, z1:-10.4 + 68*FT };   // real Meritage area: 40' wide x 68' deep (3/8"=1' scale)
+const DECK = { x0:-5.1, x1:-5.1 + 40*FT, z0:-30*FT, z1:30*FT };   // 40' wide x 60' deep (20 yd) — centred
 const deckW = DECK.x1 - DECK.x0, deckD = DECK.z1 - DECK.z0;
 const deckCx = (DECK.x0 + DECK.x1)/2, deckCz = (DECK.z0 + DECK.z1)/2;
 const deckMat = new THREE.MeshStandardMaterial({ color:0xb7bcc2, roughness:0.7, metalness:0.3 });
@@ -652,7 +652,7 @@ function refreshPath() {
   pathLine.geometry.computeBoundingSphere();
   if (pathLine.computeLineDistances) pathLine.computeLineDistances();
   while (wpGroup.children.length) wpGroup.remove(wpGroup.children[0]);
-  cartWaypoints.forEach((w, i) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.7, 16), WP_MAT); m.position.set(w.x, 0.35, w.z); m.userData.wp = i; wpGroup.add(m); });
+  cartWaypoints.forEach((w, i) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.7, 16), WP_MAT); m.position.set(w.x, 0.35, w.z); m.userData = { cart:'cart', wp:i }; wpGroup.add(m); });
 }
 
 // ---- help-movement arrows: where an operator goes to help after finishing ----
@@ -731,16 +731,16 @@ const crew = []; // {fig, station, homeX, homeZ}
 ST.forEach(s => {
   const [x, z] = POS[s.id];
   let st, led;
-  if (s.double) {                                  // Arms = two 8'x3' benches joined end-to-end (16' x 3')
+  if (s.double) {                                  // Arms = two 8'x4' benches joined end-to-end (16' x 4')
     const g = new THREE.Group();
-    const b1 = makeBench(8, 3), b2 = makeBench(8, 3);
+    const b1 = makeBench(8, 4), b2 = makeBench(8, 4);
     b1.st.position.x = -4 * FT; b2.st.position.x = 4 * FT;   // share the inner edge
     g.add(b1.st, b2.st);
     st = g; led = [b1.led, b2.led];
   } else if (s.role === 'fa') {
-    const r = makeBench(10, 4); st = r.st; led = r.led;      // full assembly: larger table
+    const r = makeBench(8, 5); st = r.st; led = r.led;       // Meritage full assembly: 8' x 5'
   } else {
-    const r = makeBench(8, 3); st = r.st; led = r.led;       // 8' x 3' workbench
+    const r = makeBench(8, 4); st = r.st; led = r.led;       // 8' x 4' workbench
   }
   st.position.set(x, 0, z);
   level2.add(st);
@@ -788,9 +788,20 @@ cart2Pad.position.set(CART2_DEF[0], 0, CART2_DEF[1]); level2.add(cart2Pad);
 nodes.cart2 = { id:'cart2', x:CART2_DEF[0], z:CART2_DEF[1], st:cart2Pad, s:{ id:'cart2', title:'Sola materials cart' } };
 POS.cart2 = [CART2_DEF[0], CART2_DEF[1]];
 // a line showing it's supplied from the SAME elevator
-const cart2Feed = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(EL[0],0.18,EL[1]), new THREE.Vector3(CART2_DEF[0],0.18,CART2_DEF[1])]), new THREE.LineDashedMaterial({ color: 0x236043, dashSize:0.5, gapSize:0.3, transparent:true, opacity:0.6 }));
-cart2Feed.computeLineDistances(); level2.add(cart2Feed);
-function refreshCart2Feed(){ cart2Feed.geometry.setFromPoints([new THREE.Vector3(EL[0],0.18,EL[1]), new THREE.Vector3(nodes.cart2.x,0.18,nodes.cart2.z)]); cart2Feed.computeLineDistances(); }
+let cart2Waypoints = [];           // [{x,z}] for the Sola cart's route
+const cart2Feed = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: 0x236043, dashSize:0.5, gapSize:0.3, transparent:true, opacity:0.6 }));
+level2.add(cart2Feed);
+const wpGroup2 = new THREE.Group(); wpGroup2.visible = false; level2.add(wpGroup2);
+const WP2_MAT = new THREE.MeshStandardMaterial({ color: 0x236043, roughness: 0.5 });
+function cart2Pts(){ return [[EL[0],EL[1]], ...cart2Waypoints.map(w=>[w.x,w.z]), [nodes.cart2.x, nodes.cart2.z]]; }
+function refreshCart2Feed(){
+  const p = cart2Pts(); const arr = []; for (const pt of p) arr.push(pt[0], 0.18, pt[1]);
+  cart2Feed.geometry.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
+  cart2Feed.geometry.setDrawRange(0, p.length); cart2Feed.geometry.computeBoundingSphere(); cart2Feed.computeLineDistances();
+  while (wpGroup2.children.length) wpGroup2.remove(wpGroup2.children[0]);
+  cart2Waypoints.forEach((w, i) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,0.7,16), WP2_MAT); m.position.set(w.x,0.35,w.z); m.userData = { cart:'cart2', wp:i }; wpGroup2.add(m); });
+}
+refreshCart2Feed();
 // shipped boxes pool near packing/ship dock
 const shipBoxes = [];
 for (let i = 0; i < 40; i++) { const b = makeShipBox(); b.visible = false; b.position.set(16 + (i%4)*2.0, 0, 4.2 + Math.floor(i/4)*1.2); level2.add(b); shipBoxes.push(b); }
@@ -950,7 +961,7 @@ function solaUpdate() {
       else part.position.set(B.x, 1.04, B.z);
     }
   }
-  solaShipBoxes.forEach((b, i) => b.visible = i < shipped);
+  solaShipBoxes.forEach(b => b.visible = false);   // no stacked boxes (was crowding the floor)
   const el = document.getElementById('solaShip'); if (el) el.textContent = shipped;
 }
 
@@ -980,7 +991,7 @@ const sideOf = x => (x < DIVIDER_X ? 'meritage' : 'other');
 const STA_COLORS = ['#1d3a66','#9a3b1f','#236043','#8f5390','#a8923a','#3f8f8f','#9c4f45','#c0552c','#2f6df6','#7a5b1f'];
 function addStation(name, x, z, id, t) {
   id = id || ('x' + (++extraSeq));
-  const r = makeBench(8, 3); r.st.position.set(x, 0, z); level2.add(r.st);
+  const r = makeBench(8, 4); r.st.position.set(x, 0, z); level2.add(r.st);   // added (Sola) tables 8' x 4'
   const accent = STA_COLORS[extraStations.length % STA_COLORS.length];   // varied colour per added station (like Meritage)
   const label = makeStationLabel(name, 'Added station', t ? t + ' min' : '—', accent);
   label.position.set(x, 2.85, z); level2.add(label);
@@ -1297,8 +1308,8 @@ function setStationRot(id, rot) {
   const nd = nodes[id]; if (!nd) return;
   nd.rot = rot; placeStation(id);
 }
-function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraStations.map(id => { const n = nodes[id]; return { id, name: n.s.title, x: n.x, z: n.z, t: n.t || 0 }; }); o.__flow = flowArrows.map(a => [a.from, a.to]); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
-function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__extras)) o.__extras.forEach(e => { if (!nodes[e.id]) { addStation(e.name, e.x, e.z, e.id, e.t); const num = parseInt(String(e.id).replace(/\D/g, '')) || 0; if (num > extraSeq) extraSeq = num; } }); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) { flowArrows = o.__flow.map(a => ({ from: a[0], to: a[1] })); buildFlow(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } } catch (e) {} }
+function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraStations.map(id => { const n = nodes[id]; return { id, name: n.s.title, x: n.x, z: n.z, t: n.t || 0 }; }); o.__flow = flowArrows.map(a => [a.from, a.to]); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
+function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__extras)) o.__extras.forEach(e => { if (!nodes[e.id]) { addStation(e.name, e.x, e.z, e.id, e.t); const num = parseInt(String(e.id).replace(/\D/g, '')) || 0; if (num > extraSeq) extraSeq = num; } }); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) { flowArrows = o.__flow.map(a => ({ from: a[0], to: a[1] })); buildFlow(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } } catch (e) {} }
 
 // 1-yard grid on the deck
 function buildGrid() {
@@ -1393,7 +1404,7 @@ function setEditing(on) {
   editBtn.textContent = on ? '✓ Done editing' : '✥ Edit layout';
   editBtn.classList.toggle('on', on);
   grid.visible = on;
-  pathLine.visible = on; wpGroup.visible = on; if (on) refreshPath();
+  pathLine.visible = on; wpGroup.visible = on; wpGroup2.visible = on; if (on) { refreshPath(); refreshCart2Feed(); }
   if (!on) { helpArming = false; armSource = null; const hb = document.getElementById('helparrow'); if (hb) hb.classList.remove('on'); if (typeof setFlowArming === 'function') setFlowArming(false); }
   if (on) {
     // keep zoom + pan in edit mode, but disable rotate and free the left button for dragging stations
@@ -1425,8 +1436,8 @@ editBtn.onclick = () => setEditing(!editing);
 let dragWp = null, helpArming = false, armSource = null, selectedStation = null, dragFix = null, flowArming = false, flowSource = null;
 function pickWaypoint(e) {
   pointerNDC(e); raycaster.setFromCamera(ndc, camera);
-  const hits = raycaster.intersectObjects(wpGroup.children, false);
-  return hits.length ? hits[0].object.userData.wp : null;
+  const hits = raycaster.intersectObjects([...wpGroup.children, ...wpGroup2.children], false);
+  return hits.length ? hits[0].object.userData : null;   // { cart, wp } or null
 }
 function fixtureList() {   // draggable non-station objects: access points, racks, then the elevator
   const arr = [];
@@ -1509,12 +1520,12 @@ renderer.domElement.addEventListener('pointermove', e => {
   }
   const cx = Math.max(DECK.x0 + 0.6, Math.min(MX1 - 0.6, snap(p.x)));      // span both floors so stations can cross the divider
   const cz = Math.max(DECK.z0 + 0.6, Math.min(DECK.z1 - 0.6, snap(p.z)));
-  if (dragWp != null) { cartWaypoints[dragWp] = { x: cx, z: cz }; refreshPath(); return; }
+  if (dragWp != null) { if (dragWp.cart === 'cart2') { cart2Waypoints[dragWp.wp] = { x: cx, z: cz }; refreshCart2Feed(); } else { cartWaypoints[dragWp.wp] = { x: cx, z: cz }; refreshPath(); } return; }
   if (!dragId) return;
   const x = Math.max(DECK.x0 + 1.4, Math.min(MX1 - 1.4, cx));              // connector (or any table) can sit in the middle / on the other floor
   const z = Math.max(DECK.z0 + 1.4, Math.min(DECK.z1 - 1.4, cz));
   setStationPos(dragId, x, z);
-  refreshMeasure(); refreshPath();
+  refreshMeasure(); refreshPath(); if (dragId === 'cart2') refreshCart2Feed();
   schedule();                 // walk times + cycle/capacity update live as you move
 });
 renderer.domElement.addEventListener('pointerup', () => {
@@ -1533,7 +1544,7 @@ renderer.domElement.addEventListener('contextmenu', e => {
     if (f.kind === 'rack') { level2.remove(f.ref.g); racks.splice(racks.indexOf(f.ref), 1); saveLayout(); return; }
   }
   const wp = pickWaypoint(e);
-  if (wp != null) { cartWaypoints.splice(wp, 1); refreshPath(); saveLayout(); return; }
+  if (wp != null) { if (wp.cart === 'cart2') { cart2Waypoints.splice(wp.wp, 1); refreshCart2Feed(); } else { cartWaypoints.splice(wp.wp, 1); refreshPath(); } saveLayout(); return; }
   const id = pickStation(e);
   if (id && flowArrows.some(a => a.from === id || a.to === id)) {   // right-click a station clears its flow lines first
     flowArrows = flowArrows.filter(a => a.from !== id && a.to !== id); buildFlow(); buildSolaSched(); saveLayout(); return;
@@ -1542,12 +1553,19 @@ renderer.domElement.addEventListener('contextmenu', e => {
     helpArrows = helpArrows.filter(a => a.from !== id && a.to !== id); buildHelp(); saveLayout();
   }
 });
-// add a waypoint at the midpoint of the current path
+// add a waypoint at the midpoint of the current path — for whichever cart was last selected
 document.getElementById('addwp').onclick = () => {
-  const a = cartWaypoints.length ? cartWaypoints[cartWaypoints.length - 1] : { x: EL[0], z: EL[1] };
-  cartWaypoints.push({ x: (a.x + nodes.cart.x) / 2, z: (a.z + nodes.cart.z) / 2 });
   if (!editing) setEditing(true);
-  refreshPath(); saveLayout();
+  if (selectedStation === 'cart2') {
+    const a = cart2Waypoints.length ? cart2Waypoints[cart2Waypoints.length - 1] : { x: EL[0], z: EL[1] };
+    cart2Waypoints.push({ x: (a.x + nodes.cart2.x) / 2, z: (a.z + nodes.cart2.z) / 2 });
+    refreshCart2Feed();
+  } else {
+    const a = cartWaypoints.length ? cartWaypoints[cartWaypoints.length - 1] : { x: EL[0], z: EL[1] };
+    cartWaypoints.push({ x: (a.x + nodes.cart.x) / 2, z: (a.z + nodes.cart.z) / 2 });
+    refreshPath();
+  }
+  saveLayout();
 };
 // add a forklift access point on the front edge
 document.getElementById('accesspt').onclick = () => {
@@ -1726,8 +1744,7 @@ function update(){
   // packing led + crew
   const pak = nodes.pak;
   setLed(pak.led, (cur>=0 && phase==='pack') ? 'active' : (shipped>=N?'done':'idle'), cur>=0 && phase==='pack');
-  // shipped boxes appear
-  shipBoxes.forEach((b,i)=> b.visible = i < shipped);
+  shipBoxes.forEach(b => b.visible = false);   // no stacked boxes (was crowding the floor)
   ui.ship.textContent = shipped;
   // finished sofas populate the racks; the forklift takes one down every 3rd
   if (shipped < lastShipped) { lastShipped = shipped; onRacks = 0; }   // clock reset/seek
