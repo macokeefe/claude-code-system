@@ -364,12 +364,16 @@ function walkOf(id) {
   for (const t of [...f.in, ...f.out]) { const p = linkPoint(t, nd); yd += dist2(nd.x, nd.z, p[0], p[1]) / YARD; }
   return yd / Math.max(1, walkSpeed) * tripsPerUnit;   // sum of linked-table distances (yd) / speed * trips
 }
-function eff(id) { const s = get(id); return (s.t || 0) / Math.max(1, s.ppl || 1) + walkOf(id); }   // step times are TOTAL; cycle = total / people
+function eff(id) { const s = getAny(id); if (!s) return 0; return (s.t || 0) / Math.max(1, s.ppl || 1) + walkOf(id); }   // step times are TOTAL; cycle = total / people (works for Meritage ST + added Sola stations)
 function helpInto(id) { return (typeof helpArrows === 'undefined') ? 0 : helpArrows.reduce((s, a) => s + (a.to === id ? (a.helpMin || 0) : 0), 0); }
 function helpFromOp(id, idx) { return (typeof helpArrows === 'undefined') ? 0 : helpArrows.reduce((s, a) => s + ((a.from === id && (a.fromIdx || 0) === idx) ? (a.helpMin || 0) : 0), 0); }
 function effNet(id) { return Math.max(0.1, eff(id) - helpInto(id)); }   // a helped station's time drops by the help minutes
 function lineCyc() { return sch ? Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 1; }
 function availIdleOp(id, idx) { return Math.max(0, lineCyc() - effNet(id) - helpFromOp(id, idx)); }   // spare min/chair a specific operator can give
+// side-aware versions so help paths work on the Sola (added-station) side too
+function solaCyc() { let m = 0.1; extraStations.filter(id => sideOf(nodes[id].x) === 'other').forEach(id => { const e = effNet(id); if (e > m) m = e; }); return m; }
+function cycOf(id) { return (typeof isExtra === 'function' && isExtra(id)) ? solaCyc() : lineCyc(); }
+function availIdleAny(id, idx) { return Math.max(0, cycOf(id) - effNet(id) - helpFromOp(id, idx)); }
 function schedule() {
   const seaT=effNet('sea'), armT=effNet('arm'), bakT=effNet('bak'), treT=effNet('tre'), conT=effNet('con');
   const ASM=effNet('fa'), PACK=effNet('pak');
@@ -877,7 +881,7 @@ function renderSolaData() {
   const ids = extraStations.filter(id => sideOf(nodes[id].x) === 'other');
   let labor = 0, cyc = 0, bot = '—';
   ids.forEach(id => {
-    const s = nodes[id].s, ppl = Math.max(1, s.ppl || 1), per = (s.t || 0) / ppl;
+    const s = nodes[id].s, per = effNet(id);   // per-unit time AFTER any help arrows into this station
     labor += (s.t || 0);
     if (per > cyc) { cyc = per; bot = s.title; }
   });
@@ -913,7 +917,7 @@ function orderedSola() {
 }
 function buildSolaSched() {
   const ids = orderedSola();
-  const time = ids.map(id => { const s = nodes[id].s; return Math.max(0.1, (s.t || 0) / Math.max(1, s.ppl || 1)); });
+  const time = ids.map(id => effNet(id));   // per-unit time, reduced by any help arrows pointing INTO this station
   const finish = ids.map(() => []);
   for (let u = 0; u < N; u++) for (let k = 0; k < ids.length; k++) {
     const pk = k > 0 ? finish[k - 1][u] : 0, pu = u > 0 ? finish[k][u - 1] : 0;
@@ -1195,7 +1199,7 @@ document.getElementById('idlebtn').onclick = () => {
 
 // ---- help-paths dashboard ----
 const helpPanel = document.getElementById('helpPanel');
-const stName = id => (get(id) ? get(id).title : id);
+const stName = id => { const s = getAny(id); return s ? s.title : id; };
 function bottleneckInfo() {
   const items = [['con', effNet('con')], ['arm', effNet('arm')], ['bak', effNet('bak')], ['tre', effNet('tre')], ['sea', effNet('sea')], ['fapak', effNet('fa') + effNet('pak')]];
   let bn = items[0]; items.forEach(it => { if (it[1] > bn[1]) bn = it; });
@@ -1206,8 +1210,34 @@ function renderHelpPanel() {
   if (!helpPanel || helpPanel.style.display === 'none') return;
   if (chartLine === 'sola') {
     const ids = orderedSola();
-    const cyc = Math.max(0.001, ...ids.map(id => (nodes[id].s.t || 0) / Math.max(1, nodes[id].s.ppl || 1)), 0.001);
-    helpPanel.innerHTML = `<h3>Help paths</h3>` + lineSel() + `<div class="ihint"><b>Sola line: ${ids.length ? (420 / cyc).toFixed(1) : '—'} units/day</b>. Help paths (operators relieving the bottleneck) are modeled on the Meritage line; the Sola line runs as a simple flow-shop for now.</div>`;
+    const cyc = solaCyc();
+    const bnId = ids.slice().sort((a, b) => effNet(b) - effNet(a))[0];
+    const sHead = `<h3>Help paths</h3>` + lineSel() + `<div class="ihint"><b>Sola line: ${ids.length ? (420 / Math.max(0.1, cyc)).toFixed(1) : '—'} units/day</b>${bnId ? ' · slowest: ' + stName(bnId) + ' (' + effNet(bnId).toFixed(1) + ' min)' : ''}. Click “➤ Help arrow”, then a FROM then a TO station on this side.</div>`;
+    const sHelp = helpArrows.map((a, i) => ({ a, i })).filter(({ a }) => isExtra(a.to) || isExtra(a.from));
+    if (!sHelp.length) { helpPanel.innerHTML = sHead + '<div class="ihint">No Sola help paths yet.</div>'; wireLineSel(helpPanel); return; }
+    let sh = sHead;
+    sHelp.forEach(({ a, i }) => {
+      const spare = availIdleAny(a.from, a.fromIdx || 0) + (a.helpMin || 0);
+      const before = eff(a.to), after = effNet(a.to);
+      const fromPpl = (getAny(a.from) && getAny(a.from).ppl) || 1;
+      const fromLabel = stName(a.from) + (fromPpl > 1 ? ' ' + ((a.fromIdx || 0) + 1) : '');
+      const onBn = a.to === bnId;
+      sh += `<div class="hrow">
+        <div class="hnm">${fromLabel} → <b>${stName(a.to)}</b> ${onBn ? '<span style="color:#2f7d52">✓ slowest</span>' : '<span style="color:#c0552c">⚠ not slowest</span>'}</div>
+        <div class="hctl">takes <input type="number" class="hmin" data-i="${i}" min="0" max="${spare.toFixed(1)}" step="0.5" value="${(a.helpMin || 0)}"> min/unit off ${stName(a.to)}
+          <button class="hdel" data-i="${i}">✕</button></div>
+        <div class="hsub">${stName(a.to)} step: ${before.toFixed(1)} → <b>${after.toFixed(1)} min</b> · helper has ${spare.toFixed(1)} min/unit spare</div>
+      </div>`;
+    });
+    helpPanel.innerHTML = sh;
+    helpPanel.querySelectorAll('.hmin').forEach(inp => inp.onchange = e => {
+      const a = helpArrows[+e.target.dataset.i]; const spare = availIdleAny(a.from, a.fromIdx || 0) + (a.helpMin || 0);
+      a.helpMin = Math.max(0, Math.min(spare, parseFloat(e.target.value) || 0));
+      buildHelp(); buildSolaSched(); renderIdle(); renderSolaData(); saveLayout(); renderHelpPanel();
+    });
+    helpPanel.querySelectorAll('.hdel').forEach(b => b.onclick = e => {
+      helpArrows.splice(+e.target.dataset.i, 1); buildHelp(); buildSolaSched(); renderIdle(); renderSolaData(); saveLayout(); renderHelpPanel();
+    });
     wireLineSel(helpPanel); return;
   }
   const bn = bottleneckInfo();
@@ -1537,11 +1567,11 @@ renderer.domElement.addEventListener('pointerdown', e => {
     const sid = pickStation(e); if (!sid) return;
     if (!armSource) { armSource = sid; }
     else { if (sid !== armSource) {
-        const ppl = (get(armSource) && get(armSource).ppl) || 1;
+        const fs = getAny(armSource); const ppl = (fs && fs.ppl) || 1;
         const used = new Set(helpArrows.filter(a => a.from === armSource).map(a => a.fromIdx || 0));
         let fromIdx = ppl - 1; for (let i = 0; i < ppl; i++) { if (!used.has(i)) { fromIdx = i; break; } }   // next free operator at this station
-        helpArrows.push({ from: armSource, fromIdx, to: sid, helpMin: Math.min(5, +availIdleOp(armSource, fromIdx).toFixed(1)) });
-        buildHelp(); schedule(); saveLayout();
+        helpArrows.push({ from: armSource, fromIdx, to: sid, helpMin: Math.min(5, +availIdleAny(armSource, fromIdx).toFixed(1)) });
+        buildHelp(); schedule(); buildSolaSched(); renderIdle(); renderSolaData(); renderHelpPanel(); saveLayout();   // re-pace both lines (a Sola help arrow affects the Sola flow-shop)
       } armSource = null; }
     return;
   }
@@ -1600,7 +1630,7 @@ renderer.domElement.addEventListener('contextmenu', e => {
     flowArrows = flowArrows.filter(a => a.from !== id && a.to !== id); buildFlow(); buildSolaSched(); saveLayout(); return;
   }
   if (id && helpArrows.some(a => a.from === id || a.to === id)) {
-    helpArrows = helpArrows.filter(a => a.from !== id && a.to !== id); buildHelp(); saveLayout();
+    helpArrows = helpArrows.filter(a => a.from !== id && a.to !== id); buildHelp(); schedule(); buildSolaSched(); renderIdle(); renderSolaData(); saveLayout();
   }
 });
 // add a waypoint at the midpoint of the current path — for whichever cart was last selected

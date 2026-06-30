@@ -186,6 +186,19 @@ needed, are their own Sola-side station.
 NEXT STEP (planned): make Meritage-side added stations join the sim too, and let
 the connector lady's other-side load feed an actual other-side line.
 
+**Help paths on the Sola side (2026-06):** help arrows used to crash when drawn
+on added/Sola stations — `eff(id)` did `get(id).t` and `get` only searches
+Meritage `ST`, so the 2nd click threw and no arrow appeared. Fixed: `eff` and
+`stName` use `getAny` (ST or added). Added side-aware `solaCyc()`/`cycOf()`/
+`availIdleAny()` so the default help-minutes come from the correct line's
+cycle. `buildSolaSched()` now paces with `effNet(id)` (per-unit time minus help
+received), so a Sola help arrow drops the helped station's time and raises Sola
+capacity; `renderSolaData()` (top panel) likewise uses `effNet`. The Help-paths
+panel's Sola branch now lists/edits/deletes Sola help arrows instead of showing
+a "not modeled" note. Help model is the same as Meritage: the helper pays only
+out of idle (helper station time unchanged), the helped station drops by
+helpMin. All help mutations call `buildSolaSched()`+`renderSolaData()` too.
+
 Rebuild after editing the entry: `client/node_modules/.bin/esbuild
 standalone/Meritage_3D_Line.entry.js --bundle --format=iife --minify
 --alias:three=<abs>/client/node_modules/three` → splice the IIFE into the
