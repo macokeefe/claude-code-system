@@ -919,7 +919,20 @@ function addStation(name, x, z, id, t) {
   nodes[id] = { s: { id, title: name, sub: 'Added station', accent, steps: [{ name, t: t || 0 }], ppl: 1, t: t || 0 }, st: r.st, led: r.led, label, mini, x, z, rot: 0, extra: true, t: t || 0 };
   POS[id] = [x, z];
   extraStations.push(id);
+  buildExtraCrew(id);                                         // show its operator figure(s)
   return id;
+}
+function buildExtraCrew(id) {                                 // operator figures for an added station (mirrors Meritage)
+  for (let i = crew.length - 1; i >= 0; i--) { if (crew[i].station === id) { level2.remove(crew[i].fig); crew.splice(i, 1); } }
+  const nd = nodes[id]; if (!nd) return; const s = nd.s, np = Math.max(0, s.ppl || 0);
+  const base = Math.max(0, extraStations.indexOf(id));
+  for (let i = 0; i < np; i++) {
+    const color = OP_COLORS[(base * 2 + i + 3) % OP_COLORS.length];
+    const fig = makeCrewFigure(color, s.title.split(' ')[0] + (np > 1 ? ' ' + (i + 1) : ''));
+    const spread = 1.1, bdx = (np > 1 ? (i - (np - 1) / 2) * 2 * spread : 0), bdz = 1.7;
+    fig.position.set(nd.x + bdx, 0, nd.z + bdz); level2.add(fig);
+    crew.push({ fig, station: id, bdx, bdz, homeX: nd.x + bdx, homeZ: nd.z + bdz, idx: i });
+  }
 }
 const getAny = id => ST.find(s => s.id === id) || (nodes[id] && nodes[id].s) || null;
 const isExtra = id => !!(nodes[id] && nodes[id].extra);
@@ -953,6 +966,7 @@ function rowsHtml(list) {
 }
 function deleteStation(id) {                                  // remove an ADDED station (core Meritage stations stay)
   const nd = nodes[id]; if (!nd || !nd.extra) return;
+  for (let i = crew.length - 1; i >= 0; i--) { if (crew[i].station === id) { level2.remove(crew[i].fig); crew.splice(i, 1); } }
   [nd.st, nd.label, nd.mini, nd.visual && nd.visual.g].forEach(o => { if (o) level2.remove(o); });
   const i = extraStations.indexOf(id); if (i >= 0) extraStations.splice(i, 1);
   delete nodes[id]; delete POS[id];
@@ -965,7 +979,7 @@ function afterEdit(id) {                                     // ST stations re-p
 function wireRows(host) {
   host.querySelectorAll('input.sppl').forEach(inp => inp.onchange = e => {
     const id = e.target.dataset.id, s = getAny(id); s.ppl = Math.max(1, parseInt(e.target.value) || 1);
-    if (!isExtra(id)) { rebuildCrew(id); placeStation(id); }
+    if (isExtra(id)) buildExtraCrew(id); else { rebuildCrew(id); placeStation(id); }
     afterEdit(id);
   });
   host.querySelectorAll('input.sname').forEach(inp => inp.onchange = e => {
@@ -1194,6 +1208,12 @@ document.getElementById('taskbtn').onclick = () => {
   taskPanel.style.display = (taskPanel.style.display === 'none') ? 'block' : 'none';
   renderTaskChart();
 };
+// toggle the editable Station-times panel like the other panels
+{ const tb = document.getElementById('timesbtn'); if (tb) tb.onclick = () => {
+  const hidden = timeBox.style.display === 'none';
+  timeBox.style.display = hidden ? 'block' : 'none';
+  tb.classList.toggle('on', hidden);
+}; }
 
 /* =========================== EDIT LAYOUT =========================== */
 const YARD = 0.9144;                       // 1 unit = 1 metre; 1 yard = 0.9144 m
