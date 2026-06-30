@@ -761,7 +761,7 @@ ST.forEach(s => {
     const color = OP_COLORS[opColorIdx % OP_COLORS.length]; opColorIdx++;
     const fig = makeCrewFigure(color, s.title.split(' ')[0] + (np>1?(' '+(i+1)):''));
     const spread = s.double ? 4 * FT : 1.1;        // one operator per 8' table on the double bench
-    const bdx = (np > 1 ? (i - (np-1)/2) * 2 * spread : 0), bdz = 1.7;   // base offset from station (rotates with the table)
+    const bdx = (np > 1 ? (i - (np-1)/2) * 2 * spread : 0), bdz = ((s.role === 'fa' ? 5 : 4) * FT) / 2 + 0.6;   // stand on the mat
     fig.position.set(x + bdx, 0, z + bdz);
     level2.add(fig);
     crew.push({ fig, station: s.id, bdx, bdz, homeX: x + bdx, homeZ: z + bdz, idx: i });
@@ -1012,7 +1012,7 @@ function buildExtraCrew(id) {                                 // operator figure
   for (let i = 0; i < np; i++) {
     const color = OP_COLORS[(base * 2 + i + 3) % OP_COLORS.length];
     const fig = makeCrewFigure(color, s.title.split(' ')[0] + (np > 1 ? ' ' + (i + 1) : ''));
-    const spread = 1.1, bdx = (np > 1 ? (i - (np - 1) / 2) * 2 * spread : 0), bdz = 1.7;
+    const spread = 1.1, bdx = (np > 1 ? (i - (np - 1) / 2) * 2 * spread : 0), bdz = (4 * FT) / 2 + 0.6;   // stand on the anti-fatigue mat (8'x4' bench)
     fig.position.set(nd.x + bdx, 0, nd.z + bdz); level2.add(fig);
     crew.push({ fig, station: id, bdx, bdz, homeX: nd.x + bdx, homeZ: nd.z + bdz, idx: i });
   }
@@ -1291,7 +1291,7 @@ function rebuildCrew(id) {              // recreate a station's operator figures
   for (let i = 0; i < np; i++) {
     const color = OP_COLORS[(base * 2 + i) % OP_COLORS.length];
     const fig = makeCrewFigure(color, s.title.split(' ')[0] + (np > 1 ? ' ' + (i + 1) : ''));
-    const bdx = (np > 1 ? (i - (np - 1) / 2) * 2 * spread : 0), bdz = 1.7;
+    const bdx = (np > 1 ? (i - (np - 1) / 2) * 2 * spread : 0), bdz = ((s.role === 'fa' ? 5 : 4) * FT) / 2 + 0.6;
     fig.position.set(nd.x + bdx, 0, nd.z + bdz); level2.add(fig);
     crew.push({ fig, station: id, bdx, bdz, homeX: nd.x + bdx, homeZ: nd.z + bdz, idx: i });
   }
