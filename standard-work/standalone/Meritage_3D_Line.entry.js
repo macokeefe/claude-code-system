@@ -867,18 +867,54 @@ function buildSolaSched() {
   }
   solaSched = { ids, time, finish, N };
   solaHorizon = ids.length ? ((finish[ids.length - 1][N - 1] || 0) + 4) : 0;
+  buildSolaTravel();
 }
-function solaUpdate() {
+// traveling parts between consecutive Sola stations + a ship pile at the end
+const solaTravelGroup = new THREE.Group(); level2.add(solaTravelGroup);
+let solaTravel = [];
+function buildSolaTravel() {
+  while (solaTravelGroup.children.length) solaTravelGroup.remove(solaTravelGroup.children[0]);
+  solaTravel = [];
   if (!solaSched) return;
-  const { ids, time, finish, N: sn } = solaSched; if (!ids.length) return;
+  const { ids } = solaSched;
+  for (let k = 0; k < ids.length - 1; k++) {
+    const kind = nodes[ids[k]] && nodes[ids[k]].kind || 'connectors';
+    const arr = [];
+    for (let u = 0; u < MAX_UNITS; u++) { const p = buildSub(kind); p.scale.set(0.5, 0.5, 0.5); p.visible = false; solaTravelGroup.add(p); arr.push(p); }
+    solaTravel.push(arr);
+  }
+}
+const solaShipBoxes = [];
+for (let i = 0; i < 40; i++) { const b = makeShipBox(); b.visible = false; b.position.set(20.5 + (i % 3) * 1.8, 0, -4 + Math.floor(i / 3) * 1.2); level2.add(b); solaShipBoxes.push(b); }
+const SOLA_TRAVEL = 3;            // sim-min a part spends moving to the next station
+function solaUpdate() {
+  if (!solaSched) { solaShipBoxes.forEach(b => b.visible = false); return; }
+  const { ids, time, finish, N: sn } = solaSched; if (!ids.length) { solaShipBoxes.forEach(b => b.visible = false); return; }
   let shipped = 0; for (let u = 0; u < sn; u++) if (Ts >= finish[ids.length - 1][u]) shipped++;
+  // each station: LED + WIP part growing while it works; operators bob while active
   ids.forEach((id, k) => {
     const nd = nodes[id]; if (!nd) return;
-    if (Ts <= 0) { setLed(nd.led, 'idle', false); return; }
-    let active = false, allDone = true;
-    for (let u = 0; u < sn; u++) { const f = finish[k][u], st = f - time[k]; if (Ts >= st && Ts < f) active = true; if (Ts < f) allDone = false; }
-    setLed(nd.led, active ? 'active' : (allDone ? 'done' : 'idle'), active);
+    let active = false, allDone = true, frac = 0;
+    if (Ts > 0) for (let u = 0; u < sn; u++) { const f = finish[k][u], st = f - time[k]; if (Ts >= st && Ts < f) { active = true; frac = (Ts - st) / time[k]; } if (Ts < f) allDone = false; }
+    setLed(nd.led, Ts <= 0 ? 'idle' : (active ? 'active' : (allDone ? 'done' : 'idle')), active);
+    if (nd.visual) nd.visual.update(active ? frac : 0, 0, sn);
+    crew.forEach(c => { if (c.station === id) { const b = active ? Math.sin(Ts * 6 + c.idx) * 0.07 : 0; c.fig.position.x = c.homeX + b; c.fig.position.z = c.homeZ + (active ? Math.cos(Ts * 6 + c.idx) * 0.07 : 0); } });
   });
+  // parts traveling station -> next station
+  for (let k = 0; k < ids.length - 1; k++) {
+    const pool = solaTravel[k]; if (!pool) continue;
+    const A = nodes[ids[k]], B = nodes[ids[k + 1]]; if (!A || !B) continue;
+    for (let u = 0; u < sn; u++) {
+      const part = pool[u]; if (!part) continue;
+      const depart = finish[k][u], cons = finish[k + 1][u] - time[k + 1];
+      if (Ts <= 0 || depart >= cons || Ts < depart || Ts >= cons) { part.visible = false; continue; }
+      const arrive = Math.min(depart + SOLA_TRAVEL, cons);
+      part.visible = true;
+      if (Ts < arrive) { const fr = (arrive > depart) ? (Ts - depart) / (arrive - depart) : 1; part.position.set(A.x + (B.x - A.x) * fr, 1.04 + Math.sin(fr * Math.PI) * 0.4, A.z + (B.z - A.z) * fr); }
+      else part.position.set(B.x, 1.04, B.z);
+    }
+  }
+  solaShipBoxes.forEach((b, i) => b.visible = i < shipped);
   const el = document.getElementById('solaShip'); if (el) el.textContent = shipped;
 }
 
@@ -916,12 +952,15 @@ function addStation(name, x, z, id, t) {
   label.position.set(x, 2.85, z); level2.add(label);
   const mini = makeMiniLabel(name, accent); mini.position.set(x, 2.55, z); level2.add(mini);
   setLed(r.led, 'idle', false);
-  nodes[id] = { s: { id, title: name, sub: 'Added station', accent, steps: [{ name, t: t || 0 }], ppl: 1, t: t || 0 }, st: r.st, led: r.led, label, mini, x, z, rot: 0, extra: true, t: t || 0 };
+  const kind = SOLA_KINDS[extraStations.length % SOLA_KINDS.length];
+  const visual = makeFeederWIP(kind); visual.g.position.set(x, 1.04, z); level2.add(visual.g);   // a WIP part that grows as it works
+  nodes[id] = { s: { id, title: name, sub: 'Added station', accent, steps: [{ name, t: t || 0 }], ppl: 1, t: t || 0 }, st: r.st, led: r.led, label, mini, visual, kind, x, z, rot: 0, extra: true, t: t || 0 };
   POS[id] = [x, z];
   extraStations.push(id);
   buildExtraCrew(id);                                         // show its operator figure(s)
   return id;
 }
+const SOLA_KINDS = ['connectors', 'arm', 'back', 'trellis', 'seat'];
 function buildExtraCrew(id) {                                 // operator figures for an added station (mirrors Meritage)
   for (let i = crew.length - 1; i >= 0; i--) { if (crew[i].station === id) { level2.remove(crew[i].fig); crew.splice(i, 1); } }
   const nd = nodes[id]; if (!nd) return; const s = nd.s, np = Math.max(0, s.ppl || 0);
