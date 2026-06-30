@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
+// Capture the pristine page HTML before the 3D scene mutates the DOM, so we can
+// bake the current layouts into a fresh self-contained copy of this app.
+const __ORIGINAL_HTML = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+
 /* ============================================================
    MERITAGE 3-SEATER — standalone 3D line model
    Look modeled on the original app's Floor.jsx; structure is our
@@ -1311,7 +1315,8 @@ function setStationRot(id, rot) {
   nd.rot = rot; placeStation(id);
 }
 function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraStations.map(id => { const n = nodes[id]; return { id, name: n.s.title, x: n.x, z: n.z, t: n.t || 0 }; }); o.__flow = flowArrows.map(a => [a.from, a.to]); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
-function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__extras)) o.__extras.forEach(e => { if (!nodes[e.id]) { addStation(e.name, e.x, e.z, e.id, e.t); const num = parseInt(String(e.id).replace(/\D/g, '')) || 0; if (num > extraSeq) extraSeq = num; } }); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) { flowArrows = o.__flow.map(a => ({ from: a[0], to: a[1] })); buildFlow(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } } catch (e) {} }
+function loadLayout() { try { let o = null; try { o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch (e) {} if (!o && window.__M3D_LAYOUT__) o = window.__M3D_LAYOUT__;   // baked-in working layout (travels with the file)
+  if (!o) return; if (Array.isArray(o.__extras)) o.__extras.forEach(e => { if (!nodes[e.id]) { addStation(e.name, e.x, e.z, e.id, e.t); const num = parseInt(String(e.id).replace(/\D/g, '')) || 0; if (num > extraSeq) extraSeq = num; } }); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) { flowArrows = o.__flow.map(a => ({ from: a[0], to: a[1] })); buildFlow(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } } catch (e) {} }
 
 // 1-yard grid on the deck
 function buildGrid() {
@@ -1614,7 +1619,10 @@ rebuildDivider();   // align the crossing to the connector station
 
 /* ---- named layouts: save / load / compare different floor plans ---- */
 const LAYOUTS_KEY = 'm3d_layouts_v2';
-const readLayouts = () => { try { return JSON.parse(localStorage.getItem(LAYOUTS_KEY)) || {}; } catch (e) { return {}; } };
+// Named layouts = those baked into this file (window.__M3D_LAYOUTS__) MERGED with
+// any saved in this browser. So layouts baked into the app travel to any computer.
+const builtinLayouts = () => { try { return (window.__M3D_LAYOUTS__ && typeof window.__M3D_LAYOUTS__ === 'object') ? window.__M3D_LAYOUTS__ : {}; } catch (e) { return {}; } };
+const readLayouts = () => { let ls = {}; try { ls = JSON.parse(localStorage.getItem(LAYOUTS_KEY)) || {}; } catch (e) {} return Object.assign({}, builtinLayouts(), ls); };
 const writeLayouts = o => { try { localStorage.setItem(LAYOUTS_KEY, JSON.stringify(o)); } catch (e) {} };
 function snapshot() {
   const pos = {}, times = {};
@@ -1669,6 +1677,34 @@ document.getElementById('exportLayout').onclick = () => {
   a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
   a.download = 'meritage-line-layout.json'; document.body.appendChild(a); a.click();
   a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+// Bake the current working layout + all named layouts into a fresh copy of this
+// app, so opening that copy on any computer shows the same layouts built in.
+const bakeBtn = document.getElementById('bakeApp');
+if (bakeBtn) bakeBtn.onclick = () => {
+  saveLayout();
+  let working = {}; try { working = JSON.parse(localStorage.getItem(LAYOUT_KEY) || '{}'); } catch (e) {}
+  const named = readLayouts();                              // builtin + this browser's
+  // Build the marker tags + strip-regex from fragments so the literal substrings
+  // "<script id=\"m3dLayouts\">" and "</script>" never appear in THIS bundle's
+  // source. If they did, __ORIGINAL_HTML (the serialized document, which contains
+  // this very bundle) would carry them, and the strip-regex below would match
+  // INSIDE the bundle and truncate everything up to its real closing tag.
+  const LT = String.fromCharCode(60);                      // '<'  (never folded into a literal tag)
+  const enc = o => JSON.stringify(o).replace(/</g, '\\u003c');   // keep stray '<' in data from breaking the script
+  const inject = LT + 'script id="m3dLayouts">' +
+    'window.__M3D_LAYOUT__=' + enc(working) + ';' +
+    'window.__M3D_LAYOUTS__=' + enc(named) + ';' +
+    LT + '/script>\n';
+  const stripRe = new RegExp(LT + 'script id="m3dLayouts">[\\s\\S]*?' + LT + '/script>\\s*', 'i');
+  let html = __ORIGINAL_HTML.replace(stripRe, '');         // drop any previously-baked layouts
+  html = html.replace('</head>', inject + '</head>');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+  a.download = 'Meritage_3D_Line.html'; document.body.appendChild(a); a.click();
+  a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  const n = Object.keys(named).length;
+  alert(`Saved a copy of the app with your working layout` + (n ? ` and ${n} saved layout${n > 1 ? 's' : ''}` : '') + ` built in.\nUse / share that downloaded file — it will show the same layouts on any computer.`);
 };
 const importFile = document.getElementById('importFile');
 document.getElementById('importLayout').onclick = () => importFile.click();

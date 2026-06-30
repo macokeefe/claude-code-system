@@ -192,6 +192,26 @@ standalone/Meritage_3D_Line.entry.js --bundle --format=iife --minify
 `<script>` of the HTML scaffold (lines before `<script>` are the hand-authored
 DOM/CSS; everything after is the bundle). No npm build script wired for it.
 
+**Save layouts INTO the app (2026-06):** a static HTML file can't self-modify,
+so layouts that should "travel between computers" are baked into a downloaded
+COPY. `loadLayout`/`readLayouts` fall back to globals `window.__M3D_LAYOUT__`
+(working) and `window.__M3D_LAYOUTS__` (named) when localStorage is empty —
+`readLayouts()` = `Object.assign({}, builtinLayouts(), localStorage)` so baked
+layouts merge under this browser's. The **💾 Save into app** button (`#bakeApp`)
+captures `__ORIGINAL_HTML` (`'<!DOCTYPE html>\n' + outerHTML`, taken at module
+load) and injects `<script id="m3dLayouts">window.__M3D_LAYOUT__=…;
+window.__M3D_LAYOUTS__=…;</script>` before `</head>`, then downloads it.
+GOTCHA (cost a long debug): the inject marker tag and the strip-regex that
+removes a previously-baked inject MUST be built from fragments at runtime
+(`const LT = String.fromCharCode(60)` for `<`), NOT as plain literals. Plain
+literals fold into the bundle, so `__ORIGINAL_HTML` (the serialized document,
+which contains this very bundle) carries a literal `<script id="m3dLayouts">`,
+and the non-greedy strip-regex then matches INSIDE the bundle and deletes
+everything up to the bundle's real closing `</script>` — the baked copy's
+bundle is truncated and never runs (symptom: opens with an empty layout
+dropdown and zero console output). JSON data is `<`-escaped for the same
+reason. Re-baking is idempotent (strip-regex removes the old inject first).
+
 ## Sola No-Arms updated SWI + material flow (2026-06)
 
 Newer "Sola_Lounge_no_armSWI_in_progress.csv" (No Arms, **No middle leg**) —
