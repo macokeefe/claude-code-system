@@ -212,6 +212,21 @@ bundle is truncated and never runs (symptom: opens with an empty layout
 dropdown and zero console output). JSON data is `<`-escaped for the same
 reason. Re-baking is idempotent (strip-regex removes the old inject first).
 
+GOTCHA #2 (Sola side missing in saved/baked layouts, 2026-06): named layouts
+(`snapshot`/`applyLayout`) originally captured only Meritage `ST` — the Sola
+side (added stations `extraStations` + `flowArrows`) was dropped, so a baked
+named layout opened on another machine showed "only the chart" (the Sola data
+panel renders from defaults) and no Sola benches. Fixed with shared helpers
+`extraSnap()` / `clearExtras()` / `restoreExtras()` / `restoreFlow()` used by
+BOTH the working layout (`saveLayout`/`loadLayout`) and named layouts
+(`snapshot`/`applyLayout`). `extraSnap` stores full per-station detail
+(`{id,name,x,z,t,rot,ppl,steps}`) — the old working-layout `__extras` only
+stored `{id,name,x,z,t}`, losing people/step breakdown. `applyLayout` only
+clears+restores the Sola side when `L.extras` is an array, so applying a
+LEGACY (pre-fix) named layout doesn't wipe the current Sola line. NOTE: named
+layouts saved before this fix can't be recovered — rebuild the Sola line (it
+survives in the working layout) and re-save those layouts.
+
 ## Sola No-Arms updated SWI + material flow (2026-06)
 
 Newer "Sola_Lounge_no_armSWI_in_progress.csv" (No Arms, **No middle leg**) —
