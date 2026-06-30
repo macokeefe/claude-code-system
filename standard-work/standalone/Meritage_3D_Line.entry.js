@@ -265,10 +265,31 @@ function buildSub(kind) {
   const sub = new THREE.Group();
   if (kind === 'arm') { sub.add(rail(0.9)); const p = rail(0.5); p.rotation.z = Math.PI/2; p.position.set(-0.4,0.25,0); sub.add(p); }
   else if (kind === 'back') { const a=rail(1.1); a.position.y=0.3; sub.add(a); const l=rail(0.6); l.rotation.z=Math.PI/2; l.position.x=-0.5; sub.add(l); const r2=rail(0.6); r2.rotation.z=Math.PI/2; r2.position.x=0.5; sub.add(r2); }
-  else if (kind === 'trellis') { for(let i=0;i<4;i++){const s=bx(0.9,0.05,0.08,MAT.cherry); s.position.z=-0.3+i*0.2; sub.add(s);} }
+  else if (kind === 'trellis') { for(let i=0;i<4;i++){const s=bx(0.9,0.05,0.08,MAT.cherry); s.position.z=-0.3+i*0.2; sub.add(s);} const b1=rail(0.9); b1.rotation.y=Math.PI/2; b1.position.x=-0.45; sub.add(b1); const b2=rail(0.9); b2.rotation.y=Math.PI/2; b2.position.x=0.45; sub.add(b2); }
   else if (kind === 'seat') { const a=rail(1.4); a.position.z=-0.4; sub.add(a); const b=rail(1.4); b.position.z=0.4; sub.add(b); for(let i=0;i<5;i++){const s=cyl(0.02,0.85,MAT.chrome); s.rotation.x=Math.PI/2; s.position.x=-0.5+i*0.25; sub.add(s);} }
+  // ---- Sola-specific parts (from the SWI descriptions) ----
+  else if (kind === 'rivet') { const e=rail(0.95); sub.add(e); for(let i=0;i<5;i++){const n=cyl(0.045,0.16,MAT.chrome); n.position.set(-0.36+i*0.18,0.1,0); sub.add(n);} }   // nutserts set into an extrusion
+  else if (kind === 'plate') { const p=bx(0.5,0.05,0.4,MAT.steel); p.position.y=0.06; sub.add(p); for(const [dx,dz] of [[-0.18,-0.13],[0.18,-0.13],[-0.18,0.13],[0.18,0.13]]){const s=cyl(0.03,0.12,MAT.chrome); s.position.set(dx,0.12,dz); sub.add(s);} }   // connector plate + 4 corner screws
+  else if (kind === 'frame') { const w=1.1,d=0.7; const a=rail(w); a.position.z=-d/2; sub.add(a); const b=rail(w); b.position.z=d/2; sub.add(b); const l=rail(d); l.rotation.y=Math.PI/2; l.position.x=-w/2; sub.add(l); const r2=rail(d); r2.rotation.y=Math.PI/2; r2.position.x=w/2; sub.add(r2); }   // rectangular frame section
+  else if (kind === 'cap') { for(const [dx,dz] of [[-0.4,-0.3],[0.4,-0.3],[-0.4,0.3],[0.4,0.3]]){const c=bx(0.13,0.13,0.13,MAT.cherry); c.position.set(dx,0.07,dz); sub.add(c);} }   // corner & end caps
+  else if (kind === 'cushion') { const m=bx(0.85,0.42,0.55,MAT.box); m.position.y=0.21; sub.add(m); const tp=bx(0.87,0.05,0.14,MAT.boxWhite); tp.position.y=0.44; sub.add(tp); }   // cushions packed / boxed for ship
   else { for(let i=0;i<3;i++){const c=bx(0.16,0.1,0.1,MAT.cherry); c.position.x=-0.25+i*0.25; sub.add(c);} } // connectors
   return sub;
+}
+// pick the part a station makes from its name (Sola SWI wording)
+function kindForPart(name) {
+  const n = (name || '').toLowerCase();
+  if (/rivet|nut/.test(n)) return 'rivet';
+  if (/plate/.test(n)) return 'plate';
+  if (/cushion|pack|ship|box/.test(n)) return 'cushion';
+  if (/cap/.test(n)) return 'cap';
+  if (/trellis|slat|seat support/.test(n)) return 'trellis';
+  if (/install|finish/.test(n)) return 'seat';
+  if (/frame|sub.?assembl|connection|join/.test(n)) return 'frame';
+  if (/connector|conn/.test(n)) return 'connectors';
+  if (/arm/.test(n)) return 'arm';
+  if (/back/.test(n)) return 'back';
+  return 'frame';
 }
 
 /* feeder sub-assembly: a small representative part that grows as the current
@@ -949,7 +970,7 @@ function addStation(name, x, z, id, t) {
   label.position.set(x, 2.85, z); level2.add(label);
   const mini = makeMiniLabel(name, accent); mini.position.set(x, 2.55, z); level2.add(mini);
   setLed(r.led, 'idle', false);
-  const kind = SOLA_KINDS[extraStations.length % SOLA_KINDS.length];
+  const kind = kindForPart(name);                            // part shape matches what this station makes (from the SWI name)
   const visual = makeFeederWIP(kind); visual.g.position.set(x, 1.04, z); level2.add(visual.g);   // a WIP part that grows as it works
   nodes[id] = { s: { id, title: name, sub: 'Added station', accent, steps: [{ name, t: t || 0 }], ppl: 1, t: t || 0 }, st: r.st, led: r.led, label, mini, visual, kind, x, z, rot: 0, extra: true, t: t || 0 };
   POS[id] = [x, z];
@@ -957,7 +978,6 @@ function addStation(name, x, z, id, t) {
   buildExtraCrew(id);                                         // show its operator figure(s)
   return id;
 }
-const SOLA_KINDS = ['connectors', 'arm', 'back', 'trellis', 'seat'];
 function buildExtraCrew(id) {                                 // operator figures for an added station (mirrors Meritage)
   for (let i = crew.length - 1; i >= 0; i--) { if (crew[i].station === id) { level2.remove(crew[i].fig); crew.splice(i, 1); } }
   const nd = nodes[id]; if (!nd) return; const s = nd.s, np = Math.max(0, s.ppl || 0);
