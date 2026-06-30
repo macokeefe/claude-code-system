@@ -239,6 +239,12 @@ storage). Bake/export now read those, never storage. The baked copy carries
 everything in `window.__M3D_LAYOUT__`/`__M3D_LAYOUTS__`, and `loadLayout` reads
 those globals directly — so on a storage-blocked machine the user must WORK IN
 and RE-OPEN the baked copy (the plain copy can't remember anything there).
+Import was ALSO broken on such machines — it did `localStorage.setItem` +
+`location.reload()`, which silently no-ops when storage is blocked. Fixed:
+import now parses the file and applies it to the LIVE scene via the shared
+`applyWorkingLayout(o)` (extracted from `loadLayout`), `clearExtras()` first,
+then `schedule()`/`buildSolaSched()`. So the reliable PC→Mac transfer is
+Export (on the storage-working PC) → Import (on the Mac) — no rebuild needed.
 
 ## Sola No-Arms updated SWI + material flow (2026-06)
 
