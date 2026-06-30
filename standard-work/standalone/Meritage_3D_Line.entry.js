@@ -749,6 +749,27 @@ ST.forEach(s => {
 // register the materials cart as a draggable source node (nodes/POS now exist)
 nodes.cart = { id:'cart', x:CART_DEF[0], z:CART_DEF[1], st:cartPad, s:{ id:'cart', title:'Materials cart' } };
 POS.cart = [CART_DEF[0], CART_DEF[1]];
+
+// ---- second materials cart for the SOLA side, fed from the SAME elevator ----
+const CART2_DEF = [13, -1.2];                                 // on the Sola (right) side
+const cart2Pad = new THREE.Group();
+const pad2 = bx(2.7, 0.04, 2.7, new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.9, transparent: true, opacity: 0.45 }));
+pad2.position.y = 0.025; cart2Pad.add(pad2);
+for (const dx of [-1.35, 1.35]) { const e = bx(0.1, 0.03, 2.7, MAT.tape); e.position.set(dx, 0.03, 0); cart2Pad.add(e); }
+for (const dz of [-1.35, 1.35]) { const e = bx(2.7, 0.03, 0.1, MAT.tape); e.position.set(0, 0.03, dz); cart2Pad.add(e); }
+(function(){ const c=document.createElement('canvas'); c.width=360; c.height=72; const x=c.getContext('2d');
+  x.fillStyle='#236043'; x.beginPath(); x.roundRect(4,8,352,56,14); x.fill();
+  x.fillStyle='#fff'; x.font='700 28px Arial'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('SOLA MATERIALS CART',180,38);
+  const tex=new THREE.CanvasTexture(c); tex.anisotropy=8; const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true}));
+  sp.scale.set(2.2,0.45,1); sp.position.y=1.6; cart2Pad.add(sp); })();
+const cart2Mesh = makePartsCart(); cart2Mesh.scale.set(1.4,1.3,1.4); cart2Pad.add(cart2Mesh);   // a physical cart sits on the pad
+cart2Pad.position.set(CART2_DEF[0], 0, CART2_DEF[1]); level2.add(cart2Pad);
+nodes.cart2 = { id:'cart2', x:CART2_DEF[0], z:CART2_DEF[1], st:cart2Pad, s:{ id:'cart2', title:'Sola materials cart' } };
+POS.cart2 = [CART2_DEF[0], CART2_DEF[1]];
+// a line showing it's supplied from the SAME elevator
+const cart2Feed = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(EL[0],0.18,EL[1]), new THREE.Vector3(CART2_DEF[0],0.18,CART2_DEF[1])]), new THREE.LineDashedMaterial({ color: 0x236043, dashSize:0.5, gapSize:0.3, transparent:true, opacity:0.6 }));
+cart2Feed.computeLineDistances(); level2.add(cart2Feed);
+function refreshCart2Feed(){ cart2Feed.geometry.setFromPoints([new THREE.Vector3(EL[0],0.18,EL[1]), new THREE.Vector3(nodes.cart2.x,0.18,nodes.cart2.z)]); cart2Feed.computeLineDistances(); }
 // shipped boxes pool near packing/ship dock
 const shipBoxes = [];
 for (let i = 0; i < 40; i++) { const b = makeShipBox(); b.visible = false; b.position.set(16 + (i%4)*2.0, 0, 4.2 + Math.floor(i/4)*1.2); level2.add(b); shipBoxes.push(b); }
@@ -808,6 +829,26 @@ function applyLabels() {
 document.getElementById('labels').onclick = () => { labelMode = (labelMode + 1) % 3; applyLabels(); };
 applyLabels();
 
+// ---- live per-line DATA: Meritage (left, via schedule) + Sola (right). Both
+// lines are always shown; each panel shows that line's totals independently. ----
+function renderSolaData() {
+  const ids = extraStations.filter(id => sideOf(nodes[id].x) === 'other');
+  const conSola = (get('con').steps || []).filter(s => s.side === 'other').reduce((a, s) => a + (parseFloat(s.t) || 0), 0);
+  let labor = conSola, cyc = conSola > 0 ? conSola : 0, bot = conSola > 0 ? 'Connectors (Sola)' : '—';
+  ids.forEach(id => {
+    const s = nodes[id].s, ppl = Math.max(1, s.ppl || 1), per = (s.t || 0) / ppl;
+    labor += (s.t || 0);
+    if (per > cyc) { cyc = per; bot = s.title; }
+  });
+  const cap = cyc > 0 ? 420 / cyc : 0;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('solaLabor', labor.toFixed(1));
+  set('solaCyc', cyc > 0 ? cyc.toFixed(1).replace(/\.0$/, '') : '—');
+  set('solaCap', cap > 0 ? cap.toFixed(1) : '—');
+  set('solaBot', cyc > 0 ? `${bot} (${cyc.toFixed(1).replace(/\.0$/, '')})` : '— none yet —');
+  set('solaCount', ids.length);
+}
+
 // build editable time rows
 const timeBox = document.getElementById('times');
 // walk-time controls
@@ -833,10 +874,11 @@ const extraStations = [];
 let extraSeq = 0;
 const DIVIDER_X = DECK.x1;                                   // the painted middle line
 const sideOf = x => (x < DIVIDER_X ? 'meritage' : 'other');
+const STA_COLORS = ['#1d3a66','#9a3b1f','#236043','#8f5390','#a8923a','#3f8f8f','#9c4f45','#c0552c','#2f6df6','#7a5b1f'];
 function addStation(name, x, z, id, t) {
   id = id || ('x' + (++extraSeq));
   const r = makeBench(8, 3); r.st.position.set(x, 0, z); level2.add(r.st);
-  const accent = '#5c5f99';
+  const accent = STA_COLORS[extraStations.length % STA_COLORS.length];   // varied colour per added station (like Meritage)
   const label = makeStationLabel(name, 'Added station', t ? t + ' min' : '—', accent);
   label.position.set(x, 2.85, z); level2.add(label);
   const mini = makeMiniLabel(name, accent); mini.position.set(x, 2.55, z); level2.add(mini);
@@ -918,6 +960,7 @@ function renderTimes() {
   stepsHost.innerHTML = rowsHtml(mer);
   stepsHost2.innerHTML = oth.length ? rowsHtml(oth) : '<div style="font-size:11px;color:#8a93a0">No Sola (no arms) stations yet. Add one with “＋ Add station”, or drag a station across the middle line.</div>';
   wireRows(stepsHost); wireRows(stepsHost2);
+  if (typeof renderSolaData === 'function') renderSolaData();
 }
 renderTimes();
 
@@ -948,6 +991,7 @@ function renderShared() {
   stepsHost3.querySelectorAll('select.sside').forEach(s => s.onchange = e => { c.steps[+e.target.dataset.i].side = e.target.value; after(); });
   stepsHost3.querySelectorAll('button.sdel').forEach(b => b.onclick = e => { c.steps.splice(+e.target.dataset.i, 1); if (!c.steps.length) c.steps.push({ name: 'Connectors', t: 0, side: 'meritage' }); after(); });
   const add = document.getElementById('shAdd'); if (add) add.onclick = () => { c.steps.push({ name: 'New task', t: 0, side: 'meritage' }); after(); };
+  if (typeof renderSolaData === 'function') renderSolaData();
 }
 recalcCon(); renderShared();
 document.getElementById('walkOn').onchange = e => { walkOn = e.target.checked; schedule(); T = 0; setPlay(false); };
@@ -1125,6 +1169,7 @@ function setStationPos(id, x, z) {
   nd.x = x; nd.z = z; POS[id] = [x, z];
   placeStation(id);
   if (id === 'con' && typeof rebuildDivider === 'function') rebuildDivider();   // crossing follows the connector
+  if (id === 'cart2' && typeof refreshCart2Feed === 'function') refreshCart2Feed();
 }
 function setStationRot(id, rot) {
   const nd = nodes[id]; if (!nd) return;
@@ -1170,7 +1215,7 @@ const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 const deckPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(FLOOR2 - 0.0)); // y = FLOOR2
 let editing = false, dragId = null, savedView = null;
-const stList = () => [...ST.map(s => nodes[s.id]), ...extraStations.map(id => nodes[id]), nodes.cart].filter(n => n && n.st);
+const stList = () => [...ST.map(s => nodes[s.id]), ...extraStations.map(id => nodes[id]), nodes.cart, nodes.cart2].filter(n => n && n.st);
 const measurePanel = document.getElementById('measure');
 const editBtn = document.getElementById('edit');
 
@@ -1396,7 +1441,7 @@ document.getElementById('rackbtn').onclick = () => {
 };
 loadLayout();
 try { recalcCon(); schedule(); } catch (e) { console.error('schedule failed', e); }   // set labor/cycle/readouts FIRST so a bad saved layout can't leave them stuck on the placeholder
-try { renderTimes(); renderShared(); } catch (e) { console.error('panel render failed', e); }
+try { renderTimes(); renderShared(); renderSolaData(); } catch (e) { console.error('panel render failed', e); }
 
 /* ---- draggable floating windows: grab any panel by its title bar and move it;
    positions persist per panel. The listener is on the panel (not the title) so

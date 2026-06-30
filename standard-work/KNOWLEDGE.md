@@ -222,6 +222,19 @@ connectors to the Sola Connector Plate / Attachment stations.
 App naming: the "other side" is now labelled **"Sola (no arms)"** throughout the
 UI (internal side value stays `other`).
 
+**Dual data panels (2026-06):** both lines are ALWAYS shown (a brief view-filter
+that hid one line was removed — the engineer wants to see both). The top now has
+TWO readout strips: MERITAGE (left, from `schedule()`) and SOLA (NO ARMS) (right,
+`renderSolaData()` — Stations / Total labor / Cycle / Capacity / Bottleneck).
+Sola metrics are computed from the Sola-side added stations (`sideOf==='other'`)
+plus the connector lady's Sola-side task minutes: labor = Σ station t (+lady
+Sola), cycle = max per-operator station time, capacity = 420/cycle. It's a
+static line-balance (bottleneck = slowest station), not yet an animated flow sim
+— the 3D Play still animates only Meritage. Added stations also get varied
+header colours (`STA_COLORS`), and there's a 2nd "Sola materials cart" (`cart2`,
+green) fed from the same elevator (dashed feed line). NEXT: an animated Sola
+flow sim so the Sola line can run in 3D too (together or separately).
+
 ## 3D Floor presentation restyle (2026-06)
 
 The engineer wants the 3D Floor boss-presentable: "simple… super good for
