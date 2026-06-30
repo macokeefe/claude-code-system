@@ -1319,9 +1319,9 @@ function buildGrid() {
   const major = new THREE.LineBasicMaterial({ color: 0x33414f, transparent: true, opacity: 0.8 });
   const vp = [], vpM = [], hp = [], hpM = [];
   let i = 0;
-  for (let x = DECK.x0; x <= DECK.x1 + 1e-6; x += YARD, i++) { (i % 5 === 0 ? vpM : vp).push(x, y, DECK.z0, x, y, DECK.z1); }
+  for (let x = DECK.x0; x <= MX1 + 1e-6; x += YARD, i++) { (i % 5 === 0 ? vpM : vp).push(x, y, DECK.z0, x, y, DECK.z1); }   // span both decks (Meritage + Sola)
   i = 0;
-  for (let z = DECK.z0; z <= DECK.z1 + 1e-6; z += YARD, i++) { (i % 5 === 0 ? hpM : hp).push(DECK.x0, y, z, DECK.x1, y, z); }
+  for (let z = DECK.z0; z <= DECK.z1 + 1e-6; z += YARD, i++) { (i % 5 === 0 ? hpM : hp).push(DECK.x0, y, z, MX1, y, z); }
   const mk = (pts, mat) => { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); return new THREE.LineSegments(geo, mat); };
   g.add(mk(vp, minor), mk(hp, minor), mk(vpM, major), mk(hpM, major));
   // yard ruler labels every 5 yd along the near edges
@@ -1332,7 +1332,7 @@ function buildGrid() {
     sp.scale.set(2.0, 1.0, 1); sp.position.set(wx, y + 0.2, wz); g.add(sp);
   };
   let yd = 0;
-  for (let x = DECK.x0; x <= DECK.x1 + 1e-6; x += 5 * YARD, yd += 5) mkLbl(yd + 'yd', x, DECK.z1 + 0.9);
+  for (let x = DECK.x0; x <= MX1 + 1e-6; x += 5 * YARD, yd += 5) mkLbl(yd + 'yd', x, DECK.z1 + 0.9);
   yd = 0;
   for (let z = DECK.z0; z <= DECK.z1 + 1e-6; z += 5 * YARD, yd += 5) mkLbl(yd + 'yd', DECK.x0 - 0.9, z);
   return g;
