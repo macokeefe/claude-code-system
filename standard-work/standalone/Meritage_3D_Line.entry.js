@@ -1007,6 +1007,10 @@ const taskPanel = document.getElementById('taskPanel');
 function renderTaskChart() {
   if (!taskPanel || taskPanel.style.display === 'none') return;
   const ids = ['con','arm','bak','tre','sea','fa','pak'];
+  // Full assembly + pack are done by the SAME 2 people back-to-back, so they're
+  // one bar in this chart (their combined time is the real bottleneck vs takt).
+  const rows = ['con','arm','bak','tre','sea'].map(id => ({ title: get(id).title, key: id, tt: effNet(id), steps: get(id).steps }));
+  rows.push({ title: 'FULL ASSEMBLY + PACK', key: 'fapak', tt: effNet('fa') + effNet('pak'), steps: [...(get('fa').steps || []), ...(get('pak').steps || [])] });
   const cyc = Math.max(effNet('con'), effNet('arm'), effNet('bak'), effNet('tre'), effNet('sea'), effNet('fa') + effNet('pak'));
   // TOTAL LABOR = combined hands-on work of every person added up (raw work
   // content per unit, NOT divided by people). The per-station bars below are
@@ -1018,10 +1022,10 @@ function renderTaskChart() {
   const taktPct = (takt / scaleMax) * 100;
   let html = `<h3>Task distribution — operator loading</h3>`;
   html += `<div class="ihint"><b>Total labor: ${totalLabor.toFixed(1)} min/unit</b> · cycle ${cyc.toFixed(1)} · <span style="color:#d11;font-weight:700">takt ${takt.toFixed(1)} min</span> (<input type="number" id="taktDemand" value="${taktDemand}" min="1" style="width:44px"> units / ${(dayMin/60).toFixed(1)}-hr day). Red line = takt.</div>`;
-  ids.forEach(id => {
-    const s = get(id), tt = effNet(id);
-    const onBn = isBottleneckTarget(id, bn.key);
-    const stepsArr = s.steps || [{ name: s.title, t: tt }];
+  rows.forEach(row => {
+    const tt = row.tt;
+    const onBn = row.key === 'fapak' ? bn.key === 'fapak' : isBottleneckTarget(row.key, bn.key);
+    const stepsArr = (row.steps && row.steps.length) ? row.steps : [{ name: row.title, t: tt }];
     const baseSum = stepsArr.reduce((a, st) => a + (parseFloat(st.t) || 0), 0) || tt;
     const f = tt / baseSum;                                   // scale steps so the bar totals the NET station time (matches the label + takt line)
     let seg = '';
@@ -1030,7 +1034,7 @@ function renderTaskChart() {
       const col = onBn ? (i % 2 ? '#c0552c' : '#d98a6e') : (i % 2 ? '#2f6df6' : '#7ba6e0');
       seg += `<i style="width:${sw}%;background:${col}" title="${(st.name||'').replace(/"/g,'')} · ${st.t} min"></i>`;
     });
-    html += `<div class="trow2"><span class="tn2">${s.title}${onBn?' ◄':''}</span><span class="bar2">${seg}<span class="takt2" style="left:${taktPct}%"></span></span><span class="v2">${tt.toFixed(1)}m</span></div>`;
+    html += `<div class="trow2"><span class="tn2">${row.title}${onBn?' ◄':''}</span><span class="bar2">${seg}<span class="takt2" style="left:${taktPct}%"></span></span><span class="v2">${tt.toFixed(1)}m</span></div>`;
   });
   taskPanel.innerHTML = html;
   const td = document.getElementById('taktDemand');
