@@ -873,9 +873,25 @@ function renderSolaData() {
   buildSolaSched();
 }
 // Sola flow-shop simulation (its own clock Ts): units flow through the Sola
-// stations in left-to-right order; each station = its per-operator time.
+// stations in FLOW-ARROW order (topological); falls back to left-to-right only
+// if no flow lines are drawn. Each station = its per-operator time.
 function orderedSola() {
-  return extraStations.filter(id => sideOf(nodes[id].x) === 'other').sort((a, b) => nodes[a].x - nodes[b].x);
+  const ids = extraStations.filter(id => sideOf(nodes[id].x) === 'other');
+  const byX = arr => arr.slice().sort((a, b) => nodes[a].x - nodes[b].x);
+  const set = new Set(ids);
+  const edges = flowArrows.filter(a => set.has(a.from) && set.has(a.to) && a.from !== a.to);
+  if (!edges.length) return byX(ids);                        // no flow drawn → left to right
+  const indeg = {}, adj = {}; ids.forEach(id => { indeg[id] = 0; adj[id] = []; });
+  edges.forEach(e => { adj[e.from].push(e.to); indeg[e.to]++; });
+  let q = byX(ids.filter(id => indeg[id] === 0));            // start at stations nothing feeds into
+  const out = [], seen = new Set();
+  while (q.length) {
+    const n = q.shift(); if (seen.has(n)) continue; seen.add(n); out.push(n);
+    adj[n].forEach(m => { if (--indeg[m] <= 0 && !seen.has(m)) q.push(m); });
+    q = byX(q);
+  }
+  byX(ids).forEach(id => { if (!seen.has(id)) out.push(id); });   // any leftovers (cycles)
+  return out;
 }
 function buildSolaSched() {
   const ids = orderedSola();
@@ -1454,7 +1470,7 @@ renderer.domElement.addEventListener('pointerdown', e => {
     const sid = pickStation(e); if (!sid) return;
     if (!flowSource) { flowSource = sid; }
     else { if (sid !== flowSource && !flowArrows.some(a => a.from === flowSource && a.to === sid)) {
-        flowArrows.push({ from: flowSource, to: sid }); buildFlow(); saveLayout();
+        flowArrows.push({ from: flowSource, to: sid }); buildFlow(); buildSolaSched(); saveLayout();
       } flowSource = null; }
     return;
   }
@@ -1520,7 +1536,7 @@ renderer.domElement.addEventListener('contextmenu', e => {
   if (wp != null) { cartWaypoints.splice(wp, 1); refreshPath(); saveLayout(); return; }
   const id = pickStation(e);
   if (id && flowArrows.some(a => a.from === id || a.to === id)) {   // right-click a station clears its flow lines first
-    flowArrows = flowArrows.filter(a => a.from !== id && a.to !== id); buildFlow(); saveLayout(); return;
+    flowArrows = flowArrows.filter(a => a.from !== id && a.to !== id); buildFlow(); buildSolaSched(); saveLayout(); return;
   }
   if (id && helpArrows.some(a => a.from === id || a.to === id)) {
     helpArrows = helpArrows.filter(a => a.from !== id && a.to !== id); buildHelp(); saveLayout();
