@@ -227,6 +227,19 @@ LEGACY (pre-fix) named layout doesn't wipe the current Sola line. NOTE: named
 layouts saved before this fix can't be recovered — rebuild the Sola line (it
 survives in the working layout) and re-save those layouts.
 
+GOTCHA #3 (bake captured nothing on Mac/Safari, 2026-06): the bake button and
+the export button read the working layout back out of `localStorage`
+(`getItem(LAYOUT_KEY)`). Safari (and file:// pages generally) often REFUSE to
+persist localStorage, so `setItem` throws (silently caught) and the read
+returns empty — bake produced a copy with an empty working layout even though
+the line was on screen. Fixed: `buildWorkingLayout()` builds the object from
+the LIVE scene; `saveLayout()` keeps an in-memory mirror `__workingLayout`;
+named layouts keep an in-memory mirror `__namedCache` (seeded from baked-in +
+storage). Bake/export now read those, never storage. The baked copy carries
+everything in `window.__M3D_LAYOUT__`/`__M3D_LAYOUTS__`, and `loadLayout` reads
+those globals directly — so on a storage-blocked machine the user must WORK IN
+and RE-OPEN the baked copy (the plain copy can't remember anything there).
+
 ## Sola No-Arms updated SWI + material flow (2026-06)
 
 Newer "Sola_Lounge_no_armSWI_in_progress.csv" (No Arms, **No middle leg**) —

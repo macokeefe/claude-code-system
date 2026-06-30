@@ -1345,7 +1345,14 @@ function setStationRot(id, rot) {
   const nd = nodes[id]; if (!nd) return;
   nd.rot = rot; placeStation(id);
 }
-function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
+// Build the working-layout object from the LIVE scene (not from storage).
+function buildWorkingLayout() {
+  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); return o;
+}
+// In-memory mirror so the layout survives even when localStorage is blocked
+// (Safari / file:// often refuses to persist) — bake reads THIS, never storage.
+let __workingLayout = {};
+function saveLayout() { __workingLayout = buildWorkingLayout(); try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(__workingLayout)); } catch (e) {} }
 function loadLayout() { try { let o = null; try { o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch (e) {} if (!o && window.__M3D_LAYOUT__) o = window.__M3D_LAYOUT__;   // baked-in working layout (travels with the file)
   if (!o) return; restoreExtras(o.__extras); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } } catch (e) {} }
 
@@ -1653,8 +1660,15 @@ const LAYOUTS_KEY = 'm3d_layouts_v2';
 // Named layouts = those baked into this file (window.__M3D_LAYOUTS__) MERGED with
 // any saved in this browser. So layouts baked into the app travel to any computer.
 const builtinLayouts = () => { try { return (window.__M3D_LAYOUTS__ && typeof window.__M3D_LAYOUTS__ === 'object') ? window.__M3D_LAYOUTS__ : {}; } catch (e) { return {}; } };
-const readLayouts = () => { let ls = {}; try { ls = JSON.parse(localStorage.getItem(LAYOUTS_KEY)) || {}; } catch (e) {} return Object.assign({}, builtinLayouts(), ls); };
-const writeLayouts = o => { try { localStorage.setItem(LAYOUTS_KEY, JSON.stringify(o)); } catch (e) {} };
+// In-memory mirror (seeded from baked-in + this browser's storage). It is the
+// source of truth this session, so layouts survive even if localStorage is
+// blocked (Safari / file://) — bake reads THIS, never storage directly.
+let __namedCache = null;
+const readLayouts = () => {
+  if (!__namedCache) { let ls = {}; try { ls = JSON.parse(localStorage.getItem(LAYOUTS_KEY)) || {}; } catch (e) {} __namedCache = Object.assign({}, builtinLayouts(), ls); }
+  return __namedCache;
+};
+const writeLayouts = o => { __namedCache = o; try { localStorage.setItem(LAYOUTS_KEY, JSON.stringify(o)); } catch (e) {} };
 function snapshot() {
   const pos = {}, times = {};
   ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
@@ -1704,7 +1718,7 @@ refreshLayoutSel();
 // computers — localStorage doesn't travel with the HTML file) ----
 document.getElementById('exportLayout').onclick = () => {
   saveLayout();                                              // capture the current on-screen arrangement
-  const data = localStorage.getItem(LAYOUT_KEY) || '{}';
+  const data = JSON.stringify(buildWorkingLayout());        // from live scene, not storage
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
   a.download = 'meritage-line-layout.json'; document.body.appendChild(a); a.click();
@@ -1715,8 +1729,8 @@ document.getElementById('exportLayout').onclick = () => {
 const bakeBtn = document.getElementById('bakeApp');
 if (bakeBtn) bakeBtn.onclick = () => {
   saveLayout();
-  let working = {}; try { working = JSON.parse(localStorage.getItem(LAYOUT_KEY) || '{}'); } catch (e) {}
-  const named = readLayouts();                              // builtin + this browser's
+  const working = buildWorkingLayout();                    // LIVE scene, not storage (works even if localStorage is blocked)
+  const named = readLayouts();                             // in-memory mirror: builtin + this session's saves
   // Build the marker tags + strip-regex from fragments so the literal substrings
   // "<script id=\"m3dLayouts\">" and "</script>" never appear in THIS bundle's
   // source. If they did, __ORIGINAL_HTML (the serialized document, which contains
