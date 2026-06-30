@@ -856,8 +856,11 @@ document.getElementById('cam').onclick = () => { camera.position.set(7,30,52); c
 document.getElementById('top').onclick = () => { camera.position.set(4,FLOOR2+38,1); controls.target.set(4,FLOOR2,1); };
 // label visibility: 0 = off, 1 = names only (compact), 2 = full cards
 let labelMode = 1;
+const extraStations = [];   // added (Sola) stations — declared early so applyLabels can include them
+let extraSeq = 0;
 function applyLabels() {
-  ST.forEach(s => { const nd = nodes[s.id]; if (!nd) return; if (nd.label) nd.label.visible = labelMode === 2; if (nd.mini) nd.mini.visible = labelMode === 1; });
+  const all = [...ST.map(s => s.id), ...extraStations];   // Meritage + Sola (added) stations
+  all.forEach(id => { const nd = nodes[id]; if (!nd) return; if (nd.label) nd.label.visible = labelMode === 2; if (nd.mini) nd.mini.visible = labelMode === 1; });
   if (typeof cartSign !== 'undefined' && cartSign) cartSign.visible = labelMode !== 0;
   const b = document.getElementById('labels'); if (b) b.textContent = 'Labels: ' + (labelMode === 0 ? 'Off' : labelMode === 1 ? 'Names' : 'Full');
 }
@@ -984,8 +987,6 @@ const stepsHost2 = document.createElement('div'); stepsHost2.id = 'stepsHost2'; 
    you want. They are independent — NOT part of the Meritage line, so they never
    affect its schedule/labor/bottleneck (kept out of ST). Which table a station
    shows up in depends on which side of the middle line it sits on. ---- */
-const extraStations = [];
-let extraSeq = 0;
 const DIVIDER_X = DECK.x1;                                   // the painted middle line
 const sideOf = x => (x < DIVIDER_X ? 'meritage' : 'other');
 const STA_COLORS = ['#1d3a66','#9a3b1f','#236043','#8f5390','#a8923a','#3f8f8f','#9c4f45','#c0552c','#2f6df6','#7a5b1f'];
@@ -1003,6 +1004,7 @@ function addStation(name, x, z, id, t) {
   POS[id] = [x, z];
   extraStations.push(id);
   buildExtraCrew(id);                                         // show its operator figure(s)
+  if (typeof applyLabels === 'function') applyLabels();       // follow the current Labels mode (Off / Names / Full)
   return id;
 }
 function buildExtraCrew(id) {                                 // operator figures for an added station (mirrors Meritage)
