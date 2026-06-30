@@ -845,9 +845,18 @@ function rowsHtml(list) {
     html += `<div class="strow"><span class="su" style="flex:1">People at station</span>
         <input class="sppl" type="number" min="1" max="6" step="1" data-id="${s.id}" value="${ppl}"/>
         <span class="su">→ ${s.t.toFixed(0)}÷${ppl} = ${cyc.toFixed(1)}m</span></div>`;
-    html += `<button class="sadd" data-id="${s.id}">+ add step</button></div>`;
+    html += `<button class="sadd" data-id="${s.id}">+ add step</button>`;
+    if (nodes[s.id] && nodes[s.id].extra) html += `<button class="sdelsta" data-id="${s.id}" style="background:#c0552c;color:#fff;border:0;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;margin-left:6px">🗑 Remove station</button>`;
+    html += `</div>`;
   });
   return html;
+}
+function deleteStation(id) {                                  // remove an ADDED station (core Meritage stations stay)
+  const nd = nodes[id]; if (!nd || !nd.extra) return;
+  [nd.st, nd.label, nd.mini, nd.visual && nd.visual.g].forEach(o => { if (o) level2.remove(o); });
+  const i = extraStations.indexOf(id); if (i >= 0) extraStations.splice(i, 1);
+  delete nodes[id]; delete POS[id];
+  renderTimes(); saveLayout();
 }
 function afterEdit(id) {                                     // ST stations re-pace the line; added stations don't
   if (isExtra(id)) { renderTimes(); saveLayout(); }
@@ -872,6 +881,10 @@ function wireRows(host) {
   host.querySelectorAll('button.sdel').forEach(b => b.onclick = e => {
     const id = e.target.dataset.id, s = getAny(id); s.steps.splice(+e.target.dataset.si, 1); if (!s.steps.length) s.steps.push({ name: s.sub || 'Step', t: 0 });
     recalcAny(id); afterEdit(id);
+  });
+  host.querySelectorAll('button.sdelsta').forEach(b => b.onclick = e => {
+    const id = e.target.dataset.id, nd = nodes[id];
+    if (nd && confirm(`Remove station “${nd.s.title}”?`)) deleteStation(id);
   });
 }
 function renderTimes() {
