@@ -898,7 +898,7 @@ function solaUpdate() {
     if (Ts > 0) for (let u = 0; u < sn; u++) { const f = finish[k][u], st = f - time[k]; if (Ts >= st && Ts < f) { active = true; frac = (Ts - st) / time[k]; } if (Ts < f) allDone = false; }
     setLed(nd.led, Ts <= 0 ? 'idle' : (active ? 'active' : (allDone ? 'done' : 'idle')), active);
     if (nd.visual) nd.visual.update(active ? frac : 0, 0, sn);
-    crew.forEach(c => { if (c.station === id) { const b = active ? Math.sin(Ts * 6 + c.idx) * 0.07 : 0; c.fig.position.x = c.homeX + b; c.fig.position.z = c.homeZ + (active ? Math.cos(Ts * 6 + c.idx) * 0.07 : 0); } });
+    crew.forEach(c => { if (c.station === id) { c.fig.position.x = c.homeX; c.fig.position.z = c.homeZ; c.fig.rotation.y = active ? Math.sin(Ts * 3 + c.idx) * 0.2 : 0; } });   // stay planted; gentle working sway
   });
   // parts traveling station -> next station
   for (let k = 0; k < ids.length - 1; k++) {
