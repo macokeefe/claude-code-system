@@ -638,6 +638,31 @@ function refreshPath() {
 let helpArrows = [];                  // [{from, fromIdx, to, helpMin}] — added via the “Help arrow” tool (no demo defaults, so chart times match the station times)
 const helpGroup = new THREE.Group(); level2.add(helpGroup);
 const HELP_COL = 0x8f3fbf;
+
+// ---- material-flow arrows: where parts come FROM and go TO between stations ----
+let flowArrows = [];                                         // [{from, to}]
+const flowGroup = new THREE.Group(); level2.add(flowGroup);
+const FLOW_COL = 0x2e7d4f;                                   // green = part flow (distinct from purple help)
+function buildFlow() {
+  while (flowGroup.children.length) flowGroup.remove(flowGroup.children[0]);
+  flowArrows.forEach(a => {
+    if (!nodes[a.from] || !nodes[a.to]) return;
+    const line = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: FLOW_COL }));
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.6, 12), new THREE.MeshStandardMaterial({ color: FLOW_COL }));
+    flowGroup.add(line, cone); a._line = line; a._cone = cone;
+  });
+}
+const _fy = new THREE.Vector3(0, 1, 0), _fd = new THREE.Vector3();
+function updateFlow() {
+  const y = 0.4;
+  flowArrows.forEach(a => {
+    if (!a._line) return; const A = nodes[a.from], B = nodes[a.to]; if (!A || !B) return;
+    a._line.geometry.setAttribute('position', new THREE.Float32BufferAttribute([A.x, y, A.z, B.x, y, B.z], 3));
+    a._line.geometry.computeBoundingSphere();
+    a._cone.position.set(B.x, y, B.z);
+    _fd.set(B.x - A.x, 0, B.z - A.z); if (_fd.lengthSq() > 0.0001) { _fd.normalize(); a._cone.quaternion.setFromUnitVectors(_fy, _fd); }
+  });
+}
 function assignHelpers() {
   if (typeof crew === 'undefined') return;
   crew.forEach(c => { c.helpTo = null; c.helpMin = 0; });
@@ -1105,8 +1130,8 @@ function setStationRot(id, rot) {
   const nd = nodes[id]; if (!nd) return;
   nd.rot = rot; placeStation(id);
 }
-function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraStations.map(id => { const n = nodes[id]; return { id, name: n.s.title, x: n.x, z: n.z, t: n.t || 0 }; }); o.__conSteps = (get('con').steps || []).map(s => [s.name, s.t, s.side || 'meritage']); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
-function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__conSteps)) { get('con').steps = o.__conSteps.map(a => ({ name: a[0], t: +a[1] || 0, side: a[2] || 'meritage' })); recalcCon(); } if (Array.isArray(o.__extras)) o.__extras.forEach(e => { if (!nodes[e.id]) { addStation(e.name, e.x, e.z, e.id, e.t); const num = parseInt(String(e.id).replace(/\D/g, '')) || 0; if (num > extraSeq) extraSeq = num; } }); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (s.id !== 'con' && o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } } catch (e) {} }
+function saveLayout() { try { const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraStations.map(id => { const n = nodes[id]; return { id, name: n.s.title, x: n.x, z: n.z, t: n.t || 0 }; }); o.__conSteps = (get('con').steps || []).map(s => [s.name, s.t, s.side || 'meritage']); o.__flow = flowArrows.map(a => [a.from, a.to]); localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {} }
+function loadLayout() { try { const o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (!o) return; if (Array.isArray(o.__conSteps)) { get('con').steps = o.__conSteps.map(a => ({ name: a[0], t: +a[1] || 0, side: a[2] || 'meritage' })); recalcCon(); } if (Array.isArray(o.__extras)) o.__extras.forEach(e => { if (!nodes[e.id]) { addStation(e.name, e.x, e.z, e.id, e.t); const num = parseInt(String(e.id).replace(/\D/g, '')) || 0; if (num > extraSeq) extraSeq = num; } }); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) { flowArrows = o.__flow.map(a => ({ from: a[0], to: a[1] })); buildFlow(); } Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (s.id !== 'con' && o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } } catch (e) {} }
 
 // 1-yard grid on the deck
 function buildGrid() {
@@ -1202,7 +1227,7 @@ function setEditing(on) {
   editBtn.classList.toggle('on', on);
   grid.visible = on;
   pathLine.visible = on; wpGroup.visible = on; if (on) refreshPath();
-  if (!on) { helpArming = false; armSource = null; const hb = document.getElementById('helparrow'); if (hb) hb.classList.remove('on'); }
+  if (!on) { helpArming = false; armSource = null; const hb = document.getElementById('helparrow'); if (hb) hb.classList.remove('on'); if (typeof setFlowArming === 'function') setFlowArming(false); }
   if (on) {
     // keep zoom + pan in edit mode, but disable rotate and free the left button for dragging stations
     controls.enabled = true; controls.enableRotate = false; controls.enableZoom = true; controls.enablePan = true;
@@ -1230,7 +1255,7 @@ function setEditing(on) {
   }
 }
 editBtn.onclick = () => setEditing(!editing);
-let dragWp = null, helpArming = false, armSource = null, selectedStation = null, dragFix = null;
+let dragWp = null, helpArming = false, armSource = null, selectedStation = null, dragFix = null, flowArming = false, flowSource = null;
 function pickWaypoint(e) {
   pointerNDC(e); raycaster.setFromCamera(ndc, camera);
   const hits = raycaster.intersectObjects(wpGroup.children, false);
@@ -1256,12 +1281,32 @@ const helpBtn = document.getElementById('helparrow');
 helpBtn.onclick = () => {
   if (!editing) setEditing(true);
   helpArming = !helpArming; armSource = null;
+  if (helpArming) setFlowArming(false);              // only one arming tool at a time
   helpBtn.classList.toggle('on', helpArming);
   helpBtn.textContent = helpArming ? '➤ click FROM → TO' : '➤ Help arrow';
+};
+const flowBtn = document.getElementById('flowarrow');
+function setFlowArming(on) {
+  flowArming = on; flowSource = null;
+  flowBtn.classList.toggle('on', on);
+  flowBtn.textContent = on ? '⇢ click FROM → TO' : '⇢ Flow line';
+}
+flowBtn.onclick = () => {
+  if (!editing) setEditing(true);
+  if (!flowArming) { helpArming = false; helpBtn.classList.remove('on'); helpBtn.textContent = '➤ Help arrow'; }
+  setFlowArming(!flowArming);
 };
 const snap = v => Math.round(v / (YARD / 2)) * (YARD / 2);   // snap to 0.5 yd
 renderer.domElement.addEventListener('pointerdown', e => {
   if (!editing) return;
+  if (flowArming) {                                   // drawing a part-flow arrow: pick FROM, then TO
+    const sid = pickStation(e); if (!sid) return;
+    if (!flowSource) { flowSource = sid; }
+    else { if (sid !== flowSource && !flowArrows.some(a => a.from === flowSource && a.to === sid)) {
+        flowArrows.push({ from: flowSource, to: sid }); buildFlow(); saveLayout();
+      } flowSource = null; }
+    return;
+  }
   if (helpArming) {                                   // drawing a help arrow: pick source, then target
     const sid = pickStation(e); if (!sid) return;
     if (!armSource) { armSource = sid; }
@@ -1323,6 +1368,9 @@ renderer.domElement.addEventListener('contextmenu', e => {
   const wp = pickWaypoint(e);
   if (wp != null) { cartWaypoints.splice(wp, 1); refreshPath(); saveLayout(); return; }
   const id = pickStation(e);
+  if (id && flowArrows.some(a => a.from === id || a.to === id)) {   // right-click a station clears its flow lines first
+    flowArrows = flowArrows.filter(a => a.from !== id && a.to !== id); buildFlow(); saveLayout(); return;
+  }
   if (id && helpArrows.some(a => a.from === id || a.to === id)) {
     helpArrows = helpArrows.filter(a => a.from !== id && a.to !== id); buildHelp(); saveLayout();
   }
@@ -1564,6 +1612,7 @@ function loop(now){
   }
   updateCarts();   // carts stay parked in a line along the path
   updateHelp();    // help-movement arrows follow the stations
+  updateFlow();    // part-flow arrows follow the stations
   for (const fl of forkLifts) {                    // forklift carries a package DOWN when triggered, else idle at deck
     if (fl.busy) {
       fl.t += dt; const p = fl.t / 4;               // ~4s round trip
