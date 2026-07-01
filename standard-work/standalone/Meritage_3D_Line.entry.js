@@ -660,9 +660,9 @@ function concreteTex(rx, ry) {
   line(bx0, (bz0 + bz1) / 2, lw, bz1 - bz0); line(bx1, (bz0 + bz1) / 2, lw, bz1 - bz0);
 })();
 // ---- object builders: each adds meshes to a group `g`, relative to the group origin ----
-function aPad(g, w, d, color) {
-  const p = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), AM(color, { transparent: true, opacity: 0.4, roughness: 0.85 })); p.position.y = AY + 0.03; g.add(p);
-  const b = new THREE.Mesh(new THREE.BoxGeometry(w, 0.02, d), AM(color, {})); b.position.y = AY + 0.012; g.add(b);
+function aPad(g, w, d, color) {   // neutral marked-off zone (no colors) — a light-grey pad with a slightly darker outline
+  const p = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), AM(0xbcc2c8, { transparent: true, opacity: 0.32, roughness: 0.9 })); p.position.y = AY + 0.03; g.add(p);
+  const b = new THREE.Mesh(new THREE.BoxGeometry(w, 0.02, d), AM(0x9aa1a8, {})); b.position.y = AY + 0.012; g.add(b);
 }
 function aLabel(g, text, w) {
   const c = document.createElement('canvas'); c.width = 512; c.height = 110; const x = c.getContext('2d');
