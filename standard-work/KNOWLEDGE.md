@@ -186,11 +186,27 @@ Staging, Upholstery Racks, Forklift Access lanes (corners), FG Staging, X
 Staging, Back Rest Rack, Cart Staging, Sola Cart Staging, Sola Pallets — plus
 representative objects (steel racks, pallets w/ boxes, carts w/ wheels, 2 turn
 tables, a slide gate). Layout: BACK band z≈−12, FRONT band z≈12, LEFT x≈−9,
-RIGHT x≈23 (decks span x[−5.1,19.28] z[±9.14], divider x=7.09). Context only —
-NOT in the sim, `nodes`, `stList`, or saved layout; toggle via the injected
-`🏭 Areas` button (`surroundings.visible`). Because it's built in code it
-travels with baked/shared copies. To adjust, edit the placement calls at the
-end of the IIFE (data-driven zone/pallet/rack/cart/turntable/gate helpers).
+RIGHT x≈23 (decks span x[−5.1,19.28] z[±9.14], divider x=7.09). Toggle via the
+injected `🏭 Areas` button (`surroundings.visible`).
+
+EDITABLE (2026-06 update): areas are now draggable in Edit Layout and
+persisted. Each area is `{g,kind,x,z,rot}` in `areas[]`, built from an
+`AREA_KINDS` registry (kind → builder that draws pad+label+objects at the group
+origin). `addArea/clearAreas/restoreAreas` + `defaultAreas()` (from
+`AREA_DEFAULTS`). `fixtureList()` includes areas (kind `'area'`) when
+`surroundings.visible`, so the existing dragFix path moves them and right-click
+deletes them. Persisted as `__areas` = `[[kind,x,z,rot],…]` in the working
+layout AND named layouts; a layout's `__areas` REPLACES the defaults. The
+dragFix clamp and the edit grid were widened to the whole floor
+(x[−12.5,26.5]; grid [−12,26]×[−14.5,14.5]).
+
+RAILINGS REMOVED (2026-06): the deck guard-railings (`railing()` calls) were
+deleted — the two line decks now sit on the open warehouse floor.
+
+FLOOR LOOK (2026-06): the surrounding slab uses a canvas `concreteTex()`
+(speckle + expansion-joint tile borders, repeat-wrapped) plus painted yellow
+aisle safety lines, so it reads as a real sealed concrete floor. The line decks
+keep their original metallic surface.
 
 **Printable line-plan report (2026-06):** a `📄 Report` button (injected next to
 Import via JS, since the toolbar lives in the frozen HTML head) opens a
