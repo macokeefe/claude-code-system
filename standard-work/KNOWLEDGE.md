@@ -178,6 +178,16 @@ pans (left = drag stations), and `contextmenu` is suppressed on the canvas.
 (Station times, Idle/day, Help paths, Task chart, Measure) are draggable by their
 title bar (CSS `cursor:move` + a `pointerdown` delegation IIFE near the end of
 the entry; positions persist in `localStorage['m3d_panel_<id>']`).
+**Rotated-table crew bug (2026-06):** operators appeared on the OPPOSITE side
+from the anti-fatigue mat whenever a table was rotated 90°/270° ("Rotate
+table"). Cause: the bench (and its mat, a child mesh) rotate with THREE's
+Y-rotation `x'=x·cos+z·sin, z'=-x·sin+z·cos`, but `placeStation` rotated the
+crew offset with the opposite-handed math convention (`rx=bdx·cs−bdz·sn`), so
+the two diverged for any non-0/180° angle (they matched at 0/180°, which hid
+it). Fixed to `rx=bdx·cs+bdz·sn, rz=bdz·cs−bdx·sn` so crew tracks the mat at
+every angle. Single-op stations sit dead-center on the mat; multi-op stations
+spread along the full-width mat.
+
 **Resizable windows (2026-06):** the same IIFE adds a bottom-right corner grip
 (20px hit-zone; a `◢` glyph injected via a JS `<style>`, cursor hint on hover).
 Dragging it sets `el.style.zoom` (0.55–2.6) so the WHOLE window scales — box +

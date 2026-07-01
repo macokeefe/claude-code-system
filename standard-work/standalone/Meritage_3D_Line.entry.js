@@ -1344,7 +1344,7 @@ function placeStation(id) {
   if (nd.mini) { nd.mini.position.x = x; nd.mini.position.z = z; }
   if (nd.visual) { nd.visual.g.position.x = x; nd.visual.g.position.z = z; nd.visual.g.rotation.y = r; }
   crew.filter(c => c.station === id).forEach(c => {
-    const rx = c.bdx * cs - c.bdz * sn, rz = c.bdx * sn + c.bdz * cs;   // rotate the operator's offset with the table
+    const rx = c.bdx * cs + c.bdz * sn, rz = c.bdz * cs - c.bdx * sn;   // rotate the operator's offset with the table (matches THREE Y-rotation, so crew tracks the mat)
     c.homeX = x + rx; c.homeZ = z + rz;
     if (!editing) { c.fig.position.x = c.homeX; c.fig.position.z = c.homeZ; }
   });
