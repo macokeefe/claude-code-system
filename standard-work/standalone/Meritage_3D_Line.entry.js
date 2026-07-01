@@ -129,6 +129,7 @@ function makeCrewFigure(colorHex, name) {
   head.position.y = 1.32; head.castShadow = true;
   const tag = makeNameTag(name, colorHex); tag.position.y = 1.8;
   g.add(legs, torso, head, tag);
+  g.scale.set(1.06, 1.17, 1.06);   // true scale: ~5'9" (1.75 m) operator next to 38" benches
   return g;
 }
 
@@ -659,6 +660,41 @@ function concreteTex(rx, ry) {
   line((bx0 + bx1) / 2, bz0, bx1 - bx0, lw); line((bx0 + bx1) / 2, bz1, bx1 - bx0, lw);
   line(bx0, (bz0 + bz1) / 2, lw, bz1 - bz0); line(bx1, (bz0 + bz1) / 2, lw, bz1 - bz0);
 })();
+// ---- stairs up to the floor, to the LEFT of the lift (per the plant plan) ----
+(function buildStairs() {
+  const g = new THREE.Group();
+  const W = 4 * FT;                                    // 4' wide industrial stair
+  const rise = FLOOR2 - 0.04;                          // ground → floor top
+  const steps = 32, sh = rise / steps, tread = 0.28, run = steps * tread;
+  const x0 = -13.65;                                   // channel just off the floor's west edge — left of the lift
+  const zTop = 2.2;                                    // lands beside the lift (lift z ≈ 2)
+  const stepMat = AM(0x6d7680, { metalness: 0.35, roughness: 0.6 });
+  for (let i = 1; i <= steps; i++) {                   // code-legal treads: 7.3" rise / 11" run
+    const t = new THREE.Mesh(new THREE.BoxGeometry(W, 0.07, tread), stepMat);
+    t.position.set(x0, -FLOOR2 + i * sh - 0.035, zTop + (steps - i) * tread + tread / 2);
+    t.castShadow = true; g.add(t);
+  }
+  const len = Math.hypot(run, rise), ang = Math.atan2(rise, run);
+  for (const dx of [-W / 2, W / 2]) {
+    const s = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.3, len), A_STEEL);   // stringer
+    s.position.set(x0 + dx, -FLOOR2 + rise / 2 - 0.12, zTop + run / 2); s.rotation.x = ang; g.add(s);
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, len), A_STEEL);   // sloped handrail
+    rail.position.set(x0 + dx, -FLOOR2 + rise / 2 + 0.95, zTop + run / 2); rail.rotation.x = ang; g.add(rail);
+    for (let i = 2; i <= steps; i += 5) {              // rail posts
+      const p = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.0, 0.05), A_STEEL);
+      p.position.set(x0 + dx, -FLOOR2 + i * sh + 0.5, zTop + (steps - i) * tread + tread / 2); g.add(p);
+    }
+  }
+  // top landing bridging onto the floor edge, with guard rails on the open sides
+  const land = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.08, 1.6), stepMat);
+  land.position.set(-13.6, -0.08, zTop - 0.8); land.castShadow = true; g.add(land);
+  for (const [w, d, lx, lz] of [[1.5, 0.06, -13.6, zTop - 1.6], [0.06, 1.6, -14.35, zTop - 0.8]]) {
+    const r = new THREE.Mesh(new THREE.BoxGeometry(w, 0.06, d), A_STEEL); r.position.set(lx, 1.0, lz); g.add(r);
+    const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.05, 0.05), A_STEEL); p1.position.set(lx - w / 2 + 0.03, 0.48, lz - d / 2 + 0.03); g.add(p1);
+    const p2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.05, 0.05), A_STEEL); p2.position.set(lx + w / 2 - 0.03, 0.48, lz + d / 2 - 0.03); g.add(p2);
+  }
+  surroundings.add(g);
+})();
 // ---- object builders: each adds meshes to a group `g`, relative to the group origin ----
 function aPad(g, w, d, color) {   // neutral marked-off zone (no colors) — a light-grey pad with a slightly darker outline
   const p = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), AM(0xbcc2c8, { transparent: true, opacity: 0.32, roughness: 0.9 })); p.position.y = AY + 0.03; g.add(p);
@@ -671,45 +707,47 @@ function aLabel(g, text, w) {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 110 / 512), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false }));
   m.rotation.x = -Math.PI / 2; m.position.y = AY + 0.07; g.add(m);
 }
-function aPallet(g, x, z) {
-  const p = new THREE.Mesh(new THREE.BoxGeometry(1, 0.15, 1.2), A_PALLET); p.position.set(x, AY + 0.09, z); p.castShadow = true; g.add(p);
-  const b = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.6, 1.05), A_BOX); b.position.set(x, AY + 0.47, z); b.castShadow = true; g.add(b);
+function aPallet(g, x, z) {                                  // standard 48" x 40" pallet + load
+  const p = new THREE.Mesh(new THREE.BoxGeometry(48 * FT / 12, 0.14, 40 * FT / 12), A_PALLET); p.position.set(x, AY + 0.08, z); p.castShadow = true; g.add(p);
+  const b = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.6, 0.9), A_BOX); b.position.set(x, AY + 0.45, z); b.castShadow = true; g.add(b);
 }
-function aRack(g, x, z, w, d, rot) {
+function aRack(g, x, z, w, d, rot, h) {                      // w/d in metres, h = upright height
+  h = h || 1.25;
   const r = new THREE.Group();
-  for (const sx of [-w / 2, w / 2]) for (const sz of [-d / 2, d / 2]) { const u = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.25, 0.07), A_STEEL); u.position.set(sx, AY + 0.62, sz); u.castShadow = true; r.add(u); }
-  for (const sy of [0.35, 0.78, 1.2]) { const sh = new THREE.Mesh(new THREE.BoxGeometry(w, 0.04, d), A_STEEL); sh.position.set(0, AY + sy, 0); r.add(sh); }
+  for (const sx of [-w / 2, w / 2]) for (const sz of [-d / 2, d / 2]) { const u = new THREE.Mesh(new THREE.BoxGeometry(0.07, h, 0.07), A_STEEL); u.position.set(sx, AY + h / 2, sz); u.castShadow = true; r.add(u); }
+  for (const fr of [0.28, 0.62, 0.96]) { const sh = new THREE.Mesh(new THREE.BoxGeometry(w, 0.04, d), A_STEEL); sh.position.set(0, AY + h * fr, 0); r.add(sh); }
   r.position.set(x, 0, z); if (rot) r.rotation.y = rot; g.add(r);
 }
-function aCart(g, x, z) {
+function aCart(g, x, z) {                                    // 4' x 2.5' shop cart
   const c = new THREE.Group();
-  const d = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.1, 0.75), AM(0x59636f, { metalness: 0.3 })); d.position.y = AY + 0.34; d.castShadow = true; c.add(d);
-  const b = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.42, 0.62), AM(0xb0a06a, {})); b.position.y = AY + 0.6; b.castShadow = true; c.add(b);
-  for (const wx of [-0.45, 0.45]) for (const wz of [-0.28, 0.28]) { const wl = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.06, 12), AM(0x222, {})); wl.rotation.z = Math.PI / 2; wl.position.set(wx, AY + 0.09, wz); c.add(wl); }
+  const d = new THREE.Mesh(new THREE.BoxGeometry(4 * FT, 0.1, 2.5 * FT), AM(0x59636f, { metalness: 0.3 })); d.position.y = AY + 0.34; d.castShadow = true; c.add(d);
+  const b = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.42, 0.6), AM(0xb0a06a, {})); b.position.y = AY + 0.6; b.castShadow = true; c.add(b);
+  for (const wx of [-0.5, 0.5]) for (const wz of [-0.3, 0.3]) { const wl = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.06, 12), AM(0x222, {})); wl.rotation.z = Math.PI / 2; wl.position.set(wx, AY + 0.09, wz); c.add(wl); }
   c.position.set(x, 0, z); g.add(c);
 }
-function aTurntable(g) {
-  const b = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.12, 28), A_STEEL); b.position.y = AY + 0.06; g.add(b);
-  const t = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.07, 28), AM(0x556, {})); t.position.y = AY + 0.15; g.add(t);
+function aTurntable(g) {                                     // ~5' diameter assembly turntable
+  const b = new THREE.Mesh(new THREE.CylinderGeometry(2.5 * FT, 2.5 * FT, 0.12, 28), A_STEEL); b.position.y = AY + 0.06; g.add(b);
+  const t = new THREE.Mesh(new THREE.CylinderGeometry(2.1 * FT, 2.1 * FT, 0.07, 28), AM(0x556, {})); t.position.y = AY + 0.15; g.add(t);
 }
-function aGate(g, w) {
+function aGate(g, w) {                                       // 6' slide gate (w = 6 ft in metres)
   for (const sx of [-w / 2, w / 2]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.3, 0.12), A_STEEL); p.position.set(sx, AY + 0.65, 0); p.castShadow = true; g.add(p); }
   const bar = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, 0.08), AM(0xc0552c, {})); bar.position.set(0, AY + 1.12, 0); g.add(bar);
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(w * 2.33, 0.05, 0.05), A_STEEL); rail.position.set(w * 0.66, AY + 1.24, 0); g.add(rail);   // 8' gate travel rail (per plan)
 }
 // ---- area-kind registry: label + builder (drawn at the group origin) ----
 const AREA_KINDS = {
   forklift:    g => { aPad(g, 4.6, 4.6, AC.fork); aLabel(g, 'Forklift Access', 4.2); },
   pallets:     g => { aPad(g, 5, 4.2, AC.pallet); aLabel(g, 'Pallet Staging', 4.4); aPallet(g, -1.3, 0.6); aPallet(g, 1.3, 0.6); },
   solaPallets: g => { aPad(g, 4.4, 4.2, AC.pallet); aLabel(g, 'Sola Pallets', 4); aPallet(g, -1, 0.6); aPallet(g, 1, 0.6); },
-  upholstery:  g => { aPad(g, 2.8, 4.2, AC.uph); aLabel(g, 'Upholstery Rack', 2.6); aRack(g, 0, -0.7, 2.2, 0.6, 0); },
+  upholstery:  g => { aPad(g, 2.8, 4.2, AC.uph); aLabel(g, 'Upholstery Rack', 2.6); aRack(g, 0, -0.7, 6 * FT, 2 * FT, 0, 1.7); },   // 6' x 2' garment-height rack
   fg:          g => { aPad(g, 4.6, 5, AC.fg); aLabel(g, 'FG Staging', 4); aPallet(g, -1, -1.3); aPallet(g, 1, -1.3); aPallet(g, -1, 1); aPallet(g, 1, 1); },
   xstaging:    g => { aPad(g, 4.6, 3, AC.x); aLabel(g, 'X Staging', 4); },
-  backrest:    g => { aPad(g, 4.6, 3.2, AC.back); aLabel(g, 'Back Rest Rack', 4); aRack(g, 0, 0, 3, 0.6, 0); },
+  backrest:    g => { aPad(g, 4.6, 3.2, AC.back); aLabel(g, 'Back Rest Rack', 4); aRack(g, 0, 0, 6 * FT, 2.5 * FT, 0, 1.4); },   // 6 x 2.5 per plan
   solaCart:    g => { aPad(g, 7, 4.2, AC.cart); aLabel(g, 'Sola Cart Staging', 4.4); aCart(g, -1.6, 0.5); aCart(g, 0, 0.5); aCart(g, 1.6, 0.5); },
   cart:        g => { aPad(g, 4.4, 4.2, AC.cart); aLabel(g, 'Cart Staging', 4); aCart(g, -0.8, 0.5); aCart(g, 0.8, 0.5); },
-  rackRow:     g => { aLabel(g, '6 × 1.5 Racks', 3); for (let i = 0; i < 6; i++) aRack(g, 0, -5 + i * 2, 1.83, 0.46, Math.PI / 2); },
+  rackRow:     g => { aLabel(g, '6 × 1.5 Racks', 3); for (let i = 0; i < 6; i++) aRack(g, 0, -5 + i * 2, 6 * FT, 1.5 * FT, Math.PI / 2); },   // exact 6' x 1.5'
   turntable:   g => { aTurntable(g); aLabel(g, 'Turn Table', 2.2); },
-  gate:        g => { aGate(g, 4); aLabel(g, "6' Slide Gate", 3); },
+  gate:        g => { aGate(g, 6 * FT); aLabel(g, "6' Slide Gate", 2.4); },   // true 6' opening + 8' travel rail
 };
 function addArea(kind, x, z, rot) {
   const build = AREA_KINDS[kind]; if (!build) return null;

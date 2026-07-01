@@ -208,6 +208,21 @@ FLOOR LOOK (2026-06): the surrounding slab uses a canvas `concreteTex()`
 aisle safety lines, so it reads as a real sealed concrete floor. The line decks
 keep their original metallic surface.
 
+TRUE-SCALE PASS (2026-07): all surrounding parts sized from the plan/reality:
+pallets 48"×40", shop carts 4'×2.5', 6×1.5 racks exactly 6'×1.5', upholstery
+racks 6'×2'×5'7" tall, Back Rest Rack 6'×2.5' (per plan), turn table 5' dia,
+slide gate true 6' opening + 8' travel rail (`aRack` gained an `h` height
+param). Crew figures scaled to ~5'9" (`makeCrewFigure` `g.scale.set(1.06,
+1.17, 1.06)`) so operators read correctly against the 38" benches.
+
+STAIRS (2026-07): `buildStairs()` IIFE (in `surroundings`, so the 🏭 Areas
+button hides it too) — a 4'-wide industrial straight flight at the floor's
+west edge (channel x≈−13.65, outside the slab at x0=−12.91), 32 treads at
+7.3"/11" rise-run, descending from a guard-railed top landing at z≈1.4–3.0
+(flush with the slab top, immediately LEFT of the lift at x=−6.7, z=2) down to
+the ground at z≈11. Stringers/handrails are boxes rotated by
+`atan2(rise,run)` about x. Fixed scenery — not draggable, not in layouts.
+
 **Printable line-plan report (2026-06):** a `📄 Report` button (injected next to
 Import via JS, since the toolbar lives in the frozen HTML head) opens a
 self-contained printable page in a new tab (`buildReportHTML()` → Blob URL →
