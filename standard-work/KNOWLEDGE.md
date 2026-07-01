@@ -177,7 +177,15 @@ pans (left = drag stations), and `contextmenu` is suppressed on the canvas.
 **Draggable windows + shared connector station (2026-06):** the floating panels
 (Station times, Idle/day, Help paths, Task chart, Measure) are draggable by their
 title bar (CSS `cursor:move` + a `pointerdown` delegation IIFE near the end of
-the entry; positions persist in `localStorage['m3d_panel_<id>']`). The SHARED connector station idea was REMOVED (engineer, 2026-06): CONNECTORS is
+the entry; positions persist in `localStorage['m3d_panel_<id>']`).
+**Resizable windows (2026-06):** the same IIFE adds a bottom-right corner grip
+(20px hit-zone; a `◢` glyph injected via a JS `<style>`, cursor hint on hover).
+Dragging it sets `el.style.zoom` (0.55–2.6) so the WHOLE window scales — box +
+all the px-based text together (simplest way to scale px children uniformly).
+GOTCHA: `zoom` also scales the element's own `left`/`top`, so drag/clamp deltas
+are in visual px and must be divided by `zoom` to move in offset px;
+`clampOnScreen()` keeps the window fully in the viewport. Persisted as
+`{left,top,zoom}` in the same `m3d_panel_<id>` key. The SHARED connector station idea was REMOVED (engineer, 2026-06): CONNECTORS is
 just a normal Meritage feeder again (`POS.con` back on the left feeder row, shown
 in the Meritage table). No middle-line "connector lady" bench, no "Shared —
 connector station" table, no per-side connector assignment. Sola connectors, if

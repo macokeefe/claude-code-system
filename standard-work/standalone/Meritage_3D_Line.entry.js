@@ -1669,17 +1669,62 @@ try { renderTimes(); renderSolaData(); } catch (e) { console.error('panel render
 (() => {
   let topZ = 30;
   const keyOf = id => 'm3d_panel_' + id;
-  ['times', 'idlePanel', 'helpPanel', 'taskPanel', 'measure'].forEach(id => {
+  const IDS = ['times', 'idlePanel', 'helpPanel', 'taskPanel', 'measure'];
+  const CORNER = 20;                                        // px hit-zone at the bottom-right corner
+  // a small resize grip in the corner of every panel (injected here so it lives with the code)
+  const st = document.createElement('style');
+  st.textContent = IDS.map(id => `#${id}`).join(',') +
+    `{overflow:auto}` +
+    IDS.map(id => `#${id}::after`).join(',') +
+    `{content:"◢";position:sticky;float:right;bottom:0;right:0;margin-top:-14px;font-size:13px;line-height:1;color:#b3bcc8;pointer-events:none}`;
+  document.head.appendChild(st);
+  IDS.forEach(id => {
     const el = document.getElementById(id); if (!el) return;
-    try { const s = JSON.parse(localStorage.getItem(keyOf(id))); if (s && typeof s.left === 'number') { el.style.left = s.left + 'px'; el.style.top = s.top + 'px'; el.style.right = 'auto'; el.style.bottom = 'auto'; } } catch (e) {}
+    // restore saved position + size (zoom scales the whole window: box + fonts together)
+    try { const s = JSON.parse(localStorage.getItem(keyOf(id)));
+      if (s) {
+        if (typeof s.zoom === 'number') el.style.zoom = s.zoom;
+        if (typeof s.left === 'number') { el.style.left = s.left + 'px'; el.style.top = s.top + 'px'; el.style.right = 'auto'; el.style.bottom = 'auto'; }
+      }
+    } catch (e) {}
+    const par = () => el.offsetParent || document.body;
+    const zoomOf = () => parseFloat(el.style.zoom) || 1;
+    const persist = () => { try { localStorage.setItem(keyOf(id), JSON.stringify({ left: el.offsetLeft, top: el.offsetTop, zoom: zoomOf() })); } catch (e) {} };
+    const inCorner = e => { const r = el.getBoundingClientRect(); return (r.right - e.clientX) <= CORNER && (r.bottom - e.clientY) <= CORNER; };
+    // keep the whole window on-screen; note `zoom` also scales left/top, so overflow (in visual px) is undone in offset px by dividing by zoom
+    const clampOnScreen = () => {
+      const z = zoomOf(), pr = par().getBoundingClientRect(), rr = el.getBoundingClientRect();
+      let L = el.offsetLeft, T = el.offsetTop;
+      if (rr.right > pr.right) L -= (rr.right - pr.right) / z;
+      if (rr.bottom > pr.bottom) T -= (rr.bottom - pr.bottom) / z;
+      el.style.left = Math.max(0, L) + 'px'; el.style.top = Math.max(0, T) + 'px'; el.style.right = 'auto'; el.style.bottom = 'auto';
+    };
+    el.addEventListener('pointermove', e => { if (!e.buttons) el.style.cursor = inCorner(e) ? 'nwse-resize' : ''; });   // hint the resize corner
     el.addEventListener('pointerdown', e => {
-      const h = e.target.closest('h3,h4'); if (!h || !el.contains(h) || e.button !== 0) return;   // drag only by the title bar
+      if (e.button !== 0) return;
+      if (inCorner(e)) {                                    // ---- RESIZE: grow/shrink the window; text scales with it ----
+        e.preventDefault(); e.stopPropagation(); el.style.zIndex = ++topZ;
+        const pr = par().getBoundingClientRect();
+        let r = el.getBoundingClientRect();
+        el.style.left = ((r.left - pr.left) / zoomOf()) + 'px'; el.style.top = ((r.top - pr.top) / zoomOf()) + 'px'; el.style.right = 'auto'; el.style.bottom = 'auto';   // pin (offset px) so it grows toward the corner
+        r = el.getBoundingClientRect();
+        const z0 = zoomOf();
+        const d0 = Math.max(1, Math.hypot(e.clientX - r.left, e.clientY - r.top));
+        const move = ev => {
+          const d = Math.hypot(ev.clientX - r.left, ev.clientY - r.top);
+          el.style.zoom = Math.max(0.55, Math.min(2.6, z0 * d / d0));
+          clampOnScreen();
+        };
+        const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); persist(); };
+        window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+        return;
+      }
+      const h = e.target.closest('h3,h4'); if (!h || !el.contains(h)) return;   // else drag only by the title bar
       e.preventDefault(); el.style.zIndex = ++topZ;
-      const par = el.offsetParent || document.body;
-      const maxL = Math.max(0, par.clientWidth - el.offsetWidth), maxT = Math.max(0, par.clientHeight - el.offsetHeight);
-      const sx = e.clientX, sy = e.clientY, sl = el.offsetLeft, st = el.offsetTop;
-      const move = ev => { el.style.left = Math.max(0, Math.min(sl + (ev.clientX - sx), maxL)) + 'px'; el.style.top = Math.max(0, Math.min(st + (ev.clientY - sy), maxT)) + 'px'; el.style.right = 'auto'; el.style.bottom = 'auto'; };
-      const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); try { localStorage.setItem(keyOf(id), JSON.stringify({ left: el.offsetLeft, top: el.offsetTop })); } catch (e) {} };
+      const z = zoomOf();                                   // cursor delta is in visual px; offset moves at delta/zoom
+      const sx = e.clientX, sy = e.clientY, sl = el.offsetLeft, st2 = el.offsetTop;
+      const move = ev => { el.style.left = Math.max(0, sl + (ev.clientX - sx) / z) + 'px'; el.style.top = Math.max(0, st2 + (ev.clientY - sy) / z) + 'px'; el.style.right = 'auto'; el.style.bottom = 'auto'; clampOnScreen(); };
+      const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); persist(); };
       window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
     });
   });
