@@ -234,6 +234,25 @@ sub-assemblies → Full Assembly → Pack; Sola = numbered single-piece flow via
 steps with times, and the help paths. Uses the live `effNet`/`helpInto`/
 `bottleneckInfo` so numbers match the app. Print → Save as PDF to share.
 
+**Undo (2026-07):** `saveLayout()` pushes the previous `__workingLayout` onto
+`undoStack` (cap 50) whenever the JSON differs — since every mutation already
+calls `saveLayout`, undo needs no per-action hooks. `undoLayout()` (↩ Undo
+button, injected; or Ctrl/Cmd+Z outside text inputs) pops and re-applies via
+`clearExtras()` + `helpArrows=[]` (because `applyWorkingLayout` skips an empty
+`__help`) + `applyWorkingLayout(prev)`, then re-schedules both lines.
+`undoApplying` guards against re-pushing during an undo. A baseline
+`__workingLayout = buildWorkingLayout()` is captured right after the init
+`loadLayout()` so the FIRST edit is undoable (the push is skipped while
+`__workingLayout` is `{}`). Import records an undo point explicitly.
+
+**Report upgrades (2026-07):** the report now opens with a **Floor Plan**
+section — `captureFloorMap()` renders the scene once with a temporary
+top-down OrthographicCamera fitted to the whole floor (aspect-corrected to the
+canvas) and embeds `renderer.domElement.toDataURL()` as an `<img>`; the main
+loop redraws with the real camera next frame, so nothing is disturbed. Also
+added an **Operators** headcount KPI per line and a walk-time note (speed +
+trips/unit) when walk time is on.
+
 **Rotated-table crew bug (2026-06):** operators appeared on the OPPOSITE side
 from the anti-fatigue mat whenever a table was rotated 90°/270° ("Rotate
 table"). Cause: the bench (and its mat, a child mesh) rotate with THREE's

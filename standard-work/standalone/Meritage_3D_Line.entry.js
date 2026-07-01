@@ -1514,7 +1514,42 @@ function buildWorkingLayout() {
 // In-memory mirror so the layout survives even when localStorage is blocked
 // (Safari / file:// often refuses to persist) — bake reads THIS, never storage.
 let __workingLayout = {};
-function saveLayout() { __workingLayout = buildWorkingLayout(); try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(__workingLayout)); } catch (e) {} }
+/* ---- undo: every saveLayout() records the previous state; Ctrl/Cmd+Z (or the
+   ↩ Undo button) restores it. Stack capped at 50 steps. ---- */
+var undoStack = [], undoApplying = false;
+function refreshUndoBtn() { const b = document.getElementById('undoBtn'); if (b) b.style.opacity = undoStack.length ? '1' : '0.45'; }
+function saveLayout() {
+  const next = buildWorkingLayout();
+  try {
+    if (!undoApplying && Object.keys(__workingLayout).length && JSON.stringify(next) !== JSON.stringify(__workingLayout)) {
+      undoStack.push(__workingLayout); if (undoStack.length > 50) undoStack.shift(); refreshUndoBtn();
+    }
+  } catch (e) {}
+  __workingLayout = next;
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(next)); } catch (e) {}
+}
+function undoLayout() {
+  if (!undoStack.length) return;
+  const prev = undoStack.pop();
+  undoApplying = true;
+  try {
+    clearExtras();
+    helpArrows = []; buildHelp();                            // applyWorkingLayout skips an empty __help, so clear first
+    applyWorkingLayout(prev);
+    __workingLayout = prev;
+    try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(prev)); } catch (e) {}
+    renderTimes(); schedule(); if (typeof buildSolaSched === 'function') buildSolaSched();
+    try { renderIdle(); renderHelpPanel(); } catch (e) {}
+    T = 0; Ts = 0; setPlay(false);
+  } finally { undoApplying = false; }
+  refreshUndoBtn();
+}
+window.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+    const t = e.target; if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;   // keep native text undo
+    e.preventDefault(); undoLayout();
+  }
+});
 function applyWorkingLayout(o) {   // apply a working-layout object to the LIVE scene (shared by load + import)
   if (!o) return; if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); }
 }
@@ -1795,6 +1830,7 @@ document.getElementById('rackbtn').onclick = () => {
   saveLayout();
 };
 loadLayout();
+__workingLayout = buildWorkingLayout();   // baseline so the FIRST edit is undoable (saveLayout skips the push while this is empty)
 try { schedule(); } catch (e) { console.error('schedule failed', e); }   // set labor/cycle/readouts FIRST so a bad saved layout can't leave them stuck on the placeholder
 try { renderTimes(); renderSolaData(); } catch (e) { console.error('panel render failed', e); }
 
@@ -1973,6 +2009,7 @@ importFile.onchange = e => {
   const reader = new FileReader();
   reader.onload = () => {
     let o; try { o = JSON.parse(reader.result); } catch (err) { alert('That file isn’t a valid layout export.'); return; }
+    try { if (Object.keys(__workingLayout).length) { undoStack.push(__workingLayout); refreshUndoBtn(); } } catch (err) {}   // undo point before the import
     clearExtras();                                          // drop the current Sola side, then apply the imported one
     applyWorkingLayout(o);                                  // apply to the LIVE scene — no reload, works even if storage is blocked
     __workingLayout = o; try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(o)); } catch (e) {}
@@ -1985,6 +2022,20 @@ importFile.onchange = e => {
 /* ---- Printable line-plan report: a clean, shareable summary of the current
    layout (build sequence, each station's steps/people/times, help paths, KPIs)
    for the assembly-line lead. Opens in a new tab; Print → Save as PDF. ---- */
+function captureFloorMap() {                                 // top-down snapshot of the whole floor for the report
+  try {
+    const b = { x0: -16, x1: 28.5, z0: -16, z1: 16 };
+    const w = b.x1 - b.x0, d = b.z1 - b.z0;
+    const aspect = renderer.domElement.width / renderer.domElement.height;
+    let halfH = d / 2, halfW = halfH * aspect;
+    if (halfW < w / 2) { halfW = w / 2; halfH = halfW / aspect; }
+    const cam = new THREE.OrthographicCamera(-halfW, halfW, halfH, -halfH, 0.1, 200);
+    cam.position.set((b.x0 + b.x1) / 2, FLOOR2 + 40, (b.z0 + b.z1) / 2);
+    cam.up.set(0, 0, -1); cam.lookAt((b.x0 + b.x1) / 2, FLOOR2, (b.z0 + b.z1) / 2);
+    renderer.render(scene, cam);                             // main loop redraws with the real camera next frame
+    return renderer.domElement.toDataURL('image/png');
+  } catch (e) { return null; }
+}
 function buildReportHTML() {
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const num = v => (Math.round(v * 10) / 10).toString();
@@ -2009,14 +2060,16 @@ function buildReportHTML() {
   // ---- Meritage ----
   const feeders = ['con', 'arm', 'bak', 'tre', 'sea'].map(get);
   const merLabor = ['con', 'arm', 'bak', 'tre', 'sea', 'fa', 'pak'].reduce((a, id) => a + (get(id).t || 0), 0);
+  const merPpl = ['con', 'arm', 'bak', 'tre', 'sea', 'fa', 'pak'].reduce((a, id) => a + (get(id).ppl || 1), 0);
   const bn = bottleneckInfo(), bnName = bn.key === 'fapak' ? 'Full Assembly + Pack' : FEEDNAME[bn.key];
   const takt = dayMin / taktDemand;
   const merHelp = helpArrows.filter(a => !isExtra(a.to));
   const kpi = (l, v) => `<div class="kpi"><div class="kl">${l}</div><div class="kv">${v}</div></div>`;
+  const walkNote = walkOn ? ` Station times include walking to linked tables at ${walkSpeed} yd/min (${tripsPerUnit} trip${tripsPerUnit > 1 ? 's' : ''}/unit).` : '';
   let mer = `<section><h2>Meritage 3-Seater</h2>
-    <div class="kpis">${kpi('Total labor', num(merLabor) + ' min/unit')}${kpi('Line cycle', num(bn.time) + ' min')}${kpi('Capacity', num(bn.cap) + ' /day')}${kpi('Takt (' + taktDemand + '/day)', num(takt) + ' min')}${kpi('Bottleneck', esc(bnName))}</div>
+    <div class="kpis">${kpi('Operators', merPpl)}${kpi('Total labor', num(merLabor) + ' min/unit')}${kpi('Line cycle', num(bn.time) + ' min')}${kpi('Capacity', num(bn.cap) + ' /day')}${kpi('Takt (' + taktDemand + '/day)', num(takt) + ' min')}${kpi('Bottleneck', esc(bnName))}</div>
     <h3>Build sequence</h3>
-    <p class="lead">The five sub-assembly stations run <b>in parallel</b>; their parts feed <b>Full Assembly</b>, then the unit goes to <b>Cushions &amp; Pack</b>.</p>
+    <p class="lead">The five sub-assembly stations run <b>in parallel</b>; their parts feed <b>Full Assembly</b>, then the unit goes to <b>Cushions &amp; Pack</b>.${walkNote}</p>
     <div class="stage"><div class="sh">1 · Sub-assemblies (parallel)</div><div class="grid">${feeders.map(s => card(s)).join('')}</div></div>
     <div class="stage"><div class="sh">2 · Full Assembly</div><div class="grid">${card(get('fa'))}</div></div>
     <div class="stage"><div class="sh">3 · Cushions &amp; Pack</div><div class="grid">${card(get('pak'))}</div></div>
@@ -2027,11 +2080,12 @@ function buildReportHTML() {
   let sola = '';
   if (sIds.length) {
     const sLabor = sIds.reduce((a, id) => a + (nodes[id].s.t || 0), 0);
+    const sPpl = sIds.reduce((a, id) => a + (nodes[id].s.ppl || 1), 0);
     let sCyc = 0.1, sBot = '—'; sIds.forEach(id => { const e = effNet(id); if (e > sCyc) { sCyc = e; sBot = nodes[id].s.title; } });
     const sCap = sCyc > 0 ? 420 / sCyc : 0;
     const sHelp = helpArrows.filter(a => isExtra(a.to));
     sola = `<section><h2>Sola (No Arms)</h2>
-      <div class="kpis">${kpi('Total labor', num(sLabor) + ' min/unit')}${kpi('Line cycle', num(sCyc) + ' min')}${kpi('Capacity', num(sCap) + ' /day')}${kpi('Stations', sIds.length)}${kpi('Bottleneck', esc(sBot))}</div>
+      <div class="kpis">${kpi('Operators', sPpl)}${kpi('Total labor', num(sLabor) + ' min/unit')}${kpi('Line cycle', num(sCyc) + ' min')}${kpi('Capacity', num(sCap) + ' /day')}${kpi('Stations', sIds.length)}${kpi('Bottleneck', esc(sBot))}</div>
       <h3>Build sequence (in order of flow)</h3>
       <p class="lead">Single-piece flow — each unit moves through the stations below in this order.</p>
       <div class="grid">${sIds.map((id, i) => card(nodes[id].s, i + 1)).join('')}</div>
@@ -2040,6 +2094,10 @@ function buildReportHTML() {
 
   const layoutName = (layoutSel && layoutSel.value) ? layoutSel.value : 'Working layout';
   const when = new Date().toLocaleString();
+  const mapUrl = captureFloorMap();
+  const mapSec = mapUrl ? `<section><h2>Floor Plan</h2>
+    <p class="lead">Top-down view of this layout — Meritage on the left deck, Sola (No Arms) on the right, staging areas around them.</p>
+    <img class="map" src="${mapUrl}" alt="Floor plan"></section>` : '';
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Assembly Line Plan — ${esc(layoutName)}</title>
 <style>
@@ -2066,12 +2124,13 @@ function buildReportHTML() {
   ol.steps li span{flex:1} ol.steps li b{color:#33414f;white-space:nowrap}
   ul.help{margin:4px 0 0;padding:0 0 0 18px} ul.help li{margin:4px 0}
   .muted{color:var(--mut);font-style:italic;font-size:13px}
+  img.map{width:100%;border:1px solid var(--line);border-radius:10px;margin:6px 0 4px;background:#e8ebee}
   @media print{ body{background:#fff} .no-print{display:none} .wrap{max-width:none;padding:0} .bar{position:static} section{break-inside:avoid} }
   @media(max-width:640px){ .grid{grid-template-columns:1fr} }
 </style></head><body><div class="wrap">
   <div class="bar"><h1>Assembly Line Plan</h1><button class="no-print" onclick="window.print()">🖨 Print / Save as PDF</button></div>
   <p class="sub"><b>Layout:</b> ${esc(layoutName)} &nbsp;·&nbsp; Generated ${esc(when)} &nbsp;·&nbsp; TUUCI · Meritage &amp; Sola lines</p>
-  ${mer}${sola}
+  ${mapSec}${mer}${sola}
 </div></body></html>`;
 }
 function openReport() {
@@ -2095,6 +2154,13 @@ function openReport() {
   area.title = 'Show / hide the surrounding warehouse areas (staging, racks, forklift lanes, gate)';
   rep.parentNode.insertBefore(area, rep.nextSibling);
   area.onclick = () => { surroundings.visible = !surroundings.visible; area.textContent = '🏭 Areas: ' + (surroundings.visible ? 'on' : 'off'); };
+  const und = document.createElement('button');
+  und.id = 'undoBtn'; und.className = imp.className || '';
+  und.textContent = '↩ Undo';
+  und.title = 'Undo the last layout change (Ctrl/Cmd+Z)';
+  area.parentNode.insertBefore(und, area.nextSibling);
+  und.onclick = undoLayout;
+  refreshUndoBtn();
 })();
 
 /* =========================== UPDATE =========================== */
