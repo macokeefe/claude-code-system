@@ -178,6 +178,17 @@ pans (left = drag stations), and `contextmenu` is suppressed on the canvas.
 (Station times, Idle/day, Help paths, Task chart, Measure) are draggable by their
 title bar (CSS `cursor:move` + a `pointerdown` delegation IIFE near the end of
 the entry; positions persist in `localStorage['m3d_panel_<id>']`).
+**Printable line-plan report (2026-06):** a `📄 Report` button (injected next to
+Import via JS, since the toolbar lives in the frozen HTML head) opens a
+self-contained printable page in a new tab (`buildReportHTML()` → Blob URL →
+`window.open`, falls back to download if the popup is blocked). It curates the
+CURRENT layout for the assembly-line lead: per-line KPIs (total labor, cycle,
+capacity, takt, bottleneck), the build sequence (Meritage = 5 parallel
+sub-assemblies → Full Assembly → Pack; Sola = numbered single-piece flow via
+`orderedSola()`), each station's people/total/net-per-unit and its ordered
+steps with times, and the help paths. Uses the live `effNet`/`helpInto`/
+`bottleneckInfo` so numbers match the app. Print → Save as PDF to share.
+
 **Rotated-table crew bug (2026-06):** operators appeared on the OPPOSITE side
 from the anti-fatigue mat whenever a table was rotated 90°/270° ("Rotate
 table"). Cause: the bench (and its mat, a child mesh) rotate with THREE's

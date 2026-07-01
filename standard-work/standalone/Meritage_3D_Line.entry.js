@@ -1846,6 +1846,115 @@ importFile.onchange = e => {
   reader.readAsText(f); importFile.value = '';
 };
 
+/* ---- Printable line-plan report: a clean, shareable summary of the current
+   layout (build sequence, each station's steps/people/times, help paths, KPIs)
+   for the assembly-line lead. Opens in a new tab; Print → Save as PDF. ---- */
+function buildReportHTML() {
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const num = v => (Math.round(v * 10) / 10).toString();
+  const stepList = steps => (!steps || !steps.length)
+    ? '<div class="muted">No steps recorded yet.</div>'
+    : '<ol class="steps">' + steps.map(st => `<li><span>${esc(st.name)}</span><b>${(+st.t) ? num(+st.t) + ' min' : '—'}</b></li>`).join('') + '</ol>';
+  const card = (s, n) => {
+    const id = s.id, ppl = Math.max(1, s.ppl || 1), tot = s.t || 0, per = effNet(id), hin = helpInto(id);
+    const seq = n ? `<span class="seq">${n}</span>` : '';
+    const helpNote = hin > 0 ? `<div class="hinote">helped: −${num(hin)} min/unit → net <b>${num(per)} min/unit</b></div>` : '';
+    return `<div class="card">
+      <div class="ch">${seq}<span class="ct">${esc(s.title)}</span>
+        <span class="cm">${ppl} ${ppl > 1 ? 'people' : 'person'} · ${num(tot)} min total · <b>${num(per)} min/unit</b></span></div>
+      ${helpNote}${stepList(s.steps)}</div>`;
+  };
+  const helpRows = arr => arr.length ? '<ul class="help">' + arr.map(a => {
+    const fp = (getAny(a.from) && getAny(a.from).ppl) || 1;
+    const fl = stName(a.from) + (fp > 1 ? ' (op ' + ((a.fromIdx || 0) + 1) + ')' : '');
+    return `<li><b>${esc(fl)}</b> &rarr; helps <b>${esc(stName(a.to))}</b> · takes ${num(a.helpMin || 0)} min/unit off it</li>`;
+  }).join('') + '</ul>' : '<div class="muted">No help paths set.</div>';
+
+  // ---- Meritage ----
+  const feeders = ['con', 'arm', 'bak', 'tre', 'sea'].map(get);
+  const merLabor = ['con', 'arm', 'bak', 'tre', 'sea', 'fa', 'pak'].reduce((a, id) => a + (get(id).t || 0), 0);
+  const bn = bottleneckInfo(), bnName = bn.key === 'fapak' ? 'Full Assembly + Pack' : FEEDNAME[bn.key];
+  const takt = dayMin / taktDemand;
+  const merHelp = helpArrows.filter(a => !isExtra(a.to));
+  const kpi = (l, v) => `<div class="kpi"><div class="kl">${l}</div><div class="kv">${v}</div></div>`;
+  let mer = `<section><h2>Meritage 3-Seater</h2>
+    <div class="kpis">${kpi('Total labor', num(merLabor) + ' min/unit')}${kpi('Line cycle', num(bn.time) + ' min')}${kpi('Capacity', num(bn.cap) + ' /day')}${kpi('Takt (' + taktDemand + '/day)', num(takt) + ' min')}${kpi('Bottleneck', esc(bnName))}</div>
+    <h3>Build sequence</h3>
+    <p class="lead">The five sub-assembly stations run <b>in parallel</b>; their parts feed <b>Full Assembly</b>, then the unit goes to <b>Cushions &amp; Pack</b>.</p>
+    <div class="stage"><div class="sh">1 · Sub-assemblies (parallel)</div><div class="grid">${feeders.map(s => card(s)).join('')}</div></div>
+    <div class="stage"><div class="sh">2 · Full Assembly</div><div class="grid">${card(get('fa'))}</div></div>
+    <div class="stage"><div class="sh">3 · Cushions &amp; Pack</div><div class="grid">${card(get('pak'))}</div></div>
+    <h3>Help paths (operator sharing)</h3>${helpRows(merHelp)}</section>`;
+
+  // ---- Sola (only if stations exist) ----
+  const sIds = orderedSola();
+  let sola = '';
+  if (sIds.length) {
+    const sLabor = sIds.reduce((a, id) => a + (nodes[id].s.t || 0), 0);
+    let sCyc = 0.1, sBot = '—'; sIds.forEach(id => { const e = effNet(id); if (e > sCyc) { sCyc = e; sBot = nodes[id].s.title; } });
+    const sCap = sCyc > 0 ? 420 / sCyc : 0;
+    const sHelp = helpArrows.filter(a => isExtra(a.to));
+    sola = `<section><h2>Sola (No Arms)</h2>
+      <div class="kpis">${kpi('Total labor', num(sLabor) + ' min/unit')}${kpi('Line cycle', num(sCyc) + ' min')}${kpi('Capacity', num(sCap) + ' /day')}${kpi('Stations', sIds.length)}${kpi('Bottleneck', esc(sBot))}</div>
+      <h3>Build sequence (in order of flow)</h3>
+      <p class="lead">Single-piece flow — each unit moves through the stations below in this order.</p>
+      <div class="grid">${sIds.map((id, i) => card(nodes[id].s, i + 1)).join('')}</div>
+      <h3>Help paths (operator sharing)</h3>${helpRows(sHelp)}</section>`;
+  }
+
+  const layoutName = (layoutSel && layoutSel.value) ? layoutSel.value : 'Working layout';
+  const when = new Date().toLocaleString();
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Assembly Line Plan — ${esc(layoutName)}</title>
+<style>
+  :root{--navy:#1d3a66;--mut:#6b7785;--line:#e3e7ec}
+  *{box-sizing:border-box} body{margin:0;font:15px/1.5 -apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1c2530;background:#f4f6f8}
+  .wrap{max-width:900px;margin:0 auto;padding:28px 30px 60px}
+  .bar{position:sticky;top:0;background:#12203a;margin:-28px -30px 24px;padding:14px 30px;display:flex;justify-content:space-between;align-items:center}
+  .bar h1{color:#fff;font-size:17px;margin:0} .bar button{background:#2f7d52;color:#fff;border:0;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer}
+  .sub{color:var(--mut);font-size:13px;margin:0 0 22px}
+  h2{color:var(--navy);font-size:22px;margin:30px 0 6px;padding-bottom:6px;border-bottom:2px solid var(--navy)}
+  h3{color:var(--navy);font-size:15px;text-transform:uppercase;letter-spacing:.04em;margin:22px 0 8px}
+  .lead{color:#33414f;margin:0 0 12px}
+  .kpis{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0 4px}
+  .kpi{flex:1;min-width:120px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+  .kl{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut)} .kv{font-size:18px;font-weight:700;color:var(--navy)}
+  .stage{margin:14px 0} .sh{font-weight:700;color:#c0552c;margin:0 0 8px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 14px;break-inside:avoid}
+  .ch{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;border-bottom:1px solid var(--line);padding-bottom:7px;margin-bottom:7px}
+  .seq{background:var(--navy);color:#fff;border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none}
+  .ct{font-weight:700;color:var(--navy);font-size:15px} .cm{color:var(--mut);font-size:12.5px;margin-left:auto}
+  .hinote{font-size:12px;color:#2f7d52;margin:-2px 0 6px}
+  ol.steps{margin:0;padding:0 0 0 20px} ol.steps li{margin:3px 0;display:flex;justify-content:space-between;gap:10px}
+  ol.steps li span{flex:1} ol.steps li b{color:#33414f;white-space:nowrap}
+  ul.help{margin:4px 0 0;padding:0 0 0 18px} ul.help li{margin:4px 0}
+  .muted{color:var(--mut);font-style:italic;font-size:13px}
+  @media print{ body{background:#fff} .no-print{display:none} .wrap{max-width:none;padding:0} .bar{position:static} section{break-inside:avoid} }
+  @media(max-width:640px){ .grid{grid-template-columns:1fr} }
+</style></head><body><div class="wrap">
+  <div class="bar"><h1>Assembly Line Plan</h1><button class="no-print" onclick="window.print()">🖨 Print / Save as PDF</button></div>
+  <p class="sub"><b>Layout:</b> ${esc(layoutName)} &nbsp;·&nbsp; Generated ${esc(when)} &nbsp;·&nbsp; TUUCI · Meritage &amp; Sola lines</p>
+  ${mer}${sola}
+</div></body></html>`;
+}
+function openReport() {
+  const html = buildReportHTML();
+  const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+  const w = window.open(url, '_blank');
+  if (!w) { const a = document.createElement('a'); a.href = url; a.download = 'Assembly_Line_Plan.html'; document.body.appendChild(a); a.click(); a.remove(); }
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+(() => {                                                     // add the Report button to the toolbar (next to Import)
+  const imp = document.getElementById('importLayout'); if (!imp) return;
+  const btn = document.createElement('button');
+  btn.id = 'reportBtn'; btn.className = imp.className || '';
+  btn.textContent = '📄 Report';
+  btn.title = 'Open a printable line plan (build sequence, steps, people, help paths) to share with the assembly-line lead';
+  imp.parentNode.insertBefore(btn, imp.nextSibling);
+  btn.onclick = openReport;
+})();
+
 /* =========================== UPDATE =========================== */
 function setLed(mat, state, active){ (Array.isArray(mat)?mat:[mat]).forEach(m=>{ m.color.setHex(RING[state]); m.emissive.setHex(state==='idle'?0x000000:RING[state]); m.emissiveIntensity = active?1.1:0.5; }); }
 
