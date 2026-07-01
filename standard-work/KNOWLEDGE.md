@@ -178,6 +178,20 @@ pans (left = drag stations), and `contextmenu` is suppressed on the canvas.
 (Station times, Idle/day, Help paths, Task chart, Measure) are draggable by their
 title bar (CSS `cursor:move` + a `pointerdown` delegation IIFE near the end of
 the entry; positions persist in `localStorage['m3d_panel_<id>']`).
+**Surrounding warehouse areas (2026-06):** `buildSurroundings()` (an IIFE that
+adds a `surroundings` group to `level2`) draws the peripheral zones from the
+plant floor plan AROUND the two untouched line decks: an extended concrete
+slab, then color-coded translucent zone pads with flat floor labels — Pallet
+Staging, Upholstery Racks, Forklift Access lanes (corners), FG Staging, X
+Staging, Back Rest Rack, Cart Staging, Sola Cart Staging, Sola Pallets — plus
+representative objects (steel racks, pallets w/ boxes, carts w/ wheels, 2 turn
+tables, a slide gate). Layout: BACK band z≈−12, FRONT band z≈12, LEFT x≈−9,
+RIGHT x≈23 (decks span x[−5.1,19.28] z[±9.14], divider x=7.09). Context only —
+NOT in the sim, `nodes`, `stList`, or saved layout; toggle via the injected
+`🏭 Areas` button (`surroundings.visible`). Because it's built in code it
+travels with baked/shared copies. To adjust, edit the placement calls at the
+end of the IIFE (data-driven zone/pallet/rack/cart/turntable/gate helpers).
+
 **Printable line-plan report (2026-06):** a `📄 Report` button (injected next to
 Import via JS, since the toolbar lives in the frozen HTML head) opens a
 self-contained printable page in a new tab (`buildReportHTML()` → Blob URL →

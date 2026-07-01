@@ -634,6 +634,85 @@ const cartPool = [];
 for (let i = 0; i < 3; i++) { const c = makePartsCart(); c.scale.set(1.4, 1.3, 1.4); c.visible = false; level2.add(c); cartPool.push({ mesh: c, state: 'down', slot: -1, remaining: 0 }); }
 let elevBusy = false, carY = 0.4, lastConsumed = 0, lastSimT = 0;
 
+/* ===== Surrounding warehouse areas (from the plant floor plan). The two line
+   decks stay as-is; these are the staging/rack/forklift zones AROUND them.
+   Context only — toggle with the 🏭 Areas button; not part of the sim/layout. ===== */
+const surroundings = new THREE.Group(); level2.add(surroundings);
+const surroundLabels = [];
+(function buildSurroundings() {
+  const Y = 0;
+  const M = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.92 }, o || {}));
+  const steel = M(0x8fa0b0, { metalness: 0.3, roughness: 0.6 });
+  // extended warehouse floor under/around both decks (top just below the deck surface)
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(40, 0.5, 31), M(0xccd0d4, { roughness: 0.98 }));
+  slab.position.set(7.09, -0.29, 0); slab.receiveShadow = true; surroundings.add(slab);
+  function label(text, x, z, w, rot) {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 110; const g = c.getContext('2d');
+    g.fillStyle = '#12203a'; g.font = '700 46px Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 256, 58);
+    const t = new THREE.CanvasTexture(c); t.anisotropy = 4;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 110 / 512), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false }));
+    m.rotation.x = -Math.PI / 2; if (rot) m.rotation.z = rot; m.position.set(x, Y + 0.06, z); surroundings.add(m); surroundLabels.push(m); return m;
+  }
+  function zone(text, x, z, w, d, color) {
+    const pad = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), M(color, { transparent: true, opacity: 0.42, roughness: 0.85 }));
+    pad.position.set(x, Y + 0.025, z); surroundings.add(pad);
+    const border = new THREE.Mesh(new THREE.BoxGeometry(w, 0.02, d), M(color, {}));   // faint frame under the translucent pad
+    border.position.set(x, Y + 0.012, z); surroundings.add(border);
+    label(text, x, z, Math.min(w * 0.92, 4.4));
+  }
+  const palletMat = M(0x9c7b4f, {}), boxMat = M(0xc7a566, {});
+  function pallet(x, z) {
+    const p = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.15, 1.2), palletMat); p.position.set(x, Y + 0.09, z); p.castShadow = true; surroundings.add(p);
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.6, 1.05), boxMat); b.position.set(x, Y + 0.47, z); b.castShadow = true; surroundings.add(b);
+  }
+  function rack(x, z, w, d, rot) {
+    const g = new THREE.Group();
+    for (const sx of [-w / 2, w / 2]) for (const sz of [-d / 2, d / 2]) { const u = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.25, 0.07), steel); u.position.set(sx, Y + 0.62, sz); u.castShadow = true; g.add(u); }
+    for (const sy of [0.35, 0.78, 1.2]) { const sh = new THREE.Mesh(new THREE.BoxGeometry(w, 0.04, d), steel); sh.position.set(0, Y + sy, 0); g.add(sh); }
+    g.position.set(x, 0, z); if (rot) g.rotation.y = rot; surroundings.add(g);
+  }
+  function turntable(x, z) {
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.12, 28), steel); b.position.set(x, Y + 0.06, z); surroundings.add(b);
+    const t = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.07, 28), M(0x556, {})); t.position.set(x, Y + 0.15, z); surroundings.add(t);
+    label('Turn Table', x, z - 1.5, 2.2);
+  }
+  function cart(x, z) {
+    const g = new THREE.Group();
+    const d = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.1, 0.75), M(0x59636f, { metalness: 0.3 })); d.position.y = Y + 0.34; d.castShadow = true; g.add(d);
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.42, 0.62), M(0xb0a06a, {})); b.position.y = Y + 0.6; b.castShadow = true; g.add(b);
+    for (const wx of [-0.45, 0.45]) for (const wz of [-0.28, 0.28]) { const wl = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.06, 12), M(0x222, {})); wl.rotation.z = Math.PI / 2; wl.position.set(wx, Y + 0.09, wz); g.add(wl); }
+    g.position.set(x, 0, z); surroundings.add(g);
+  }
+  function gate(x, z, w) {
+    for (const sx of [-w / 2, w / 2]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.3, 0.12), steel); post.position.set(x + sx, Y + 0.65, z); post.castShadow = true; surroundings.add(post); }
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, 0.08), M(0xc0552c, {})); bar.position.set(x, Y + 1.12, z); surroundings.add(bar);
+    label("6' Slide Gate", x, z + 0.95, 3);
+  }
+  const C = { pallet: 0x6f88b0, uph: 0x8f6fb0, fg: 0x3f9e6a, cart: 0x3f8fb0, x: 0xc79a3a, back: 0x9a6fb0, fork: 0xd8c033, sola: 0xc0552c };
+  // ---- BACK band (z ≈ -12): pallet + upholstery staging, forklift lanes at the corners ----
+  zone('Forklift Access', -9, -12, 4.6, 4.6, C.fork);
+  zone('Pallet Staging', -2, -12, 5, 4.2, C.pallet); pallet(-3.3, -12); pallet(-0.7, -12);
+  ['Upholstery Rack', 'Upholstery Rack', 'Upholstery Rack'].forEach((t, i) => { zone(t, 3.6 + i * 3, -12, 2.6, 4.2, C.uph); rack(3.6 + i * 3, -12, 2.2, 0.6, 0); });
+  zone('Pallet Staging', 15, -12, 5, 4.2, C.pallet); pallet(13.8, -12); pallet(16.2, -12);
+  zone('Forklift Access', 22, -12, 4.6, 4.6, C.fork);
+  // ---- FRONT band (z ≈ 12): Sola cart staging, gate + forklift access, cart staging ----
+  zone('Sola Cart Staging', 1, 12, 7, 4.2, C.cart); cart(-0.6, 12); cart(1, 12); cart(2.6, 12);
+  zone('Forklift Access', 7.6, 12, 4, 4.2, C.fork); gate(7.6, 14.5, 4);
+  zone('Sola Cart Staging', 14, 12, 6.5, 4.2, C.cart); cart(12.6, 12); cart(14, 12); cart(15.4, 12);
+  zone('Cart Staging', 21.5, 12, 4.4, 4.2, C.cart); cart(20.9, 12); cart(22.3, 12);
+  // ---- LEFT band (x ≈ -9): rows of 6×1.5 racks + Sola pallets ----
+  label('6 × 1.5 Racks', -9.4, -8, 3, Math.PI / 2);
+  [-6.5, -4.5, -2.5, -0.5, 1.5, 3.5].forEach(z => rack(-9.6, z, 1.83, 0.46, Math.PI / 2));
+  zone('Sola Pallets', -9, 12, 4.4, 4.2, C.pallet); pallet(-10, 12); pallet(-8, 12); pallet(-9, 13.4);
+  cart(-11.4, -4); cart(-11.4, 0); cart(-11.4, 4);
+  // ---- RIGHT band (x ≈ 23): FG staging, turn table, X staging, back-rest & upholstery racks ----
+  zone('FG Staging', 23, -6.5, 4.6, 5, C.fg); [-7.6, -5.4].forEach(z => { pallet(22.3, z); pallet(23.7, z); });
+  turntable(22, -1);
+  zone('X Staging', 23, 2.5, 4.6, 3, C.x);
+  zone('Back Rest Rack', 23, 6.5, 4.6, 3.2, C.back); rack(23, 6.5, 3, 0.6, 0);
+  zone('Upholstery Rack', 23, 10.5, 4.6, 3, C.uph); rack(23, 10.5, 3, 0.6, 0);
+})();
+
 // ---- editable cart PATH: elevator -> waypoints -> cart spot (so carts route around stations) ----
 let cartWaypoints = [];            // [{x,z}] user-editable
 const pathLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: 0x2e7d4f, dashSize: 0.6, gapSize: 0.35 }));
@@ -1945,14 +2024,20 @@ function openReport() {
   if (!w) { const a = document.createElement('a'); a.href = url; a.download = 'Assembly_Line_Plan.html'; document.body.appendChild(a); a.click(); a.remove(); }
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
-(() => {                                                     // add the Report button to the toolbar (next to Import)
+(() => {                                                     // add Report + Areas buttons to the toolbar (next to Import)
   const imp = document.getElementById('importLayout'); if (!imp) return;
-  const btn = document.createElement('button');
-  btn.id = 'reportBtn'; btn.className = imp.className || '';
-  btn.textContent = '📄 Report';
-  btn.title = 'Open a printable line plan (build sequence, steps, people, help paths) to share with the assembly-line lead';
-  imp.parentNode.insertBefore(btn, imp.nextSibling);
-  btn.onclick = openReport;
+  const rep = document.createElement('button');
+  rep.id = 'reportBtn'; rep.className = imp.className || '';
+  rep.textContent = '📄 Report';
+  rep.title = 'Open a printable line plan (build sequence, steps, people, help paths) to share with the assembly-line lead';
+  imp.parentNode.insertBefore(rep, imp.nextSibling);
+  rep.onclick = openReport;
+  const area = document.createElement('button');
+  area.id = 'areasBtn'; area.className = imp.className || '';
+  area.textContent = '🏭 Areas: on';
+  area.title = 'Show / hide the surrounding warehouse areas (staging, racks, forklift lanes, gate)';
+  rep.parentNode.insertBefore(area, rep.nextSibling);
+  area.onclick = () => { surroundings.visible = !surroundings.visible; area.textContent = '🏭 Areas: ' + (surroundings.visible ? 'on' : 'off'); };
 })();
 
 /* =========================== UPDATE =========================== */
