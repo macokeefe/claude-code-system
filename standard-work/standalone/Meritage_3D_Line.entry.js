@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
 // Capture the pristine page HTML before the 3D scene mutates the DOM, so we can
 // bake the current layouts into a fresh self-contained copy of this app.
@@ -419,7 +420,14 @@ function schedule() {
 initMats();
 const mount = document.getElementById('view');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xe9edf1);
+// soft vertical gradient sky (reads far less flat than a solid colour)
+scene.background = (() => {
+  const c = document.createElement('canvas'); c.width = 4; c.height = 256; const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 0, 256);
+  gr.addColorStop(0, '#dfe7f0'); gr.addColorStop(0.55, '#e9edf1'); gr.addColorStop(1, '#f1efe9');
+  g.fillStyle = gr; g.fillRect(0, 0, 4, 256);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
 scene.fog = new THREE.Fog(0xe9edf1, 60, 140);
 const camera = new THREE.PerspectiveCamera(44, mount.clientWidth / mount.clientHeight, 0.1, 300);
 camera.position.set(7, 30, 52);
@@ -427,19 +435,28 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(mount.clientWidth, mount.clientHeight);
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.06;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
 mount.appendChild(renderer.domElement);
+// image-based ambient: every PBR material picks up soft room reflections,
+// which is what makes plastics/metals stop looking flat
+try {
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.38;
+} catch (e) {}
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.target.set(7, 6.8, 0); controls.maxPolarAngle = Math.PI / 2.02; controls.maxDistance = 130;
 controls.enablePan = true; controls.screenSpacePanning = true;   // pan moves the camera across the floor (esp. while editing)
 renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());   // so right-drag pans without the browser menu
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0xb8bcc2, 1.0));
-const sun = new THREE.DirectionalLight(0xfff8ee, 0.85);
-sun.position.set(16, 28, 16); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.radius = 5;
-for (const [k, v] of Object.entries({ left: -40, right: 40, top: 40, bottom: -40 })) sun.shadow.camera[k] = v;
+scene.add(new THREE.HemisphereLight(0xffffff, 0xb8bcc2, 0.62));   // lowered — the environment map now carries the ambient
+const sun = new THREE.DirectionalLight(0xfff6e8, 1.0);
+sun.position.set(16, 28, 16); sun.castShadow = true;
+sun.shadow.mapSize.set(4096, 4096); sun.shadow.radius = 4; sun.shadow.bias = -0.0002; sun.shadow.normalBias = 0.02;
+for (const [k, v] of Object.entries({ left: -32, right: 32, top: 30, bottom: -30 })) sun.shadow.camera[k] = v;   // tight bounds = crisper shadows for the same map
+sun.shadow.camera.near = 4; sun.shadow.camera.far = 90;
 scene.add(sun);
-const fill = new THREE.DirectionalLight(0xeef2f8, 0.3); fill.position.set(-18, 14, -10); scene.add(fill);
+const fill = new THREE.DirectionalLight(0xeef2f8, 0.25); fill.position.set(-18, 14, -10); scene.add(fill);
 
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(130, 90),
   new THREE.MeshStandardMaterial({ map: concreteTexture(), roughness: 0.55, metalness: 0.06 }));
@@ -1138,7 +1155,7 @@ function buildCadOverlay() {
   const w = FLOOR_X1 - FLOOR_X0, d = FLOOR_Z1 - FLOOR_Z0;
   const tex = new THREE.TextureLoader().load(window.__CAD_OVERLAY__);
   tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.55, depthTest: false, depthWrite: false });
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.55, depthTest: false, depthWrite: false, toneMapped: false });   // paper-accurate whites, exempt from tone mapping
   const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
   plane.rotation.x = -Math.PI / 2;                            // lay flat
   plane.position.set((FLOOR_X0 + FLOOR_X1) / 2, 0.2, (FLOOR_Z0 + FLOOR_Z1) / 2);   // just above the floor

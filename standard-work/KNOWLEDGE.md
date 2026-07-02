@@ -283,6 +283,16 @@ overlay toggle, station drag (pointermove), and add/delete. `#cadBox` has a
 and see just the CAD, plus a separate opacity slider for the marks
 (`MY_MARK_FILL.opacity`) — independent of the CAD-plan opacity slider.
 
+GRAPHICS PASS (2026-07): image-based ambient via
+`PMREMGenerator.fromScene(new RoomEnvironment(), 0.04)` →
+`scene.environment` (`environmentIntensity 0.38`), hemisphere light lowered
+to 0.62 to compensate; sun 1.0 with 4096 shadow map, tight ortho bounds
+(±32/±30, near 4 far 90), bias −0.0002 / normalBias 0.02; exposure 1.0
+(ACES); vertical-gradient canvas sky (cool top → warm horizon) replacing the
+flat colour; CAD overlay material `toneMapped:false` so the sheet stays
+paper-white. RoomEnvironment import: `three/examples/jsm/environments/...`
+(esbuild alias covers subpaths).
+
 CAD OVERLAY (2026-07): `📐 CAD` button (Edit-Layout only) lays the actual
 plant drawing flat on the floor, scaled 1:1, to compare the model to the plan.
 The PDF was rasterized (PyMuPDF), cropped to the interior walls (PDF x
