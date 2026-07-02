@@ -144,6 +144,7 @@ function makeHose() {
 }
 
 const FT = 0.3048;   // metres per foot (world units = metres; CAD scale 3/8"=1'-0")
+const YARD = 0.9144; // 1 yard = 0.9144 m
 function makeBench(lenFt = 8, depFt = 3) {
   const W = lenFt * FT, D = depFt * FT;
   const st = new THREE.Group();
@@ -163,11 +164,11 @@ function makeBench(lenFt = 8, depFt = 3) {
     const bin = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.2, Math.min(0.28, D - 0.3)), b % 3 === 2 ? MAT.binBlue : MAT.binYellow);
     bin.position.set(-W/2 + 0.25 + b * (W - 0.5) / (nb - 1 || 1), 0.57, -D/2 + 0.16); bin.castShadow = true; st.add(bin);
   }
-  // anti-fatigue mat on the operator side (front, +z)
-  const mat = new THREE.Mesh(new THREE.BoxGeometry(W - 0.1, 0.025, 0.9), MAT.mat);
+  // anti-fatigue mat on the operator side (front, +z) — true 8' x 1 yd
+  const mat = new THREE.Mesh(new THREE.BoxGeometry(8 * FT, 0.025, YARD), MAT.mat);
   mat.position.set(0, 0.013, D/2 + 0.6); mat.receiveShadow = true; st.add(mat);
-  for (const dz of [-0.45, 0.45]) {
-    const edge = new THREE.Mesh(new THREE.BoxGeometry(W - 0.1, 0.027, 0.08), MAT.matEdge);
+  for (const dz of [-YARD/2, YARD/2]) {
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(8 * FT, 0.027, 0.08), MAT.matEdge);
     edge.position.set(0, 0.014, D/2 + 0.6 + dz); st.add(edge);
   }
   const led = new THREE.Mesh(new THREE.BoxGeometry(W - 0.2, 0.05, 0.05),
@@ -511,22 +512,22 @@ rebuildDivider();
 // proper enclosed freight elevator that docks the floor edge
 function makeElevator(x,z){
   const shaft = new THREE.Group();
-  const S = 1.4, H = FLOOR2 + 1.7, CH = 2.2;          // half-width, shaft height, cab height
+  const SX = (8 * FT) / 2, SZ = (3 * YARD) / 2, H = FLOOR2 + 1.7, CH = 2.2;   // cab 8' deep x 3 yd wide (true size), shaft height, cab height
   const wallMat = new THREE.MeshStandardMaterial({ color:0xc7ccd2, roughness:0.5, metalness:0.5 });
   // shaft guide posts + header + motor + cable
-  for (const [px,pz] of [[-S,-S],[S,-S],[-S,S],[S,S]]) { const p=bx(0.16,H,0.16,MAT.rackPost); p.position.set(x+px,H/2,z+pz); shaft.add(p); }
-  const header = bx(2*S+0.3,0.26,2*S+0.3,MAT.rackBeam); header.position.set(x,H,z); shaft.add(header);
+  for (const [px,pz] of [[-SX,-SZ],[SX,-SZ],[-SX,SZ],[SX,SZ]]) { const p=bx(0.16,H,0.16,MAT.rackPost); p.position.set(x+px,H/2,z+pz); shaft.add(p); }
+  const header = bx(2*SX+0.3,0.26,2*SZ+0.3,MAT.rackBeam); header.position.set(x,H,z); shaft.add(header);
   const motor = bx(1.0,0.6,1.0,MAT.steel); motor.position.set(x,H+0.4,z); shaft.add(motor);
   const cable = bx(0.05,H,0.05,MAT.pants); cable.position.set(x,H/2,z); shaft.add(cable);
   // enclosed cab (floor, roof, back + 2 side walls, open front doorway)
   const car = new THREE.Group();
-  car.add(bx(2*S,0.14,2*S,MAT.steel));                                   // floor
-  const roof=bx(2*S,0.1,2*S,MAT.steel); roof.position.y=CH; car.add(roof);
-  const back=bx(2*S,CH,0.08,wallMat); back.position.set(0,CH/2,-S); car.add(back);
-  const lw=bx(0.08,CH,2*S,wallMat); lw.position.set(-S,CH/2,0); car.add(lw);
-  const rw=bx(0.08,CH,2*S,wallMat); rw.position.set(S,CH/2,0); car.add(rw);
-  for (const px of [-S+0.1,S-0.1]) { const j=bx(0.12,CH,0.12,MAT.steel); j.position.set(px,CH/2,S); car.add(j); }   // front jambs
-  const headr=bx(2*S,0.2,0.12,MAT.steel); headr.position.set(0,CH-0.1,S); car.add(headr);
+  car.add(bx(2*SX,0.14,2*SZ,MAT.steel));                                 // floor
+  const roof=bx(2*SX,0.1,2*SZ,MAT.steel); roof.position.y=CH; car.add(roof);
+  const back=bx(2*SX,CH,0.08,wallMat); back.position.set(0,CH/2,-SZ); car.add(back);
+  const lw=bx(0.08,CH,2*SZ,wallMat); lw.position.set(-SX,CH/2,0); car.add(lw);
+  const rw=bx(0.08,CH,2*SZ,wallMat); rw.position.set(SX,CH/2,0); car.add(rw);
+  for (const px of [-SX+0.1,SX-0.1]) { const j=bx(0.12,CH,0.12,MAT.steel); j.position.set(px,CH/2,SZ); car.add(j); }   // front jambs
+  const headr=bx(2*SX,0.2,0.12,MAT.steel); headr.position.set(0,CH-0.1,SZ); car.add(headr);
   // ELEVATOR sign
   (function(){ const c=document.createElement('canvas'); c.width=256;c.height=64;const g=c.getContext('2d');
     g.fillStyle='#1d3a66'; g.beginPath(); g.roundRect(0,0,256,64,10); g.fill(); g.fillStyle='#fff'; g.font='700 32px Arial'; g.textAlign='center'; g.textBaseline='middle'; g.fillText('ELEVATOR',128,34);
@@ -1464,7 +1465,7 @@ document.getElementById('taskbtn').onclick = () => {
 }; }
 
 /* =========================== EDIT LAYOUT =========================== */
-const YARD = 0.9144;                       // 1 unit = 1 metre; 1 yard = 0.9144 m
+// (YARD is defined near the top, next to FT)
 const u2y = u => u / YARD;                  // units -> yards
 const LAYOUT_KEY = 'm3d_layout_v2';   // bumped: deck rescaled to real footprint
 

@@ -214,6 +214,11 @@ racks 6'×2'×5'7" tall, Back Rest Rack 6'×2.5' (per plan), turn table 5' dia,
 slide gate true 6' opening + 8' travel rail (`aRack` gained an `h` height
 param). Crew figures scaled to ~5'9" (`makeCrewFigure` `g.scale.set(1.06,
 1.17, 1.06)`) so operators read correctly against the 38" benches.
+Also (2026-07, per engineer): elevator cab = 3 yd wide × 8' deep (`makeElevator`
+`SX/SZ` half-dims replaced the old 2.8 m square) and every bench's anti-fatigue
+mat = exactly 8' × 1 yd (`makeBench`). NOTE: `YARD` was moved next to `FT` near
+the top of the entry — `makeBench` now references it at init, and the old
+declaration at ~line 1467 would have been a TDZ error.
 
 STAIRS (2026-07): `buildStairs()` IIFE (in `surroundings`, so the 🏭 Areas
 button hides it too) — a 4'-wide industrial straight flight at the floor's
