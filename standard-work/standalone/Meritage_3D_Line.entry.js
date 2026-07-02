@@ -606,7 +606,7 @@ function fillRacks(){ let n=onRacks; for(const r of racks) for(const s of r.slot
 // the single materials cart (holds all parts) — draggable; feeders pull from this one spot
 // draggable cart SPOT (front of the queue) — feeders pull parts from here
 const cartPad = new THREE.Group();                           // a true cart SPOT: 5' x 3' taped outline (was a 9' square)
-const CPW = 5 * FT, CPD = 3 * FT;
+const CPW = 6 * FT, CPD = 3 * FT;   // taped cart spot, fits the 5'6" CAD cart
 const pad = bx(CPW, 0.04, CPD, new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.9, transparent: true, opacity: 0.45 }));
 pad.position.y = 0.025; cartPad.add(pad);
 for (const dx of [-CPW / 2, CPW / 2]) { const e = bx(0.08, 0.03, CPD, MAT.tape); e.position.set(dx, 0.03, 0); cartPad.add(e); }
@@ -624,7 +624,7 @@ const EL = [DECK.x0 - 1.6, 2];         // elevator docks the left edge of the fl
 const MAXQ = 3, LIFT_RPS = 3.0, ROLL_RPS = 3.2;   // up to 3 carts up; cart roll/elevator speed in units per REAL second (steady visual pace)
 let CART_UNITS = 1;                     // each cart carries the materials for one sofa
 const cartPool = [];
-for (let i = 0; i < 3; i++) { const c = makePartsCart(); c.scale.set(1.17, 1.2, 1.12); c.visible = false; level2.add(c); cartPool.push({ mesh: c, state: 'down', slot: -1, remaining: 0 }); }
+for (let i = 0; i < 3; i++) { const c = makePartsCart(); c.scale.set(1.61, 1.2, 1.04); c.visible = false; level2.add(c); cartPool.push({ mesh: c, state: 'down', slot: -1, remaining: 0 }); }   // carts at the true CAD footprint: 5.5' x 2.33'
 let elevBusy = false, carY = 0.4, lastConsumed = 0, lastSimT = 0;
 
 /* ===== Surrounding warehouse areas (from the plant floor plan). The two line
@@ -746,11 +746,12 @@ function aRack(g, x, z, w, d, rot, h) {                      // w/d in metres, h
   for (const fr of [0.28, 0.62, 0.96]) { const sh = new THREE.Mesh(new THREE.BoxGeometry(w, 0.04, d), A_STEEL); sh.position.set(0, AY + h * fr, 0); r.add(sh); }
   r.position.set(x, 0, z); if (rot) r.rotation.y = rot; g.add(r);
 }
-function aCart(g, x, z) {                                    // 4' x 2.5' shop cart
+function aCart(g, x, z) {                                    // 5'6" x 2'4" cart — measured off the CAD's Cart boxes (2.33 x 5.5 ft)
   const c = new THREE.Group();
-  const d = new THREE.Mesh(new THREE.BoxGeometry(4 * FT, 0.1, 2.5 * FT), AM(0x59636f, { metalness: 0.3 })); d.position.y = AY + 0.34; d.castShadow = true; c.add(d);
-  const b = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.42, 0.6), AM(0xb0a06a, {})); b.position.y = AY + 0.6; b.castShadow = true; c.add(b);
-  for (const wx of [-0.5, 0.5]) for (const wz of [-0.3, 0.3]) { const wl = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.06, 12), AM(0x222, {})); wl.rotation.z = Math.PI / 2; wl.position.set(wx, AY + 0.09, wz); c.add(wl); }
+  const CL = 5.5 * FT, CW = 2.33 * FT;
+  const d = new THREE.Mesh(new THREE.BoxGeometry(CL, 0.1, CW), AM(0x59636f, { metalness: 0.3 })); d.position.y = AY + 0.34; d.castShadow = true; c.add(d);
+  const b = new THREE.Mesh(new THREE.BoxGeometry(CL - 0.3, 0.42, CW - 0.16), AM(0xb0a06a, {})); b.position.y = AY + 0.6; b.castShadow = true; c.add(b);
+  for (const wx of [-CL / 2 + 0.16, CL / 2 - 0.16]) for (const wz of [-CW / 2 + 0.1, CW / 2 - 0.1]) { const wl = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.06, 12), AM(0x222, {})); wl.rotation.z = Math.PI / 2; wl.position.set(wx, AY + 0.09, wz); c.add(wl); }
   c.position.set(x, 0, z); g.add(c);
 }
 function aTurntable(g) {                                     // ~5' diameter assembly turntable
@@ -1014,7 +1015,7 @@ for (const dz of [-CPD / 2, CPD / 2]) { const e = bx(CPW, 0.03, 0.08, MAT.tape);
   x.fillStyle='#fff'; x.font='700 28px Arial'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('SOLA MATERIALS CART',180,38);
   const tex=new THREE.CanvasTexture(c); tex.anisotropy=8; const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true}));
   sp.scale.set(2.2,0.45,1); sp.position.y=1.6; cart2Pad.add(sp); })();
-const cart2Mesh = makePartsCart(); cart2Mesh.scale.set(1.17,1.2,1.12); cart2Pad.add(cart2Mesh);   // a physical cart sits on the pad
+const cart2Mesh = makePartsCart(); cart2Mesh.scale.set(1.61,1.2,1.04); cart2Pad.add(cart2Mesh);   // a physical cart sits on the pad
 cart2Pad.position.set(CART2_DEF[0], 0, CART2_DEF[1]); level2.add(cart2Pad);
 nodes.cart2 = { id:'cart2', x:CART2_DEF[0], z:CART2_DEF[1], st:cart2Pad, s:{ id:'cart2', title:'Sola materials cart' } };
 POS.cart2 = [CART2_DEF[0], CART2_DEF[1]];
