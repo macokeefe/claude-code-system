@@ -274,7 +274,10 @@ The PDF was rasterized (PyMuPDF), cropped to the interior walls (PDF x
 downscaled, base64'd into `window.__CAD_OVERLAY__` — injected as a `<script>`
 appended to the head scaffold `m3d_head.html` (NOT entry.js; ~400 KB, so the
 built HTML is ~1 MB now). `buildCadOverlay()` makes a flat PlaneGeometry sized
-`FLOOR_W x FLOOR_D` at y=0.2 with a MeshBasicMaterial (opacity 0.55). Toggle
+`FLOOR_W x FLOOR_D` at y=0.2 with a MeshBasicMaterial (opacity 0.55). The
+image is the SOLID white-background crop (not white→transparent) + `depthTest
+false` + `renderOrder 900`, so at opacity 1.0 the paper fully OCCLUDES the
+model ("only see the CAD"); lower opacity = tracing-paper blend. Toggle
 `setCadOverlay`; a floating `#cadBox` has the opacity slider; SHIFT-drag (or
 right-drag) on the floor nudges the plane to align (`cadDragging` in the
 pointer handlers, before station picking). Auto-hidden on leaving edit mode.

@@ -1131,10 +1131,11 @@ function buildCadOverlay() {
   const w = FLOOR_X1 - FLOOR_X0, d = FLOOR_Z1 - FLOOR_Z0;
   const tex = new THREE.TextureLoader().load(window.__CAD_OVERLAY__);
   tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.55, depthWrite: false });
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.55, depthTest: false, depthWrite: false });
   const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
   plane.rotation.x = -Math.PI / 2;                            // lay flat
   plane.position.set((FLOOR_X0 + FLOOR_X1) / 2, 0.2, (FLOOR_Z0 + FLOOR_Z1) / 2);   // just above the floor
+  plane.renderOrder = 900;                                    // draw ON TOP of the model, so at 100% opacity the CAD fully covers it
   g.add(plane); g.visible = false; level2.add(g);
   cadOverlay = { g, plane, mat, hx: 0, hz: 0 };               // hx/hz = user alignment nudge
 }
