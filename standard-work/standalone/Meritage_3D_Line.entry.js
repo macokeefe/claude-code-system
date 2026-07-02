@@ -661,62 +661,65 @@ const FLOOR_Z0 = -FLOOR_D / 2, FLOOR_Z1 = FLOOR_D / 2;                       // 
   line(bx0, (bz0 + bz1) / 2, lw, bz1 - bz0); line(bx1, (bz0 + bz1) / 2, lw, bz1 - bz0);
 })();
 // ---- stairs up to the floor, to the LEFT of the lift (per the plant plan) ----
-(function buildStairs() {
-  const g = new THREE.Group();
+// ---- stairs, built RELATIVE to an anchor (the top-landing corner) so the
+// whole staircase is a normal editable "area": drag it, right-click deletes it.
+function buildStairsInto(g) {
   const W = 4 * FT;                                    // 4' wide industrial stair
   const rise = FLOOR2 - 0.04;                          // ground → floor top
   const steps = 32, sh = rise / steps, tread = 0.28, run = steps * tread;
-  const x0 = FLOOR_X0 - 0.74;                          // channel just off the floor's west edge — left of the lift
-  const zTop = 2.2;                                    // lands beside the lift (lift z ≈ 2)
   const stepMat = AM(0x6d7680, { metalness: 0.35, roughness: 0.6 });
   for (let i = 1; i <= steps; i++) {                   // code-legal treads: 7.3" rise / 11" run
     const t = new THREE.Mesh(new THREE.BoxGeometry(W, 0.07, tread), stepMat);
-    t.position.set(x0, -FLOOR2 + i * sh - 0.035, zTop + (steps - i) * tread + tread / 2);
+    t.position.set(0, -FLOOR2 + i * sh - 0.035, (steps - i) * tread + tread / 2);
     t.castShadow = true; g.add(t);
   }
   const len = Math.hypot(run, rise), ang = Math.atan2(rise, run);
   for (const dx of [-W / 2, W / 2]) {
     const s = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.3, len), A_STEEL);   // stringer
-    s.position.set(x0 + dx, -FLOOR2 + rise / 2 - 0.12, zTop + run / 2); s.rotation.x = ang; g.add(s);
+    s.position.set(dx, -FLOOR2 + rise / 2 - 0.12, run / 2); s.rotation.x = ang; g.add(s);
     const rail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, len), A_STEEL);   // sloped handrail
-    rail.position.set(x0 + dx, -FLOOR2 + rise / 2 + 0.95, zTop + run / 2); rail.rotation.x = ang; g.add(rail);
+    rail.position.set(dx, -FLOOR2 + rise / 2 + 0.95, run / 2); rail.rotation.x = ang; g.add(rail);
     for (let i = 2; i <= steps; i += 5) {              // rail posts
       const p = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.0, 0.05), A_STEEL);
-      p.position.set(x0 + dx, -FLOOR2 + i * sh + 0.5, zTop + (steps - i) * tread + tread / 2); g.add(p);
+      p.position.set(dx, -FLOOR2 + i * sh + 0.5, (steps - i) * tread + tread / 2); g.add(p);
     }
   }
   // top landing bridging onto the floor edge, with guard rails on the open sides
   const land = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.08, 1.6), stepMat);
-  land.position.set(x0 + 0.05, -0.08, zTop - 0.8); land.castShadow = true; g.add(land);
-  for (const [w, d, lx, lz] of [[1.5, 0.06, x0 + 0.05, zTop - 1.6], [0.06, 1.6, x0 - 0.7, zTop - 0.8]]) {
+  land.position.set(0.05, -0.08, -0.8); land.castShadow = true; g.add(land);
+  for (const [w, d, lx, lz] of [[1.5, 0.06, 0.05, -1.6], [0.06, 1.6, -0.7, -0.8]]) {
     const r = new THREE.Mesh(new THREE.BoxGeometry(w, 0.06, d), A_STEEL); r.position.set(lx, 1.0, lz); g.add(r);
     const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.05, 0.05), A_STEEL); p1.position.set(lx - w / 2 + 0.03, 0.48, lz - d / 2 + 0.03); g.add(p1);
     const p2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.05, 0.05), A_STEEL); p2.position.set(lx + w / 2 - 0.03, 0.48, lz + d / 2 - 0.03); g.add(p2);
   }
-  surroundings.add(g);
-})();
+}
 // ---- SECTION LINES from the plant drawing: the four dashed cyan dividers,
-// extracted from the PDF vectors and mapped 1:1 onto the floor (walls anchored
-// at 104' x 63.3'). They run from just below the top staging band to just
-// above the bottom one, with the same jogs as the drawing. ----
+// extracted from the PDF vectors, mapped 1:1, each an editable "area" (drag /
+// right-click delete like everything else). Polylines relative to point 0. ----
 const SECTION_LINES = [
-  // 1: left divider (west side of the Meritage work area)
   [[-3.06, -6.29], [-3.06, 0.05], [-3.33, 0.05], [-3.33, 4.75], [-3.73, 4.75], [-3.73, 7.85]],
-  // 2: centre divider
   [[4.91, -6.26], [4.91, 0.98], [5.18, 0.98], [5.18, 7.76]],
-  // 3: right divider (several jogs around X staging / racks)
   [[11.80, -6.31], [11.80, -3.81], [13.08, -3.81], [13.08, -0.63], [12.00, -0.63], [12.00, 1.00], [12.54, 1.00], [12.54, 4.81], [13.55, 4.81], [13.55, 7.84]],
-  // 4: far-right divider (before FG / lift end)
   [[17.87, -6.51], [17.87, -2.55], [17.60, -2.55], [17.60, 7.87]],
 ];
-const sectionGroup = new THREE.Group(); surroundings.add(sectionGroup);
-SECTION_LINES.forEach(pl => {
-  const geo = new THREE.BufferGeometry();
-  const arr = []; pl.forEach(pt => arr.push(pt[0], 0.055, pt[1]));
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
+function slineInto(g, pl) {
+  const ax = pl[0][0], az = pl[0][1];
+  const arr = []; pl.forEach(pt => arr.push(pt[0] - ax, 0.055, pt[1] - az));
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
   const ln = new THREE.Line(geo, new THREE.LineDashedMaterial({ color: 0x00b7d4, dashSize: 0.45, gapSize: 0.28 }));
-  ln.computeLineDistances(); sectionGroup.add(ln);
-});
+  ln.computeLineDistances(); g.add(ln);
+  // faint wide ribbon under the line so it is easy to grab in Edit Layout
+  const h = 0.35, y = 0.045, verts = [];
+  for (let i = 0; i < pl.length - 1; i++) {
+    const ax0 = pl[i][0] - ax, az0 = pl[i][1] - az, bx0 = pl[i + 1][0] - ax, bz0 = pl[i + 1][1] - az;
+    const dx = bx0 - ax0, dz = bz0 - az0, L = Math.hypot(dx, dz) || 1;
+    const px = -dz / L * h, pz = dx / L * h;
+    verts.push(ax0 + px, y, az0 + pz, bx0 + px, y, bz0 + pz, ax0 - px, y, az0 - pz,
+               bx0 + px, y, bz0 + pz, bx0 - px, y, bz0 - pz, ax0 - px, y, az0 - pz);
+  }
+  const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  g.add(new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: 0x00b7d4, transparent: true, opacity: 0.1, depthWrite: false })));
+}
 // ---- object builders: each adds meshes to a group `g`, relative to the group origin ----
 function aPad(g, w, d, color) {   // neutral marked-off zone (no colors) — a light-grey pad with a slightly darker outline
   const p = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), AM(0xbcc2c8, { transparent: true, opacity: 0.32, roughness: 0.9 })); p.position.y = AY + 0.03; g.add(p);
@@ -770,6 +773,11 @@ const AREA_KINDS = {   // pads sized to fit the ~12.5' strips between the decks 
   rackRow:     g => { aLabel(g, '6 × 1.5 Racks', 3); for (let i = 0; i < 6; i++) aRack(g, 0, -5 + i * 2, 6 * FT, 1.5 * FT, Math.PI / 2); },   // exact 6' x 1.5'
   turntable:   g => { aTurntable(g); aLabel(g, 'Turn Table', 2.2); },
   gate:        g => { aGate(g, 6 * FT); aLabel(g, "6' Slide Gate", 2.4); },   // true 6' opening + 8' travel rail
+  stairs:      g => buildStairsInto(g),                                        // the ground→floor staircase — editable like everything else
+  sline1:      g => slineInto(g, SECTION_LINES[0]),                            // the plan's 4 section dividers — draggable / deletable
+  sline2:      g => slineInto(g, SECTION_LINES[1]),
+  sline3:      g => slineInto(g, SECTION_LINES[2]),
+  sline4:      g => slineInto(g, SECTION_LINES[3]),
 };
 function addArea(kind, x, z, rot) {
   const build = AREA_KINDS[kind]; if (!build) return null;
@@ -788,6 +796,9 @@ const AREA_DEFAULTS = [
   ['fg', 21.2, -6.9], ['turntable', 21.2, -3.4], ['xstaging', 21.2, -1.1], ['backrest', 21.2, 1.7], ['solaPallets', 21.2, 4.7], ['cart', 21.2, 7.8],
   // south edge
   ['rackRow', 1.0, 9.33, Math.PI / 2], ['gate', 8.6, 9.4],
+  // stairs (left of the lift) + the plan's four section dividers
+  ['stairs', FLOOR_X0 - 0.74, 2.2],
+  ['sline1', -3.06, -6.29], ['sline2', 4.91, -6.26], ['sline3', 11.80, -6.31], ['sline4', 17.87, -6.51],
 ];
 function defaultAreas() { clearAreas(); AREA_DEFAULTS.forEach(a => addArea(a[0], a[1], a[2], a[3] || 0)); }
 defaultAreas();
@@ -1854,7 +1865,7 @@ renderer.domElement.addEventListener('pointermove', e => {
   const p = deckPoint(e); if (!p) return;
   if (dragFix != null) {   // fixtures + surrounding areas can sit anywhere on the warehouse floor
     const f = fixtureList()[dragFix];
-    if (f) f.set(Math.max(FLOOR_X0 - 0.5, Math.min(FLOOR_X1 + 0.5, snap(p.x))), Math.max(FLOOR_Z0 - 0.5, Math.min(FLOOR_Z1 + 0.5, snap(p.z))));
+    if (f) f.set(Math.max(FLOOR_X0 - 1.2, Math.min(FLOOR_X1 + 1.2, snap(p.x))), Math.max(FLOOR_Z0 - 0.5, Math.min(FLOOR_Z1 + 0.5, snap(p.z))));
     return;
   }
   const cx = Math.max(DECK.x0 + 0.6, Math.min(MX1 - 0.6, snap(p.x)));      // span both floors so stations can cross the divider

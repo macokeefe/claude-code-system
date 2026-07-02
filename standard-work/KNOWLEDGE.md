@@ -261,6 +261,18 @@ DBL-CLICK EDITING (2026-07): in the Task chart, the red takt figure
 Esc cancels). Typing a takt in MINUTES back-computes `taktDemand = dayMin /
 takt` (now a float — inputs parseFloat) and re-renders the charts live.
 
+EVERYTHING EDITABLE (2026-07, "don't discriminate"): the stairs and the four
+section lines were converted from fixed scenery into AREA kinds (`stairs`,
+`sline1..4` in `AREA_KINDS`; builders `buildStairsInto(g)` / `slineInto(g,
+pl)` draw RELATIVE to the group origin — stairs anchored at the top-landing
+corner, slines at their first point). So they now drag / right-click delete /
+persist / travel exactly like every other area. Each sline carries a faint
+0.7 m-wide pick-ribbon under the dashed line so it's grabbable. dragFix clamp
+widened to FLOOR_X0−1.2 so the stairs can return to their off-edge home.
+CAVEAT: layouts saved before this have `__areas` without stairs/slines — on
+load those disappear (a layout's `__areas` REPLACES defaults); re-add via
+Undo/defaults or re-save.
+
 SECTION LINES (2026-07): the plan's four dashed cyan section dividers were
 extracted from the PDF's VECTOR data (PyMuPDF `page.get_drawings()`, color
 (0,1,1), clustered dashes → stepped polylines; the two stairs are also cyan
