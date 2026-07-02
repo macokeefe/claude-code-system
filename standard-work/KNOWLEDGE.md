@@ -267,6 +267,18 @@ carts rescaled from ×1.4 (4.8'x3.1') to a true 4'x2.5' footprint
 (`scale.set(1.17,1.2,1.12)`). These were the biggest "cramped vs paper"
 offenders from the scale audit.
 
+CAD OVERLAY (2026-07): `📐 CAD` button (Edit-Layout only) lays the actual
+plant drawing flat on the floor, scaled 1:1, to compare the model to the plan.
+The PDF was rasterized (PyMuPDF), cropped to the interior walls (PDF x
+116..2960 / y 208..1940 → aspect 1.642 == floor 104/63.3), white→transparent,
+downscaled, base64'd into `window.__CAD_OVERLAY__` — injected as a `<script>`
+appended to the head scaffold `m3d_head.html` (NOT entry.js; ~400 KB, so the
+built HTML is ~1 MB now). `buildCadOverlay()` makes a flat PlaneGeometry sized
+`FLOOR_W x FLOOR_D` at y=0.2 with a MeshBasicMaterial (opacity 0.55). Toggle
+`setCadOverlay`; a floating `#cadBox` has the opacity slider; SHIFT-drag (or
+right-drag) on the floor nudges the plane to align (`cadDragging` in the
+pointer handlers, before station picking). Auto-hidden on leaving edit mode.
+
 2D VIEW (2026-07): `▦ 2D` button (injected after #top). NOT a separate
 camera — `set2D(on)` turns the existing perspective camera into a telephoto
 plan view (fov 5° from ~260 m above the floor centre), so every raycast,

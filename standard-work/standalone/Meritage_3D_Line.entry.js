@@ -1120,6 +1120,54 @@ function set2D(on) {
   t.parentNode.insertBefore(b, t.nextSibling);
   b.onclick = () => set2D(!is2D);
 })();
+
+/* ---- CAD OVERLAY: lay the actual plant drawing flat on the floor, scaled 1:1,
+   so you can compare the model to the plan. Toggle in Edit Layout, drag to
+   align, slider for opacity. The image maps exactly to the floor bounds. ---- */
+let cadOverlay = null, cadOn = false, cadDragging = false;
+function buildCadOverlay() {
+  if (cadOverlay || !window.__CAD_OVERLAY__) return;
+  const g = new THREE.Group();
+  const w = FLOOR_X1 - FLOOR_X0, d = FLOOR_Z1 - FLOOR_Z0;
+  const tex = new THREE.TextureLoader().load(window.__CAD_OVERLAY__);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.55, depthWrite: false });
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
+  plane.rotation.x = -Math.PI / 2;                            // lay flat
+  plane.position.set((FLOOR_X0 + FLOOR_X1) / 2, 0.2, (FLOOR_Z0 + FLOOR_Z1) / 2);   // just above the floor
+  g.add(plane); g.visible = false; level2.add(g);
+  cadOverlay = { g, plane, mat, hx: 0, hz: 0 };               // hx/hz = user alignment nudge
+}
+buildCadOverlay();
+function setCadOverlay(on) {
+  if (!cadOverlay) return;
+  cadOn = on && !!window.__CAD_OVERLAY__;
+  cadOverlay.g.visible = cadOn;
+  const box = document.getElementById('cadBox'); if (box) box.style.display = cadOn ? 'flex' : 'none';
+  const btn = document.getElementById('cadBtn'); if (btn) btn.classList.toggle('on', cadOn);
+}
+// controls: a button + a small floating opacity slider (built once)
+(() => {
+  const ah = document.getElementById('accesspt') || document.getElementById('top');
+  const eb = document.getElementById('edit');
+  const btn = document.createElement('button');
+  btn.id = 'cadBtn'; btn.className = (eb && eb.className) || '';
+  btn.textContent = '📐 CAD';
+  btn.title = 'Overlay the CAD plant drawing on the floor (Edit Layout) — drag it to align, slider sets opacity';
+  // place it next to the 2D button
+  const anchor = document.getElementById('btn2d') || document.getElementById('top');
+  anchor.parentNode.insertBefore(btn, anchor.nextSibling);
+  btn.onclick = () => { if (!editing) setEditing(true); setCadOverlay(!cadOn); };
+  // opacity slider box
+  const box = document.createElement('div');
+  box.id = 'cadBox';
+  box.style.cssText = 'display:none;position:absolute;left:12px;bottom:78px;z-index:8;background:rgba(255,255,255,.95);border:1px solid #dfe3e8;border-radius:10px;padding:8px 12px;align-items:center;gap:8px;font:12px system-ui,Arial;box-shadow:0 4px 14px rgba(0,0,0,.15)';
+  box.innerHTML = '<b style="color:#1d3a66">CAD overlay</b> <span style="color:#6b7785">opacity</span>' +
+    '<input id="cadOpac" type="range" min="5" max="100" value="55" style="width:120px"> ' +
+    '<span style="color:#6b7785">· drag it to align</span>';
+  document.body.appendChild(box);
+  box.querySelector('#cadOpac').oninput = e => { if (cadOverlay) cadOverlay.mat.opacity = (+e.target.value) / 100; };
+})();
 // label visibility: 0 = off, 1 = names only (compact), 2 = full cards
 let labelMode = 1;
 const extraStations = [];   // added (Sola) stations — declared early so applyLabels can include them
@@ -1818,6 +1866,7 @@ function setEditing(on) {
     }
   } else {
     dragId = null; measure.visible = false; measurePanel.innerHTML = '';
+    if (typeof setCadOverlay === 'function') setCadOverlay(false);   // the CAD overlay is an edit-only comparison aid
     if (!is2D && savedView) { camera.position.copy(savedView.p); controls.target.copy(savedView.t); }
     // settle crew back home
     crew.forEach(c => { c.fig.position.x = c.homeX; c.fig.position.z = c.homeZ; });
@@ -1872,6 +1921,9 @@ flowBtn.onclick = () => {
 const snap = v => Math.round(v / (YARD / 2)) * (YARD / 2);   // snap to 0.5 yd
 renderer.domElement.addEventListener('pointerdown', e => {
   if (!editing) return;
+  if (cadOn && cadOverlay && (e.shiftKey || e.button === 2)) {   // Shift-drag (or right-drag) moves the CAD overlay to align it
+    const p = deckPoint(e); if (p) { cadDragging = { sx: p.x, sz: p.z, ox: cadOverlay.g.position.x, oz: cadOverlay.g.position.z }; controls.enabled = false; e.preventDefault(); return; }
+  }
   if (flowArming) {                                   // drawing a part-flow arrow: pick FROM, then TO
     const sid = pickStation(e); if (!sid) return;
     if (!flowSource) { flowSource = sid; }
@@ -1909,6 +1961,7 @@ document.getElementById('rotbtn').onclick = () => {
 renderer.domElement.addEventListener('pointermove', e => {
   if (!editing) return;
   const p = deckPoint(e); if (!p) return;
+  if (cadDragging) { cadOverlay.g.position.x = cadDragging.ox + (p.x - cadDragging.sx); cadOverlay.g.position.z = cadDragging.oz + (p.z - cadDragging.sz); return; }
   if (dragFix != null) {   // fixtures + surrounding areas can sit anywhere on the warehouse floor
     const f = fixtureList()[dragFix];
     if (f) f.set(Math.max(FLOOR_X0 - 1.2, Math.min(FLOOR_X1 + 1.2, snap(p.x))), Math.max(FLOOR_Z0 - 0.5, Math.min(FLOOR_Z1 + 0.5, snap(p.z))));
@@ -1931,6 +1984,7 @@ renderer.domElement.addEventListener('pointermove', e => {
   schedule();                 // walk times + cycle/capacity update live as you move
 });
 renderer.domElement.addEventListener('pointerup', () => {
+  if (cadDragging) { cadDragging = false; if (editing) controls.enabled = true; return; }
   if (editing) controls.enabled = true;                  // re-enable camera pan after a station/waypoint drag
   if (dragFix != null) { dragFix = null; saveLayout(); }
   if (dragWp != null) { dragWp = null; saveLayout(); }
