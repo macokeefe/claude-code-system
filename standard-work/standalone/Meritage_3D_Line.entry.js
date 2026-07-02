@@ -499,13 +499,9 @@ const dividerGroup = new THREE.Group(); level2.add(dividerGroup);
 function rebuildDivider(){
   while (dividerGroup.children.length) dividerGroup.remove(dividerGroup.children[0]);
   const dx = DECK.x1 + AISLE/2;
-  const gapC = (typeof nodes !== 'undefined' && nodes.con) ? nodes.con.z : -8.5;   // crossing follows the connector station
-  for (let z = DECK.z0; z < DECK.z1; z += 1.2) {
-    if (Math.abs((z + 0.35) - gapC) < 2.2) continue;                                 // skip dashes = crossing opening
+  for (let z = DECK.z0; z < DECK.z1; z += 1.2) {              // plain continuous dashed line — no crossing marker (connector station is not shared between lines)
     const seg = bx(0.12, 0.02, 0.7, MAT.tape); seg.position.set(dx, 0.06, z + 0.35); dividerGroup.add(seg);
   }
-  const cross = bx(0.6, 0.02, 4.0, new THREE.MeshStandardMaterial({ color:0x2f7d52, transparent:true, opacity:0.45 }));
-  cross.position.set(dx, 0.05, gapC); dividerGroup.add(cross);                       // green crossing marker
 }
 rebuildDivider();
 
@@ -699,6 +695,28 @@ const FLOOR_Z0 = -FLOOR_D / 2, FLOOR_Z1 = FLOOR_D / 2;                       // 
   }
   surroundings.add(g);
 })();
+// ---- SECTION LINES from the plant drawing: the four dashed cyan dividers,
+// extracted from the PDF vectors and mapped 1:1 onto the floor (walls anchored
+// at 104' x 63.3'). They run from just below the top staging band to just
+// above the bottom one, with the same jogs as the drawing. ----
+const SECTION_LINES = [
+  // 1: left divider (west side of the Meritage work area)
+  [[-3.06, -6.29], [-3.06, 0.05], [-3.33, 0.05], [-3.33, 4.75], [-3.73, 4.75], [-3.73, 7.85]],
+  // 2: centre divider
+  [[4.91, -6.26], [4.91, 0.98], [5.18, 0.98], [5.18, 7.76]],
+  // 3: right divider (several jogs around X staging / racks)
+  [[11.80, -6.31], [11.80, -3.81], [13.08, -3.81], [13.08, -0.63], [12.00, -0.63], [12.00, 1.00], [12.54, 1.00], [12.54, 4.81], [13.55, 4.81], [13.55, 7.84]],
+  // 4: far-right divider (before FG / lift end)
+  [[17.87, -6.51], [17.87, -2.55], [17.60, -2.55], [17.60, 7.87]],
+];
+const sectionGroup = new THREE.Group(); surroundings.add(sectionGroup);
+SECTION_LINES.forEach(pl => {
+  const geo = new THREE.BufferGeometry();
+  const arr = []; pl.forEach(pt => arr.push(pt[0], 0.055, pt[1]));
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
+  const ln = new THREE.Line(geo, new THREE.LineDashedMaterial({ color: 0x00b7d4, dashSize: 0.45, gapSize: 0.28 }));
+  ln.computeLineDistances(); sectionGroup.add(ln);
+});
 // ---- object builders: each adds meshes to a group `g`, relative to the group origin ----
 function aPad(g, w, d, color) {   // neutral marked-off zone (no colors) — a light-grey pad with a slightly darker outline
   const p = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), AM(0xbcc2c8, { transparent: true, opacity: 0.32, roughness: 0.9 })); p.position.y = AY + 0.03; g.add(p);

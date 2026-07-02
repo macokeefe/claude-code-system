@@ -261,6 +261,21 @@ DBL-CLICK EDITING (2026-07): in the Task chart, the red takt figure
 Esc cancels). Typing a takt in MINUTES back-computes `taktDemand = dayMin /
 takt` (now a float — inputs parseFloat) and re-renders the charts live.
 
+SECTION LINES (2026-07): the plan's four dashed cyan section dividers were
+extracted from the PDF's VECTOR data (PyMuPDF `page.get_drawings()`, color
+(0,1,1), clustered dashes → stepped polylines; the two stairs are also cyan
+and were excluded) and mapped 1:1 onto the floor (walls at PDF x 116..2960 /
+y 208..1940 → interior 104'x63.3', anchoring scale 27.35 px/ft — confirms the
+35x21 yd floor). `SECTION_LINES` polylines → dashed cyan THREE.Line group in
+`surroundings`. Positions (world x): ~−3.1/−3.7 stepped, ~4.9/5.2, ~11.8→13.6
+with jogs, ~17.9/17.6. NOTE these do NOT align with the current two-deck
+split — they cut through the decks; that's the real plan's sectioning, shown
+for the engineer to evaluate before any re-layout.
+
+DIVIDER (2026-07): the green "crossing" marker on the middle yellow divider
+was removed (connector station is no longer shared between lines) —
+`rebuildDivider` now draws a plain continuous dashed line.
+
 STAIRS (2026-07): `buildStairs()` IIFE (in `surroundings`, so the 🏭 Areas
 button hides it too) — a 4'-wide industrial straight flight at the floor's
 west edge (channel x≈−13.65, outside the slab at x0=−12.91), 32 treads at
