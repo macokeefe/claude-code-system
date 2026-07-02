@@ -327,6 +327,17 @@ CAVEAT: layouts saved before this have `__areas` without stairs/slines — on
 load those disappear (a layout's `__areas` REPLACES defaults); re-add via
 Undo/defaults or re-save.
 
+SECTION LINES EXACT (2026-07): after the floor became 105'x64', the sline
+polylines were RE-DERIVED with the exact same wall→floor transform the CAD
+overlay uses (PDF pts 116..2960 / 208..1940 → FLOOR_W×FLOOR_D), so line and
+drawing coincide by construction. `restoreAreas` also SNAPS any sline/stairs
+within 0.75 m of its default to the exact CAD spot (fixes stale saves;
+deliberate drags beyond that are respected). While the CAD is shown,
+`setSlinesOnTop(true)` sets the slines' materials depthTest=false /
+renderOrder 905 so they draw ABOVE the sheet at any opacity. INTENT (engineer):
+the 4 lines cut the floor into 5 slices — leftmost (~19' wide) = storage, and
+one production line in each of the other four (~27', ~23', ~16', ~18').
+
 SECTION LINES (2026-07): the plan's four dashed cyan section dividers were
 extracted from the PDF's VECTOR data (PyMuPDF `page.get_drawings()`, color
 (0,1,1), clustered dashes → stepped polylines; the two stairs are also cyan

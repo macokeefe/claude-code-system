@@ -698,11 +698,14 @@ function buildStairsInto(g) {
 // ---- SECTION LINES from the plant drawing: the four dashed cyan dividers,
 // extracted from the PDF vectors, mapped 1:1, each an editable "area" (drag /
 // right-click delete like everything else). Polylines relative to point 0. ----
+// re-derived from the PDF cyan lines with the SAME transform the CAD overlay uses
+// (interior walls PDF pts 116..2960 x 208..1940 -> floor 105'x64'), so they land
+// exactly on the drawing's section dividers.
 const SECTION_LINES = [
-  [[-3.06, -6.29], [-3.06, 0.05], [-3.33, 0.05], [-3.33, 4.75], [-3.73, 4.75], [-3.73, 7.85]],
-  [[4.91, -6.26], [4.91, 0.98], [5.18, 0.98], [5.18, 7.76]],
-  [[11.80, -6.31], [11.80, -3.81], [13.08, -3.81], [13.08, -0.63], [12.00, -0.63], [12.00, 1.00], [12.54, 1.00], [12.54, 4.81], [13.55, 4.81], [13.55, 7.84]],
-  [[17.87, -6.51], [17.87, -2.55], [17.60, -2.55], [17.60, 7.87]],
+  [[-3.06, -6.39], [-3.06, 0.05], [-3.33, 0.05], [-3.33, 4.82], [-3.74, 4.82], [-3.74, 7.97]],
+  [[4.91, -6.36], [4.91, 0.99], [5.18, 0.99], [5.18, 7.88]],
+  [[11.79, -6.41], [11.79, -3.87], [13.08, -3.87], [13.08, -0.64], [12.00, -0.64], [12.00, 1.01], [12.54, 1.01], [12.54, 4.89], [13.55, 4.89], [13.55, 7.96]],
+  [[17.87, -6.61], [17.87, -2.59], [17.60, -2.59], [17.60, 8.00]],
 ];
 function slineInto(g, pl) {
   const ax = pl[0][0], az = pl[0][1];
@@ -797,6 +800,16 @@ function restoreAreas(list) {
   if (!areas.some(a => legacy.includes(a.kind))) {
     AREA_DEFAULTS.filter(d => legacy.includes(d[0])).forEach(d => addArea(d[0], d[1], d[2], d[3] || 0));
   }
+  // snap near-default section lines to the EXACT CAD positions — older saves
+  // carry pre-64'-floor coordinates that are a few inches off the drawing.
+  // (Deliberately dragged lines, >0.75 m away, are left where the user put them.)
+  const defs = Object.fromEntries(AREA_DEFAULTS.filter(d => legacy.includes(d[0])).map(d => [d[0], d]));
+  areas.forEach(a => {
+    const d = defs[a.kind];
+    if (d && Math.hypot(a.x - d[1], a.z - d[2]) < 0.75 && (a.x !== d[1] || a.z !== d[2])) {
+      a.x = d[1]; a.z = d[2]; a.g.position.set(d[1], 0, d[2]);
+    }
+  });
 }
 // default placement — everything tucked onto the 35 x 21 yd floor: the LEFT strip
 // (west of the Meritage deck), the RIGHT strip (east of the Sola deck), and the
@@ -810,7 +823,7 @@ const AREA_DEFAULTS = [
   ['rackRow', 1.0, 9.33, Math.PI / 2], ['gate', 8.6, 9.4],
   // stairs (left of the lift) + the plan's four section dividers
   ['stairs', FLOOR_X0 - 0.74, 2.2],
-  ['sline1', -3.06, -6.29], ['sline2', 4.91, -6.26], ['sline3', 11.80, -6.31], ['sline4', 17.87, -6.51],
+  ['sline1', -3.06, -6.39], ['sline2', 4.91, -6.36], ['sline3', 11.79, -6.41], ['sline4', 17.87, -6.61],
 ];
 function defaultAreas() { clearAreas(); AREA_DEFAULTS.forEach(a => addArea(a[0], a[1], a[2], a[3] || 0)); }
 defaultAreas();
@@ -1167,11 +1180,17 @@ function rebuildMyMarks() {
     myMarksGroup.add(grp);
   });
 }
+function setSlinesOnTop(on) {                                // while the CAD is shown, the blue lines draw ABOVE the sheet so alignment is checkable at any opacity
+  areas.filter(a => /^sline/.test(a.kind)).forEach(a => a.g.traverse(o => {
+    if (o.material) { o.material.depthTest = !on; o.renderOrder = on ? 905 : 0; }
+  }));
+}
 function setCadOverlay(on) {
   if (!cadOverlay) return;
   cadOn = on && !!window.__CAD_OVERLAY__;
   cadOverlay.g.visible = cadOn;
   rebuildMyMarks();
+  setSlinesOnTop(cadOn);
   const box = document.getElementById('cadBox'); if (box) box.style.display = cadOn ? 'flex' : 'none';
   const btn = document.getElementById('cadBtn'); if (btn) btn.classList.toggle('on', cadOn);
 }
