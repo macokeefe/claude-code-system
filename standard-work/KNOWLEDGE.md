@@ -220,6 +220,22 @@ mat = exactly 8' × 1 yd (`makeBench`). NOTE: `YARD` was moved next to `FT` near
 the top of the entry — `makeBench` now references it at init, and the old
 declaration at ~line 1467 would have been a TDZ error.
 
+FLOOR 35x21 (2026-07, per engineer): the ENTIRE floor is now exactly 35 yd x
+21 yd (`FLOOR_W/D/X0/X1/Z0/Z1` consts, x≈−8.91..23.09, z≈±9.60), a tight
+envelope around the two 40'x60' decks — side strips ≈12.5' wide, front/back
+slivers only ≈0.45 yd. `AREA_DEFAULTS` were re-laid to fit: LEFT strip
+(forklift, pallets, upholstery(rot), solaCart(rot)), RIGHT strip (fg,
+turntable, xstaging, backrest, solaPallets, cart), SOUTH edge (rackRow(rot) +
+gate). Zone pads shrunk to ≤3.6 m to fit the strips. Grid + dragFix clamps
+follow the FLOOR_ consts. Saved layouts with old `__areas` coords will restore
+those areas OFF the new floor — user drags them back on.
+
+CART AISLE (2026-07): each cart route renders a 5'-wide lane (`AISLE_W`,
+`updateAisle(mesh, pts)` builds a triangle-strip ribbon with rounded joints;
+meshes `aisleMesh`/`aisleMesh2` on level2). Shown ONLY in Edit Layout (toggled
+in `setEditing`) as a subtle blue-grey floor tint (opacity 0.25), updated live
+from `refreshPath()`/`refreshCart2Feed()` as waypoints/carts move.
+
 STAIRS (2026-07): `buildStairs()` IIFE (in `surroundings`, so the 🏭 Areas
 button hides it too) — a 4'-wide industrial straight flight at the floor's
 west edge (channel x≈−13.65, outside the slab at x0=−12.91), 32 treads at

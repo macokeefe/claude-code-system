@@ -650,14 +650,17 @@ function concreteTex(rx, ry) {
   g.strokeStyle = 'rgba(88,94,100,0.55)'; g.lineWidth = 3; g.strokeRect(0, 0, 256, 256);   // expansion joint = tile border
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = 8; return t;
 }
+// the ENTIRE floor is 35 yd x 21 yd (per engineer), centred on the two decks
+const FLOOR_W = 35 * YARD, FLOOR_D = 21 * YARD, FLOOR_X = 7.09;
+const FLOOR_X0 = FLOOR_X - FLOOR_W / 2, FLOOR_X1 = FLOOR_X + FLOOR_W / 2;   // ≈ −8.91 .. 23.09
+const FLOOR_Z0 = -FLOOR_D / 2, FLOOR_Z1 = FLOOR_D / 2;                       // ≈ −9.60 .. 9.60
 (function buildFloor() {
-  const FW = 40, FD = 31, FX = 7.09;
-  const slab = new THREE.Mesh(new THREE.BoxGeometry(FW, 0.5, FD), new THREE.MeshStandardMaterial({ map: concreteTex(FW / 3, FD / 3), roughness: 0.9, metalness: 0.02 }));
-  slab.position.set(FX, -0.29, 0); slab.receiveShadow = true; surroundings.add(slab);
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(FLOOR_W, 0.5, FLOOR_D), new THREE.MeshStandardMaterial({ map: concreteTex(FLOOR_W / 3, FLOOR_D / 3), roughness: 0.9, metalness: 0.02 }));
+  slab.position.set(FLOOR_X, -0.29, 0); slab.receiveShadow = true; surroundings.add(slab);
   // painted yellow aisle safety lines around the working area
   const paint = AM(0xe8c53a, { roughness: 0.65 });
   const line = (x, z, w, d) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.02, d), paint); m.position.set(x, AY + 0.02, z); surroundings.add(m); };
-  const bx0 = -11, bx1 = 25.2, bz0 = -13.6, bz1 = 13.6, lw = 0.14;
+  const bx0 = FLOOR_X0 + 0.3, bx1 = FLOOR_X1 - 0.3, bz0 = FLOOR_Z0 + 0.3, bz1 = FLOOR_Z1 - 0.3, lw = 0.14;
   line((bx0 + bx1) / 2, bz0, bx1 - bx0, lw); line((bx0 + bx1) / 2, bz1, bx1 - bx0, lw);
   line(bx0, (bz0 + bz1) / 2, lw, bz1 - bz0); line(bx1, (bz0 + bz1) / 2, lw, bz1 - bz0);
 })();
@@ -667,7 +670,7 @@ function concreteTex(rx, ry) {
   const W = 4 * FT;                                    // 4' wide industrial stair
   const rise = FLOOR2 - 0.04;                          // ground → floor top
   const steps = 32, sh = rise / steps, tread = 0.28, run = steps * tread;
-  const x0 = -13.65;                                   // channel just off the floor's west edge — left of the lift
+  const x0 = FLOOR_X0 - 0.74;                          // channel just off the floor's west edge — left of the lift
   const zTop = 2.2;                                    // lands beside the lift (lift z ≈ 2)
   const stepMat = AM(0x6d7680, { metalness: 0.35, roughness: 0.6 });
   for (let i = 1; i <= steps; i++) {                   // code-legal treads: 7.3" rise / 11" run
@@ -688,8 +691,8 @@ function concreteTex(rx, ry) {
   }
   // top landing bridging onto the floor edge, with guard rails on the open sides
   const land = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.08, 1.6), stepMat);
-  land.position.set(-13.6, -0.08, zTop - 0.8); land.castShadow = true; g.add(land);
-  for (const [w, d, lx, lz] of [[1.5, 0.06, -13.6, zTop - 1.6], [0.06, 1.6, -14.35, zTop - 0.8]]) {
+  land.position.set(x0 + 0.05, -0.08, zTop - 0.8); land.castShadow = true; g.add(land);
+  for (const [w, d, lx, lz] of [[1.5, 0.06, x0 + 0.05, zTop - 1.6], [0.06, 1.6, x0 - 0.7, zTop - 0.8]]) {
     const r = new THREE.Mesh(new THREE.BoxGeometry(w, 0.06, d), A_STEEL); r.position.set(lx, 1.0, lz); g.add(r);
     const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.05, 0.05), A_STEEL); p1.position.set(lx - w / 2 + 0.03, 0.48, lz - d / 2 + 0.03); g.add(p1);
     const p2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.05, 0.05), A_STEEL); p2.position.set(lx + w / 2 - 0.03, 0.48, lz + d / 2 - 0.03); g.add(p2);
@@ -736,16 +739,16 @@ function aGate(g, w) {                                       // 6' slide gate (w
   const rail = new THREE.Mesh(new THREE.BoxGeometry(w * 2.33, 0.05, 0.05), A_STEEL); rail.position.set(w * 0.66, AY + 1.24, 0); g.add(rail);   // 8' gate travel rail (per plan)
 }
 // ---- area-kind registry: label + builder (drawn at the group origin) ----
-const AREA_KINDS = {
-  forklift:    g => { aPad(g, 4.6, 4.6, AC.fork); aLabel(g, 'Forklift Access', 4.2); },
-  pallets:     g => { aPad(g, 5, 4.2, AC.pallet); aLabel(g, 'Pallet Staging', 4.4); aPallet(g, -1.3, 0.6); aPallet(g, 1.3, 0.6); },
-  solaPallets: g => { aPad(g, 4.4, 4.2, AC.pallet); aLabel(g, 'Sola Pallets', 4); aPallet(g, -1, 0.6); aPallet(g, 1, 0.6); },
-  upholstery:  g => { aPad(g, 2.8, 4.2, AC.uph); aLabel(g, 'Upholstery Rack', 2.6); aRack(g, 0, -0.7, 6 * FT, 2 * FT, 0, 1.7); },   // 6' x 2' garment-height rack
-  fg:          g => { aPad(g, 4.6, 5, AC.fg); aLabel(g, 'FG Staging', 4); aPallet(g, -1, -1.3); aPallet(g, 1, -1.3); aPallet(g, -1, 1); aPallet(g, 1, 1); },
-  xstaging:    g => { aPad(g, 4.6, 3, AC.x); aLabel(g, 'X Staging', 4); },
-  backrest:    g => { aPad(g, 4.6, 3.2, AC.back); aLabel(g, 'Back Rest Rack', 4); aRack(g, 0, 0, 6 * FT, 2.5 * FT, 0, 1.4); },   // 6 x 2.5 per plan
-  solaCart:    g => { aPad(g, 7, 4.2, AC.cart); aLabel(g, 'Sola Cart Staging', 4.4); aCart(g, -1.6, 0.5); aCart(g, 0, 0.5); aCart(g, 1.6, 0.5); },
-  cart:        g => { aPad(g, 4.4, 4.2, AC.cart); aLabel(g, 'Cart Staging', 4); aCart(g, -0.8, 0.5); aCart(g, 0.8, 0.5); },
+const AREA_KINDS = {   // pads sized to fit the ~12.5' strips between the decks and the 35x21 yd floor edge
+  forklift:    g => { aPad(g, 3.6, 3.6, AC.fork); aLabel(g, 'Forklift Access', 3.3); },
+  pallets:     g => { aPad(g, 3.4, 3.4, AC.pallet); aLabel(g, 'Pallet Staging', 3.1); aPallet(g, 0, -0.9); aPallet(g, 0, 0.9); },
+  solaPallets: g => { aPad(g, 3.4, 3.4, AC.pallet); aLabel(g, 'Sola Pallets', 3.1); aPallet(g, -0.85, 0.6); aPallet(g, 0.85, 0.6); },
+  upholstery:  g => { aPad(g, 2.8, 3.4, AC.uph); aLabel(g, 'Upholstery Rack', 2.6); aRack(g, 0, -0.7, 6 * FT, 2 * FT, 0, 1.7); },   // 6' x 2' garment-height rack
+  fg:          g => { aPad(g, 3.6, 5, AC.fg); aLabel(g, 'FG Staging', 3.3); aPallet(g, -0.85, -1.3); aPallet(g, 0.85, -1.3); aPallet(g, -0.85, 1); aPallet(g, 0.85, 1); },
+  xstaging:    g => { aPad(g, 3.6, 2.6, AC.x); aLabel(g, 'X Staging', 3.3); },
+  backrest:    g => { aPad(g, 3.6, 2.8, AC.back); aLabel(g, 'Back Rest Rack', 3.3); aRack(g, 0, 0, 6 * FT, 2.5 * FT, 0, 1.4); },   // 6 x 2.5 per plan
+  solaCart:    g => { aPad(g, 6, 3.4, AC.cart); aLabel(g, 'Sola Cart Staging', 4); aCart(g, -1.6, 0.5); aCart(g, 0, 0.5); aCart(g, 1.6, 0.5); },
+  cart:        g => { aPad(g, 3.4, 3.4, AC.cart); aLabel(g, 'Cart Staging', 3.1); aCart(g, -0.8, 0.5); aCart(g, 0.8, 0.5); },
   rackRow:     g => { aLabel(g, '6 × 1.5 Racks', 3); for (let i = 0; i < 6; i++) aRack(g, 0, -5 + i * 2, 6 * FT, 1.5 * FT, Math.PI / 2); },   // exact 6' x 1.5'
   turntable:   g => { aTurntable(g); aLabel(g, 'Turn Table', 2.2); },
   gate:        g => { aGate(g, 6 * FT); aLabel(g, "6' Slide Gate", 2.4); },   // true 6' opening + 8' travel rail
@@ -757,12 +760,16 @@ function addArea(kind, x, z, rot) {
 }
 function clearAreas() { areas.forEach(a => surroundings.remove(a.g)); areas.length = 0; }
 function restoreAreas(list) { clearAreas(); (list || []).forEach(a => addArea(a[0], a[1], a[2], a[3] || 0)); }
-// default placement from the plant plan
+// default placement — everything tucked onto the 35 x 21 yd floor: the LEFT strip
+// (west of the Meritage deck), the RIGHT strip (east of the Sola deck), and the
+// narrow south edge (racks + gate). Drag any of them in Edit Layout.
 const AREA_DEFAULTS = [
-  ['forklift', -9, -12], ['pallets', -2, -12], ['upholstery', 3.6, -12], ['upholstery', 6.6, -12], ['upholstery', 9.6, -12], ['pallets', 15, -12], ['forklift', 22, -12],
-  ['solaCart', 1, 12], ['forklift', 7.6, 12], ['gate', 7.6, 14.5], ['solaCart', 14, 12], ['cart', 21.5, 12],
-  ['rackRow', -9.6, -1.5], ['solaPallets', -9, 12],
-  ['fg', 23, -6.5], ['turntable', 22, -1], ['xstaging', 23, 2.5], ['backrest', 23, 6.5], ['upholstery', 23, 10.5],
+  // left strip (x ≈ -7)
+  ['forklift', -7.0, -7.7], ['pallets', -7.0, -4.2], ['upholstery', -7.0, -0.9, Math.PI / 2], ['solaCart', -7.0, 5.5, Math.PI / 2],
+  // right strip (x ≈ 21.2)
+  ['fg', 21.2, -6.9], ['turntable', 21.2, -3.4], ['xstaging', 21.2, -1.1], ['backrest', 21.2, 1.7], ['solaPallets', 21.2, 4.7], ['cart', 21.2, 7.8],
+  // south edge
+  ['rackRow', 1.0, 9.33, Math.PI / 2], ['gate', 8.6, 9.4],
 ];
 function defaultAreas() { clearAreas(); AREA_DEFAULTS.forEach(a => addArea(a[0], a[1], a[2], a[3] || 0)); }
 defaultAreas();
@@ -785,6 +792,33 @@ function pointAtDist(d) {
   return p[p.length - 1];
 }
 function slotDist(i) { return Math.max(0, pathTotal() - i * 2.9); }   // slot 0 = end of path (cart spot)
+// ---- the cart AISLE: a 5'-wide lane along each cart's route, drawn as a subtle
+// floor tint. Shown while in Edit Layout so you can see the space the carts need. ----
+const AISLE_W = 5 * FT;
+const aisleMat = new THREE.MeshBasicMaterial({ color: 0x7d94b5, transparent: true, opacity: 0.25, depthWrite: false });
+function makeAisleMesh() { const m = new THREE.Mesh(new THREE.BufferGeometry(), aisleMat); m.visible = false; m.renderOrder = 1; level2.add(m); return m; }
+const aisleMesh = makeAisleMesh(), aisleMesh2 = makeAisleMesh();
+function updateAisle(mesh, pts) {
+  const y = 0.035, h = AISLE_W / 2, verts = [];
+  for (let i = 0; i < pts.length - 1; i++) {                 // one quad per segment
+    const ax = pts[i][0], az = pts[i][1], bx2 = pts[i + 1][0], bz2 = pts[i + 1][1];
+    const dx = bx2 - ax, dz = bz2 - az, L = Math.hypot(dx, dz) || 1;
+    const px = -dz / L * h, pz = dx / L * h;
+    verts.push(ax + px, y, az + pz, bx2 + px, y, bz2 + pz, ax - px, y, az - pz,
+               bx2 + px, y, bz2 + pz, bx2 - px, y, bz2 - pz, ax - px, y, az - pz);
+  }
+  for (let i = 1; i < pts.length - 1; i++) {                 // round the corners so segments read as one lane
+    const cx = pts[i][0], cz = pts[i][1];
+    for (let k = 0; k < 8; k++) {
+      const a0 = k / 8 * Math.PI * 2, a1 = (k + 1) / 8 * Math.PI * 2;
+      verts.push(cx, y, cz, cx + Math.cos(a0) * h, y, cz + Math.sin(a0) * h, cx + Math.cos(a1) * h, y, cz + Math.sin(a1) * h);
+    }
+  }
+  mesh.geometry.dispose();
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  mesh.geometry = g;
+}
 function refreshPath() {
   const p = pathPts(); const arr = [];
   for (const pt of p) arr.push(pt[0], 0.12, pt[1]);
@@ -794,6 +828,7 @@ function refreshPath() {
   if (pathLine.computeLineDistances) pathLine.computeLineDistances();
   while (wpGroup.children.length) wpGroup.remove(wpGroup.children[0]);
   cartWaypoints.forEach((w, i) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.7, 16), WP_MAT); m.position.set(w.x, 0.35, w.z); m.userData = { cart:'cart', wp:i }; wpGroup.add(m); });
+  updateAisle(aisleMesh, p);
 }
 
 // ---- help-movement arrows: where an operator goes to help after finishing ----
@@ -941,6 +976,7 @@ function refreshCart2Feed(){
   cart2Feed.geometry.setDrawRange(0, p.length); cart2Feed.geometry.computeBoundingSphere(); cart2Feed.computeLineDistances();
   while (wpGroup2.children.length) wpGroup2.remove(wpGroup2.children[0]);
   cart2Waypoints.forEach((w, i) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,0.7,16), WP2_MAT); m.position.set(w.x,0.35,w.z); m.userData = { cart:'cart2', wp:i }; wpGroup2.add(m); });
+  updateAisle(aisleMesh2, p);
 }
 refreshCart2Feed();
 // shipped boxes pool near packing/ship dock
@@ -1564,7 +1600,7 @@ function buildGrid() {
   const minor = new THREE.LineBasicMaterial({ color: 0x9aa6b2, transparent: true, opacity: 0.45 });
   const major = new THREE.LineBasicMaterial({ color: 0x33414f, transparent: true, opacity: 0.8 });
   const vp = [], vpM = [], hp = [], hpM = [];
-  const GX0 = -12, GX1 = 26, GZ0 = -14.5, GZ1 = 14.5;   // cover the whole warehouse floor (decks + surrounding areas)
+  const GX0 = FLOOR_X0, GX1 = FLOOR_X1, GZ0 = FLOOR_Z0, GZ1 = FLOOR_Z1;   // cover the whole 35 x 21 yd floor
   let i = 0;
   for (let x = GX0; x <= GX1 + 1e-6; x += YARD, i++) { (i % 5 === 0 ? vpM : vp).push(x, y, GZ0, x, y, GZ1); }
   i = 0;
@@ -1651,7 +1687,9 @@ function setEditing(on) {
   editBtn.textContent = on ? '✓ Done editing' : '✥ Edit layout';
   editBtn.classList.toggle('on', on);
   grid.visible = on;
-  pathLine.visible = on; wpGroup.visible = on; wpGroup2.visible = on; if (on) { refreshPath(); refreshCart2Feed(); }
+  pathLine.visible = on; wpGroup.visible = on; wpGroup2.visible = on;
+  aisleMesh.visible = on; aisleMesh2.visible = on;   // tint the 5'-wide cart aisles while editing
+  if (on) { refreshPath(); refreshCart2Feed(); }
   if (!on) { helpArming = false; armSource = null; const hb = document.getElementById('helparrow'); if (hb) hb.classList.remove('on'); if (typeof setFlowArming === 'function') setFlowArming(false); }
   if (on) {
     // keep zoom + pan in edit mode, but disable rotate and free the left button for dragging stations
@@ -1764,7 +1802,7 @@ renderer.domElement.addEventListener('pointermove', e => {
   const p = deckPoint(e); if (!p) return;
   if (dragFix != null) {   // fixtures + surrounding areas can sit anywhere on the warehouse floor
     const f = fixtureList()[dragFix];
-    if (f) f.set(Math.max(-12.5, Math.min(26.5, snap(p.x))), Math.max(-15, Math.min(15, snap(p.z))));
+    if (f) f.set(Math.max(FLOOR_X0 - 0.5, Math.min(FLOOR_X1 + 0.5, snap(p.x))), Math.max(FLOOR_Z0 - 0.5, Math.min(FLOOR_Z1 + 0.5, snap(p.z))));
     return;
   }
   const cx = Math.max(DECK.x0 + 0.6, Math.min(MX1 - 0.6, snap(p.x)));      // span both floors so stations can cross the divider
