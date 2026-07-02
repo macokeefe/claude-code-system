@@ -327,16 +327,18 @@ CAVEAT: layouts saved before this have `__areas` without stairs/slines — on
 load those disappear (a layout's `__areas` REPLACES defaults); re-add via
 Undo/defaults or re-save.
 
-SECTION LINES EXACT (2026-07): after the floor became 105'x64', the sline
-polylines were RE-DERIVED with the exact same wall→floor transform the CAD
-overlay uses (PDF pts 116..2960 / 208..1940 → FLOOR_W×FLOOR_D), so line and
-drawing coincide by construction. `restoreAreas` also SNAPS any sline/stairs
-within 0.75 m of its default to the exact CAD spot (fixes stale saves;
-deliberate drags beyond that are respected). While the CAD is shown,
-`setSlinesOnTop(true)` sets the slines' materials depthTest=false /
-renderOrder 905 so they draw ABOVE the sheet at any opacity. INTENT (engineer):
-the 4 lines cut the floor into 5 slices — leftmost (~19' wide) = storage, and
-one production line in each of the other four (~27', ~23', ~16', ~18').
+SECTION LINES EXACT + IMMOVABLE (2026-07, final state): the sline polylines
+are RE-DERIVED with the exact same wall→floor transform the CAD overlay uses
+(PDF pts 116..2960 / 208..1940 → FLOOR_W×FLOOR_D), so line and drawing
+coincide by construction. Per engineer ("the lines need to not be moveable"),
+they are NO LONGER areas: a fixed `sectionGroup` in `surroundings` draws them
+(`slineInto` lost its grab-ribbon), they are not draggable/deletable/persisted,
+and `restoreAreas` DROPS any `sline*` entries found in old saves. The stairs
+remain an editable area (with add-if-missing migration + 0.75 m home snap).
+While the CAD is shown, `setSlinesOnTop(true)` (now traversing sectionGroup)
+sets depthTest=false / renderOrder 905 so the lines draw ABOVE the sheet.
+INTENT (engineer): the 4 lines cut the floor into 5 slices — leftmost (~19')
+= storage, one production line in each of the other four (~27/23/16/18').
 
 SECTION LINES (2026-07): the plan's four dashed cyan section dividers were
 extracted from the PDF's VECTOR data (PyMuPDF `page.get_drawings()`, color

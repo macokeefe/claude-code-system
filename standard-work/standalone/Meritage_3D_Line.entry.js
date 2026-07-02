@@ -713,18 +713,16 @@ function slineInto(g, pl) {
   const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
   const ln = new THREE.Line(geo, new THREE.LineDashedMaterial({ color: 0x00b7d4, dashSize: 0.45, gapSize: 0.28 }));
   ln.computeLineDistances(); g.add(ln);
-  // faint wide ribbon under the line so it is easy to grab in Edit Layout
-  const h = 0.35, y = 0.045, verts = [];
-  for (let i = 0; i < pl.length - 1; i++) {
-    const ax0 = pl[i][0] - ax, az0 = pl[i][1] - az, bx0 = pl[i + 1][0] - ax, bz0 = pl[i + 1][1] - az;
-    const dx = bx0 - ax0, dz = bz0 - az0, L = Math.hypot(dx, dz) || 1;
-    const px = -dz / L * h, pz = dx / L * h;
-    verts.push(ax0 + px, y, az0 + pz, bx0 + px, y, bz0 + pz, ax0 - px, y, az0 - pz,
-               bx0 + px, y, bz0 + pz, bx0 - px, y, bz0 - pz, ax0 - px, y, az0 - pz);
-  }
-  const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-  g.add(new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: 0x00b7d4, transparent: true, opacity: 0.1, depthWrite: false })));
 }
+// the four CAD section dividers are FIXED reference lines: always drawn at the
+// exact CAD coordinates, not draggable, not deletable, not part of layouts.
+const sectionGroup = new THREE.Group(); surroundings.add(sectionGroup);
+SECTION_LINES.forEach(pl => {
+  const g = new THREE.Group();
+  slineInto(g, pl);
+  g.position.set(pl[0][0], 0, pl[0][1]);
+  sectionGroup.add(g);
+});
 // ---- object builders: each adds meshes to a group `g`, relative to the group origin ----
 function aPad(g, w, d, color) {   // neutral marked-off zone (no colors) — a light-grey pad with a slightly darker outline
   const p = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), AM(0xbcc2c8, { transparent: true, opacity: 0.32, roughness: 0.9 })); p.position.y = AY + 0.03; g.add(p);
@@ -779,10 +777,6 @@ const AREA_KINDS = {   // pads sized to fit the ~12.5' strips between the decks 
   turntable:   g => { aTurntable(g); aLabel(g, 'Turn Table', 2.2); },
   gate:        g => { aGate(g, 6 * FT); aLabel(g, "6' Slide Gate", 2.4); },   // true 6' opening + 8' travel rail
   stairs:      g => buildStairsInto(g),                                        // the ground→floor staircase — editable like everything else
-  sline1:      g => slineInto(g, SECTION_LINES[0]),                            // the plan's 4 section dividers — draggable / deletable
-  sline2:      g => slineInto(g, SECTION_LINES[1]),
-  sline3:      g => slineInto(g, SECTION_LINES[2]),
-  sline4:      g => slineInto(g, SECTION_LINES[3]),
 };
 function addArea(kind, x, z, rot) {
   const build = AREA_KINDS[kind]; if (!build) return null;
@@ -791,27 +785,17 @@ function addArea(kind, x, z, rot) {
 }
 function clearAreas() { areas.forEach(a => surroundings.remove(a.g)); areas.length = 0; }
 function restoreAreas(list) {
-  clearAreas(); (list || []).forEach(a => addArea(a[0], a[1], a[2], a[3] || 0));
-  // migration: layouts saved before the stairs / CAD section-lines became areas
-  // don't contain them — put them back at their exact CAD positions so the blue
-  // lines are always on the floor. (If a layout has ANY of them, it's a newer
-  // save and we respect it exactly — including deliberate deletes/moves.)
-  const legacy = ['stairs', 'sline1', 'sline2', 'sline3', 'sline4'];
-  if (!areas.some(a => legacy.includes(a.kind))) {
-    AREA_DEFAULTS.filter(d => legacy.includes(d[0])).forEach(d => addArea(d[0], d[1], d[2], d[3] || 0));
+  // section lines are no longer areas — drop any sline entries from old saves
+  // (the fixed sectionGroup always draws them at the exact CAD positions)
+  clearAreas(); (list || []).filter(a => !/^sline/.test(a[0])).forEach(a => addArea(a[0], a[1], a[2], a[3] || 0));
+  // migration: layouts saved before the stairs became an area don't contain
+  // them — add the default. Snap a near-default stairs to its exact home.
+  if (!areas.some(a => a.kind === 'stairs')) {
+    AREA_DEFAULTS.filter(d => d[0] === 'stairs').forEach(d => addArea(d[0], d[1], d[2], d[3] || 0));
   }
-  // the SECTION LINES are CAD reference lines — they must match the drawing
-  // exactly, so on every load they snap back to their CAD positions (a drag
-  // during the session is fine for experimenting, but reload restores truth —
-  // this also self-heals accidental drags, e.g. catching a line's wide grab
-  // strip while moving the elevator). The stairs keep a gentle 0.75 m snap.
-  const defs = Object.fromEntries(AREA_DEFAULTS.filter(d => legacy.includes(d[0])).map(d => [d[0], d]));
+  const sd = AREA_DEFAULTS.find(d => d[0] === 'stairs');
   areas.forEach(a => {
-    const d = defs[a.kind]; if (!d) return;
-    const isLine = /^sline/.test(a.kind);
-    if (isLine || Math.hypot(a.x - d[1], a.z - d[2]) < 0.75) {
-      a.x = d[1]; a.z = d[2]; a.g.position.set(d[1], 0, d[2]);
-    }
+    if (a.kind === 'stairs' && sd && Math.hypot(a.x - sd[1], a.z - sd[2]) < 0.75) { a.x = sd[1]; a.z = sd[2]; a.g.position.set(sd[1], 0, sd[2]); }
   });
 }
 // default placement — everything tucked onto the 35 x 21 yd floor: the LEFT strip
@@ -824,9 +808,8 @@ const AREA_DEFAULTS = [
   ['fg', 21.2, -6.9], ['turntable', 21.2, -3.4], ['xstaging', 21.2, -1.1], ['backrest', 21.2, 1.7], ['solaPallets', 21.2, 4.7], ['cart', 21.2, 7.8],
   // south edge
   ['rackRow', 1.0, 9.33, Math.PI / 2], ['gate', 8.6, 9.4],
-  // stairs (left of the lift) + the plan's four section dividers
+  // stairs (left of the lift) — the four CAD section lines are FIXED scenery now, not areas
   ['stairs', FLOOR_X0 - 0.74, 2.2],
-  ['sline1', -3.06, -6.39], ['sline2', 4.91, -6.36], ['sline3', 11.79, -6.41], ['sline4', 17.87, -6.61],
 ];
 function defaultAreas() { clearAreas(); AREA_DEFAULTS.forEach(a => addArea(a[0], a[1], a[2], a[3] || 0)); }
 defaultAreas();
@@ -1184,9 +1167,9 @@ function rebuildMyMarks() {
   });
 }
 function setSlinesOnTop(on) {                                // while the CAD is shown, the blue lines draw ABOVE the sheet so alignment is checkable at any opacity
-  areas.filter(a => /^sline/.test(a.kind)).forEach(a => a.g.traverse(o => {
+  sectionGroup.traverse(o => {
     if (o.material) { o.material.depthTest = !on; o.renderOrder = on ? 905 : 0; }
-  }));
+  });
 }
 function setCadOverlay(on) {
   if (!cadOverlay) return;
