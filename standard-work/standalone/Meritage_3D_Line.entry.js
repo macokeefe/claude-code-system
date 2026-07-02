@@ -785,7 +785,17 @@ function addArea(kind, x, z, rot) {
   surroundings.add(g); const a = { g, kind, x, z, rot: rot || 0 }; areas.push(a); return a;
 }
 function clearAreas() { areas.forEach(a => surroundings.remove(a.g)); areas.length = 0; }
-function restoreAreas(list) { clearAreas(); (list || []).forEach(a => addArea(a[0], a[1], a[2], a[3] || 0)); }
+function restoreAreas(list) {
+  clearAreas(); (list || []).forEach(a => addArea(a[0], a[1], a[2], a[3] || 0));
+  // migration: layouts saved before the stairs / CAD section-lines became areas
+  // don't contain them — put them back at their exact CAD positions so the blue
+  // lines are always on the floor. (If a layout has ANY of them, it's a newer
+  // save and we respect it exactly — including deliberate deletes/moves.)
+  const legacy = ['stairs', 'sline1', 'sline2', 'sline3', 'sline4'];
+  if (!areas.some(a => legacy.includes(a.kind))) {
+    AREA_DEFAULTS.filter(d => legacy.includes(d[0])).forEach(d => addArea(d[0], d[1], d[2], d[3] || 0));
+  }
+}
 // default placement — everything tucked onto the 35 x 21 yd floor: the LEFT strip
 // (west of the Meritage deck), the RIGHT strip (east of the Sola deck), and the
 // narrow south edge (racks + gate). Drag any of them in Edit Layout.
