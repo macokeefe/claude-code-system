@@ -796,6 +796,7 @@ function slotDist(i) { return Math.max(0, pathTotal() - i * 2.9); }   // slot 0 
 // the elevator, drawn as a floor tint. Shown while in Edit Layout. The return
 // leg has its own draggable waypoints (amber dots) so future paths can be drawn. ----
 const AISLE_W = 5 * FT;
+let aisleOn = true;                                          // 🔵 Lanes toggle: show/hide the blue aisle tint while editing
 let returnWps = [], returnWps2 = [];                         // waypoints on each cart's RETURN leg (cart spot → elevator)
 const aisleMat = new THREE.MeshBasicMaterial({ color: 0x54749e, transparent: true, opacity: 0.5, depthWrite: false });
 const RET_MAT_LINE = () => new THREE.LineDashedMaterial({ color: 0xb0812f, dashSize: 0.5, gapSize: 0.3, transparent: true, opacity: 0.95 });
@@ -1720,7 +1721,7 @@ function setEditing(on) {
   editBtn.classList.toggle('on', on);
   grid.visible = on;
   pathLine.visible = on; wpGroup.visible = on; wpGroup2.visible = on;
-  aisleMesh.visible = on; aisleMesh2.visible = on;   // tint the 5'-wide cart aisle loops while editing
+  aisleMesh.visible = on && aisleOn; aisleMesh2.visible = on && aisleOn;   // blue 5' lanes: only in edit mode, and only if the Lanes toggle is on
   returnLine.visible = on; returnLine2.visible = on; // amber dashed = return leg back to the elevator
   if (on) { refreshPath(); refreshCart2Feed(); }
   if (!on) { helpArming = false; armSource = null; const hb = document.getElementById('helparrow'); if (hb) hb.classList.remove('on'); if (typeof setFlowArming === 'function') setFlowArming(false); }
@@ -1923,6 +1924,17 @@ document.getElementById('addwp').onclick = () => {
       refreshPath();
     }
     saveLayout();
+  };
+  // 🔵 Lanes toggle: show/hide the blue 5' aisle tint while in Edit Layout
+  const lanes = document.createElement('button');
+  lanes.id = 'lanesBtn'; lanes.className = awp.className || '';
+  lanes.textContent = '🔵 Lanes: on';
+  lanes.title = 'Show / hide the blue 5\'-wide cart lanes while editing the layout';
+  b.parentNode.insertBefore(lanes, b.nextSibling);
+  lanes.onclick = () => {
+    aisleOn = !aisleOn;
+    lanes.textContent = '🔵 Lanes: ' + (aisleOn ? 'on' : 'off');
+    aisleMesh.visible = editing && aisleOn; aisleMesh2.visible = editing && aisleOn;
   };
 })();
 // Double-click ON a lane (in Edit Layout) to add a waypoint exactly there.
