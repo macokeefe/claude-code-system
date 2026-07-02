@@ -1303,6 +1303,43 @@ for (let i = 0; i < 40; i++) {
   b.position.set(-7.9 + (i % 3) * 1.75, (Math.floor(i / 3) % 2) * 0.74, -0.4 + Math.floor(i / 6) * 1.15);
   level2.add(b); solaShipBoxes.push(b);
 }
+
+/* ---- BOX STORAGE zone: an editable, drawable rectangle that the shipped
+   boxes stack inside. Drag its body to move it; drag the ◤ corner handle
+   (bottom-right, shown in Edit Layout) to draw it bigger or smaller.
+   Meritage boxes fill from its north end, Sola's from its south end. ---- */
+let boxZone = { x: -6.15, z: -1.0, w: 5.0, d: 16.5 };        // centre x/z + width/depth (m)
+let boxResizing = false;
+const boxZoneG = new THREE.Group(); level2.add(boxZoneG);
+let boxZoneHandle = null;
+function refreshBoxZone() {
+  // clamp onto the floor
+  boxZone.w = Math.max(2.2, Math.min(FLOOR_W, boxZone.w)); boxZone.d = Math.max(1.4, Math.min(FLOOR_D, boxZone.d));
+  boxZone.x = Math.max(FLOOR_X0 + boxZone.w / 2, Math.min(FLOOR_X1 - boxZone.w / 2, boxZone.x));
+  boxZone.z = Math.max(FLOOR_Z0 + boxZone.d / 2, Math.min(FLOOR_Z1 - boxZone.d / 2, boxZone.z));
+  while (boxZoneG.children.length) boxZoneG.remove(boxZoneG.children[0]);
+  const { x, z, w, d } = boxZone;
+  const pad = new THREE.Mesh(new THREE.BoxGeometry(w, 0.04, d), new THREE.MeshStandardMaterial({ color: 0x9aa4ae, transparent: true, opacity: 0.3, roughness: 0.9 }));
+  pad.position.set(x, 0.03, z); boxZoneG.add(pad);
+  const edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(w, d)), new THREE.LineDashedMaterial({ color: 0x5a6672, dashSize: 0.4, gapSize: 0.25 }));
+  edge.rotation.x = -Math.PI / 2; edge.position.set(x, 0.06, z); edge.computeLineDistances(); boxZoneG.add(edge);
+  const c = document.createElement('canvas'); c.width = 512; c.height = 110; const g2 = c.getContext('2d');
+  g2.fillStyle = '#4a5560'; g2.font = '700 44px Arial'; g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillText('BOX STORAGE', 256, 58);
+  const t = new THREE.CanvasTexture(c);
+  const lbl = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(w * 0.9, 4.4), Math.min(w * 0.9, 4.4) * 110 / 512), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false }));
+  lbl.rotation.x = -Math.PI / 2; lbl.position.set(x, 0.07, z); boxZoneG.add(lbl);
+  boxZoneHandle = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.1, 0.55), new THREE.MeshStandardMaterial({ color: 0xc0552c, roughness: 0.5 }));
+  boxZoneHandle.position.set(x + w / 2, 0.08, z + d / 2); boxZoneHandle.visible = (typeof editing !== 'undefined') && editing;
+  boxZoneG.add(boxZoneHandle);
+  // re-stack the boxes inside the zone: Meritage from the north end, Sola from the south
+  const colPitch = 1.9, rowPitch = 1.15;
+  const cols = Math.max(1, Math.floor(w / colPitch)), rows = Math.max(1, Math.floor(d / rowPitch));
+  const spots = cols * rows;
+  const x0 = x - w / 2 + 0.95, zN = z - d / 2 + 0.62, zS = z + d / 2 - 0.62;
+  shipBoxes.forEach((b, i) => { const s = i % spots, lvl = Math.min(3, Math.floor(i / spots)); b.position.set(x0 + (s % cols) * colPitch, lvl * 0.74, zN + Math.floor(s / cols) * rowPitch); });
+  solaShipBoxes.forEach((b, i) => { const s = i % spots, lvl = Math.min(3, Math.floor(i / spots)); b.position.set(x0 + (s % cols) * colPitch, lvl * 0.74, zS - Math.floor(s / cols) * rowPitch); });
+}
+refreshBoxZone();
 const SOLA_TRAVEL = 3;            // sim-min a part spends moving to the next station
 function solaUpdate() {
   if (!solaSched) { solaShipBoxes.forEach(b => b.visible = false); return; }
@@ -1753,7 +1790,7 @@ function setStationRot(id, rot) {
 }
 // Build the working-layout object from the LIVE scene (not from storage).
 function buildWorkingLayout() {
-  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); return o;
+  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); o.__boxZone = [boxZone.x, boxZone.z, boxZone.w, boxZone.d]; return o;
 }
 // In-memory mirror so the layout survives even when localStorage is blocked
 // (Safari / file:// often refuses to persist) — bake reads THIS, never storage.
@@ -1795,7 +1832,7 @@ window.addEventListener('keydown', e => {
   }
 });
 function applyWorkingLayout(o) {   // apply a working-layout object to the LIVE scene (shared by load + import)
-  if (!o) return; if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); }
+  if (!o) return; if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); }
 }
 function loadLayout() { try { let o = null; try { o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch (e) {} if (!o && window.__M3D_LAYOUT__) o = window.__M3D_LAYOUT__;   // baked-in working layout (travels with the file)
   applyWorkingLayout(o); } catch (e) {} }
@@ -1897,6 +1934,7 @@ function setEditing(on) {
   pathLine.visible = on; wpGroup.visible = on; wpGroup2.visible = on;
   aisleMesh.visible = on && aisleOn; aisleMesh2.visible = on && aisleOn;   // blue 5' lanes: only in edit mode, and only if the Lanes toggle is on
   returnLine.visible = on; returnLine2.visible = on; // amber dashed = return leg back to the elevator
+  if (boxZoneHandle) boxZoneHandle.visible = on;     // the box-storage resize handle only shows while editing
   if (on) { refreshPath(); refreshCart2Feed(); }
   if (!on) { helpArming = false; armSource = null; const hb = document.getElementById('helparrow'); if (hb) hb.classList.remove('on'); if (typeof setFlowArming === 'function') setFlowArming(false); }
   if (on) {
@@ -1940,6 +1978,7 @@ function fixtureList() {   // draggable non-station objects: access points, rack
   accessPts.forEach(a => arr.push({ root: a.g, kind: 'access', ref: a, set: (x, z) => { a.x = x; a.z = z; a.g.position.set(x, 0, z); } }));
   racks.forEach(r => arr.push({ root: r.g, kind: 'rack', ref: r, set: (x, z) => { r.x = x; r.z = z; r.g.position.set(x, 0, z); } }));
   if (surroundings.visible) areas.forEach(a => arr.push({ root: a.g, kind: 'area', ref: a, set: (x, z) => { a.x = x; a.z = z; a.g.position.set(x, 0, z); } }));   // surrounding staging areas
+  arr.push({ root: boxZoneG, kind: 'boxzone', set: (x, z) => { boxZone.x = x; boxZone.z = z; refreshBoxZone(); } });   // the drawable box-storage zone
   arr.push({ root: elevator.shaft, kind: 'elev', set: (x, z) => moveElevator(x, z) });
   return arr;
 }
@@ -1979,6 +2018,12 @@ renderer.domElement.addEventListener('pointerdown', e => {
   if (cadOn && cadOverlay && (e.shiftKey || e.button === 2)) {   // Shift-drag (or right-drag) moves the CAD overlay to align it
     const p = deckPoint(e); if (p) { cadDragging = { sx: p.x, sz: p.z, ox: cadOverlay.g.position.x, oz: cadOverlay.g.position.z }; controls.enabled = false; e.preventDefault(); return; }
   }
+  {                                                    // grab the box-storage zone's corner handle → resize (draw) the zone
+    const p = deckPoint(e);
+    if (p && Math.abs(p.x - (boxZone.x + boxZone.w / 2)) < 0.8 && Math.abs(p.z - (boxZone.z + boxZone.d / 2)) < 0.8) {
+      boxResizing = true; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId); return;
+    }
+  }
   if (flowArming) {                                   // drawing a part-flow arrow: pick FROM, then TO
     const sid = pickStation(e); if (!sid) return;
     if (!flowSource) { flowSource = sid; }
@@ -2017,6 +2062,12 @@ renderer.domElement.addEventListener('pointermove', e => {
   if (!editing) return;
   const p = deckPoint(e); if (!p) return;
   if (cadDragging) { cadOverlay.g.position.x = cadDragging.ox + (p.x - cadDragging.sx); cadOverlay.g.position.z = cadDragging.oz + (p.z - cadDragging.sz); return; }
+  if (boxResizing) {                                   // draw the zone: NW corner stays pinned, the dragged SE corner sets width/depth
+    const x0 = boxZone.x - boxZone.w / 2, z0 = boxZone.z - boxZone.d / 2;
+    const w = Math.max(2.2, snap(p.x) - x0), d = Math.max(1.4, snap(p.z) - z0);
+    boxZone.w = w; boxZone.d = d; boxZone.x = x0 + w / 2; boxZone.z = z0 + d / 2;
+    refreshBoxZone(); return;
+  }
   if (dragFix != null) {   // fixtures + surrounding areas can sit anywhere on the warehouse floor
     const f = fixtureList()[dragFix];
     if (f) f.set(Math.max(FLOOR_X0 - 1.2, Math.min(FLOOR_X1 + 1.2, snap(p.x))), Math.max(FLOOR_Z0 - 0.5, Math.min(FLOOR_Z1 + 0.5, snap(p.z))));
@@ -2041,6 +2092,7 @@ renderer.domElement.addEventListener('pointermove', e => {
 });
 renderer.domElement.addEventListener('pointerup', () => {
   if (cadDragging) { cadDragging = false; if (editing) controls.enabled = true; return; }
+  if (boxResizing) { boxResizing = false; if (editing) controls.enabled = true; saveLayout(); return; }
   if (editing) controls.enabled = true;                  // re-enable camera pan after a station/waypoint drag
   if (dragFix != null) { dragFix = null; saveLayout(); }
   if (dragWp != null) { dragWp = null; saveLayout(); }
@@ -2259,7 +2311,7 @@ function snapshot() {
   ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
   if (nodes.cart) pos.cart = [nodes.cart.x, nodes.cart.z];
   const cap = sch ? 420 / Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 0;
-  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), ppl: Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), extras: extraSnap(), flow: flowArrows.map(a => [a.from, a.to]), areas: areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]), rwps: returnWps.map(w => [w.x, w.z]), rwps2: returnWps2.map(w => [w.x, w.z]), cap: +cap.toFixed(1) };
+  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), ppl: Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), extras: extraSnap(), flow: flowArrows.map(a => [a.from, a.to]), areas: areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]), rwps: returnWps.map(w => [w.x, w.z]), rwps2: returnWps2.map(w => [w.x, w.z]), boxZone: [boxZone.x, boxZone.z, boxZone.w, boxZone.d], cap: +cap.toFixed(1) };
 }
 function applyLayout(L) {
   if (L.steps) { ST.forEach(s => { if (L.steps[s.id]) { s.steps = L.steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); }
@@ -2280,6 +2332,7 @@ function applyLayout(L) {
   if (Array.isArray(L.racks)) { clearRacks(); L.racks.forEach(p => addRack(p[0], p[1], p[2])); }
   if (Array.isArray(L.extras)) { clearExtras(); restoreExtras(L.extras); restoreFlow(L.flow); }   // rebuild the Sola side from this layout
   if (Array.isArray(L.areas)) restoreAreas(L.areas);                                                // rebuild the surrounding areas
+  if (Array.isArray(L.boxZone)) { boxZone = { x: L.boxZone[0], z: L.boxZone[1], w: L.boxZone[2], d: L.boxZone[3] }; refreshBoxZone(); }
   renderTimes();
   schedule(); T = 0; setPlay(false); saveLayout();
 }

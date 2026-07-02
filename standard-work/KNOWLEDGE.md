@@ -283,6 +283,17 @@ overlay toggle, station drag (pointermove), and add/delete. `#cadBox` has a
 and see just the CAD, plus a separate opacity slider for the marks
 (`MY_MARK_FILL.opacity`) — independent of the CAD-plan opacity slider.
 
+BOX STORAGE ZONE (2026-07): the shipped-box stack area is a drawable zone —
+`boxZone {x,z,w,d}` rendered by `refreshBoxZone()` (translucent pad + dashed
+edge + "BOX STORAGE" label + an orange SE corner handle shown only in edit).
+Drag the body to move (a `boxzone` entry in fixtureList), drag the corner to
+resize (`boxResizing` branch in the pointer handlers, NW corner pinned,
+snapped, clamped to the floor). Boxes re-stack inside on every change:
+Meritage fills rows from the NORTH end, Sola from the SOUTH (cols = w/1.9,
+rows = d/1.15, up to 4 levels of 0.74 m). Persisted as `__boxZone=[x,z,w,d]`
+in the working layout and `boxZone` in named layouts; undo covers it via
+saveLayout.
+
 GRAPHICS PASS — TRIED AND REVERTED (2026-07): an environment-map lighting
 pass (PMREM RoomEnvironment ambient, 4096 shadow map, gradient sky, exposure
 retune) was built, shipped, and the engineer said "nope, go back, way better
