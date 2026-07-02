@@ -941,7 +941,7 @@ function updateHelp() {
 /* ---- station layout: feeders in back row, FA + packing in front ---- */
 const OP_COLORS = [0x3a66a8, 0xb9772e, 0x2e7d4f, 0x8f5390, 0xa8923a, 0x3f8f8f, 0x9c4f45, 0x5c5f99];
 const POS = {
-  con:[-12, -3.2], arm:[-6, -3.2], bak:[0, -3.2], tre:[6, -3.2], sea:[12, -3.2],
+  con:[-7.5, -3.2], arm:[-6, -3.2], bak:[0, -3.2], tre:[6, -3.2], sea:[12, -3.2],   // con pulled onto the floor (default used to sit past the west edge)
   fa:[-2, 4.2], pak:[10, 4.2],
 };
 const nodes = {};
@@ -1800,6 +1800,8 @@ function pickFixture(e) {
   const list = fixtureList();
   const hits = raycaster.intersectObjects(list.map(f => f.root), true);
   if (!hits.length) return null;
+  const shits = raycaster.intersectObjects(stList().map(n => n.st), true);   // a station overlapping an area wins the grab (bench sits above the flat pad)
+  if (shits.length && shits[0].distance < hits[0].distance + 0.05) return null;
   let o = hits[0].object;
   while (o) { const idx = list.findIndex(f => f.root === o); if (idx >= 0) return idx; o = o.parent; }
   return null;
@@ -1868,8 +1870,8 @@ renderer.domElement.addEventListener('pointermove', e => {
     if (f) f.set(Math.max(FLOOR_X0 - 1.2, Math.min(FLOOR_X1 + 1.2, snap(p.x))), Math.max(FLOOR_Z0 - 0.5, Math.min(FLOOR_Z1 + 0.5, snap(p.z))));
     return;
   }
-  const cx = Math.max(DECK.x0 + 0.6, Math.min(MX1 - 0.6, snap(p.x)));      // span both floors so stations can cross the divider
-  const cz = Math.max(DECK.z0 + 0.6, Math.min(DECK.z1 - 0.6, snap(p.z)));
+  const cx = Math.max(FLOOR_X0 + 0.6, Math.min(FLOOR_X1 - 0.6, snap(p.x)));   // stations + waypoints can go ANYWHERE on the 35x21 floor (side strips included)
+  const cz = Math.max(FLOOR_Z0 + 0.6, Math.min(FLOOR_Z1 - 0.6, snap(p.z)));
   if (dragWp != null) {
     if (dragWp.cart === 'cart2') { cart2Waypoints[dragWp.wp] = { x: cx, z: cz }; refreshCart2Feed(); }
     else if (dragWp.cart === 'ret') { returnWps[dragWp.wp] = { x: cx, z: cz }; refreshPath(); }
@@ -1878,8 +1880,8 @@ renderer.domElement.addEventListener('pointermove', e => {
     return;
   }
   if (!dragId) return;
-  const x = Math.max(DECK.x0 + 1.4, Math.min(MX1 - 1.4, cx));              // connector (or any table) can sit in the middle / on the other floor
-  const z = Math.max(DECK.z0 + 1.4, Math.min(DECK.z1 - 1.4, cz));
+  const x = Math.max(FLOOR_X0 + 1.4, Math.min(FLOOR_X1 - 1.4, cx));        // stations can sit ANYWHERE on the floor — side strips included
+  const z = Math.max(FLOOR_Z0 + 1.4, Math.min(FLOOR_Z1 - 1.4, cz));
   setStationPos(dragId, x, z);
   refreshMeasure(); refreshPath(); if (dragId === 'cart2') refreshCart2Feed();
   schedule();                 // walk times + cycle/capacity update live as you move

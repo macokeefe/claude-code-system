@@ -261,6 +261,14 @@ DBL-CLICK EDITING (2026-07): in the Task chart, the red takt figure
 Esc cancels). Typing a takt in MINUTES back-computes `taktDemand = dayMin /
 takt` (now a float — inputs parseFloat) and re-renders the charts live.
 
+STATIONS ANYWHERE (2026-07): station + waypoint drag clamps widened from the
+two decks to the WHOLE floor (`FLOOR_X0/X1/Z0/Z1` ± margins) — tables can now
+be dragged onto the side strips beside the lines. `POS.con` default moved from
+x=−12 (off the shrunken floor) to −7.5. GOTCHA fixed with it: when a station
+overlaps a staging area, `pickFixture` used to steal the grab (fixtures are
+checked before stations on pointerdown); it now also raycasts stations and
+returns null when a station is closer (+0.05 bias), so the bench wins.
+
 EVERYTHING EDITABLE (2026-07, "don't discriminate"): the stairs and the four
 section lines were converted from fixed scenery into AREA kinds (`stairs`,
 `sline1..4` in `AREA_KINDS`; builders `buildStairsInto(g)` / `slineInto(g,
