@@ -458,7 +458,7 @@ const level2 = new THREE.Group(); level2.position.y = FLOOR2; scene.add(level2);
 const DECK = { x0:-5.1, x1:-5.1 + 40*FT, z0:-30*FT, z1:30*FT };   // 40' wide x 60' deep (20 yd) — centred
 const deckW = DECK.x1 - DECK.x0, deckD = DECK.z1 - DECK.z0;
 const deckCx = (DECK.x0 + DECK.x1)/2, deckCz = (DECK.z0 + DECK.z1)/2;
-const deckMat = new THREE.MeshStandardMaterial({ color:0xb7bcc2, roughness:0.7, metalness:0.3 });
+const deckMat = new THREE.MeshStandardMaterial({ map: concreteTex(deckW / 3, deckD / 3), roughness: 0.9, metalness: 0.02 });   // same sealed-concrete look as the surrounding slab — the whole floor reads as ONE colour
 const deck = bx(deckW, 0.3, deckD, deckMat); deck.position.set(deckCx, -0.16, deckCz); deck.receiveShadow = true; level2.add(deck);
 // diamond-plate edge fascia
 const fascia = new THREE.MeshStandardMaterial({ color:0x8a9099, roughness:0.6, metalness:0.4 });
@@ -1039,8 +1039,14 @@ function refreshCart2Feed(){
 }
 refreshCart2Feed();
 // shipped boxes pool near packing/ship dock
+// shipped boxes stack in the STORAGE slice (upper-left, west of section line 1):
+// organized 3 columns x 2 levels, filling row by row from the north end
 const shipBoxes = [];
-for (let i = 0; i < 40; i++) { const b = makeShipBox(); b.visible = false; b.position.set(16 + (i%4)*2.0, 0, 4.2 + Math.floor(i/4)*1.2); level2.add(b); shipBoxes.push(b); }
+for (let i = 0; i < 40; i++) {
+  const b = makeShipBox(); b.visible = false;
+  b.position.set(-7.9 + (i % 3) * 1.75, (Math.floor(i / 3) % 2) * 0.74, -8.8 + Math.floor(i / 6) * 1.15);
+  level2.add(b); shipBoxes.push(b);
+}
 // a sofa that travels from FA to packing during pack phase
 const movingSofa = makeSofaProduct(); movingSofa.update(1); movingSofa.g.visible = false; level2.add(movingSofa.g);
 
@@ -1290,8 +1296,13 @@ function buildSolaTravel() {
     solaTravel.push(arr);
   }
 }
+// Sola's shipped boxes stack just south of the Meritage stack in the same storage slice
 const solaShipBoxes = [];
-for (let i = 0; i < 40; i++) { const b = makeShipBox(); b.visible = false; b.position.set(20.5 + (i % 3) * 1.8, 0, -4 + Math.floor(i / 3) * 1.2); level2.add(b); solaShipBoxes.push(b); }
+for (let i = 0; i < 40; i++) {
+  const b = makeShipBox(); b.visible = false;
+  b.position.set(-7.9 + (i % 3) * 1.75, (Math.floor(i / 3) % 2) * 0.74, -0.4 + Math.floor(i / 6) * 1.15);
+  level2.add(b); solaShipBoxes.push(b);
+}
 const SOLA_TRAVEL = 3;            // sim-min a part spends moving to the next station
 function solaUpdate() {
   if (!solaSched) { solaShipBoxes.forEach(b => b.visible = false); return; }
@@ -1320,7 +1331,7 @@ function solaUpdate() {
       else part.position.set(B.x, 1.04, B.z);
     }
   }
-  solaShipBoxes.forEach(b => b.visible = false);   // no stacked boxes (was crowding the floor)
+  solaShipBoxes.forEach((b, i) => b.visible = Ts > 0 && i < shipped);   // finished boxes populate the storage stack
   const el = document.getElementById('solaShip'); if (el) el.textContent = shipped;
 }
 
@@ -2556,7 +2567,7 @@ function update(){
   // packing led + crew
   const pak = nodes.pak;
   setLed(pak.led, (cur>=0 && phase==='pack') ? 'active' : (shipped>=N?'done':'idle'), cur>=0 && phase==='pack');
-  shipBoxes.forEach(b => b.visible = false);   // no stacked boxes (was crowding the floor)
+  shipBoxes.forEach((b, i) => b.visible = T > 0 && i < shipped);   // finished boxes populate the storage stack (upper-left)
   ui.ship.textContent = shipped;
   // finished sofas populate the racks; the forklift takes one down every 3rd
   if (shipped < lastShipped) { lastShipped = shipped; onRacks = 0; }   // clock reset/seek
