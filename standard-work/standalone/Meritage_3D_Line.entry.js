@@ -458,7 +458,7 @@ const level2 = new THREE.Group(); level2.position.y = FLOOR2; scene.add(level2);
 const DECK = { x0:-5.1, x1:-5.1 + 40*FT, z0:-30*FT, z1:30*FT };   // 40' wide x 60' deep (20 yd) — centred
 const deckW = DECK.x1 - DECK.x0, deckD = DECK.z1 - DECK.z0;
 const deckCx = (DECK.x0 + DECK.x1)/2, deckCz = (DECK.z0 + DECK.z1)/2;
-const deckMat = new THREE.MeshStandardMaterial({ map: concreteTex(deckW / 3, deckD / 3), roughness: 0.9, metalness: 0.02 });   // same sealed-concrete look as the surrounding slab — the whole floor reads as ONE colour
+const deckMat = new THREE.MeshStandardMaterial({ color: 0xb7bcc2, roughness: 0.7, metalness: 0.3 });   // the original space-gray — and the surrounding slab uses the SAME material, so the whole floor is one colour
 const deck = bx(deckW, 0.3, deckD, deckMat); deck.position.set(deckCx, -0.16, deckCz); deck.receiveShadow = true; level2.add(deck);
 // diamond-plate edge fascia
 const fascia = new THREE.MeshStandardMaterial({ color:0x8a9099, roughness:0.6, metalness:0.4 });
@@ -653,7 +653,7 @@ const FLOOR_W = 105 * FT, FLOOR_D = 64 * FT, FLOOR_X = 7.09;
 const FLOOR_X0 = FLOOR_X - FLOOR_W / 2, FLOOR_X1 = FLOOR_X + FLOOR_W / 2;   // ≈ −8.91 .. 23.09
 const FLOOR_Z0 = -FLOOR_D / 2, FLOOR_Z1 = FLOOR_D / 2;                       // ≈ −9.60 .. 9.60
 (function buildFloor() {
-  const slab = new THREE.Mesh(new THREE.BoxGeometry(FLOOR_W, 0.5, FLOOR_D), new THREE.MeshStandardMaterial({ map: concreteTex(FLOOR_W / 3, FLOOR_D / 3), roughness: 0.9, metalness: 0.02 }));
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(FLOOR_W, 0.5, FLOOR_D), deckMat);   // same space-gray as the decks — one uniform floor colour
   slab.position.set(FLOOR_X, -0.29, 0); slab.receiveShadow = true; surroundings.add(slab);
   // painted yellow aisle safety lines around the working area
   const paint = AM(0xe8c53a, { roughness: 0.65 });
