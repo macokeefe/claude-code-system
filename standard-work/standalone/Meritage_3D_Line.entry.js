@@ -800,13 +800,16 @@ function restoreAreas(list) {
   if (!areas.some(a => legacy.includes(a.kind))) {
     AREA_DEFAULTS.filter(d => legacy.includes(d[0])).forEach(d => addArea(d[0], d[1], d[2], d[3] || 0));
   }
-  // snap near-default section lines to the EXACT CAD positions — older saves
-  // carry pre-64'-floor coordinates that are a few inches off the drawing.
-  // (Deliberately dragged lines, >0.75 m away, are left where the user put them.)
+  // the SECTION LINES are CAD reference lines — they must match the drawing
+  // exactly, so on every load they snap back to their CAD positions (a drag
+  // during the session is fine for experimenting, but reload restores truth —
+  // this also self-heals accidental drags, e.g. catching a line's wide grab
+  // strip while moving the elevator). The stairs keep a gentle 0.75 m snap.
   const defs = Object.fromEntries(AREA_DEFAULTS.filter(d => legacy.includes(d[0])).map(d => [d[0], d]));
   areas.forEach(a => {
-    const d = defs[a.kind];
-    if (d && Math.hypot(a.x - d[1], a.z - d[2]) < 0.75 && (a.x !== d[1] || a.z !== d[2])) {
+    const d = defs[a.kind]; if (!d) return;
+    const isLine = /^sline/.test(a.kind);
+    if (isLine || Math.hypot(a.x - d[1], a.z - d[2]) < 0.75) {
       a.x = d[1]; a.z = d[2]; a.g.position.set(d[1], 0, d[2]);
     }
   });
