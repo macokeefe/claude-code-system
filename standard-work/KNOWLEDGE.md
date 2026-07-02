@@ -267,6 +267,20 @@ carts rescaled from ×1.4 (4.8'x3.1') to a true 4'x2.5' footprint
 (`scale.set(1.17,1.2,1.12)`). These were the biggest "cramped vs paper"
 offenders from the scale audit.
 
+FLOOR = CAD 1:1 (2026-07): measured the drawing at 27.05 px/ft (lift 8x12,
+tables 8x4/8x3/6x1.5 all confirm to 0.00'), so the interior is 105' x 64'.
+Floor changed from 35yd x 21yd (105x63) to `105*FT x 64*FT` — 1' deeper — so
+the CAD overlay (mapped onto FLOOR_W x FLOOR_D) is exactly 1:1: anything N
+yards on the plan is N yards in the sim. All FLOOR_-derived things (areas,
+grid, stairs, clamps) follow automatically.
+
+MY-STATION MARKERS (2026-07): with the CAD on, `rebuildMyMarks()` draws a
+bright-teal fill+outline (renderOrder 902/903, depthTest off) over each of MY
+stations' bench footprints (`stationFootprint` = 8x4, fa 8x5, arms double
+16x4) so they're obvious vs the black CAD tables at any opacity. Rebuilt on
+overlay toggle, station drag (pointermove), and add/delete. `#cadBox` has a
+legend (teal=yours, dark=CAD).
+
 CAD OVERLAY (2026-07): `📐 CAD` button (Edit-Layout only) lays the actual
 plant drawing flat on the floor, scaled 1:1, to compare the model to the plan.
 The PDF was rasterized (PyMuPDF), cropped to the interior walls (PDF x

@@ -647,8 +647,9 @@ function concreteTex(rx, ry) {
   g.strokeStyle = 'rgba(88,94,100,0.55)'; g.lineWidth = 3; g.strokeRect(0, 0, 256, 256);   // expansion joint = tile border
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = 8; return t;
 }
-// the ENTIRE floor is 35 yd x 21 yd (per engineer), centred on the two decks
-const FLOOR_W = 35 * YARD, FLOOR_D = 21 * YARD, FLOOR_X = 7.09;
+// the ENTIRE floor = the CAD's true interior: 105' x 64' (measured 1:1 from the
+// drawing at 27.05 px/ft — lift 8x12, tables 8x4/8x3 all confirm it). 105'=35yd.
+const FLOOR_W = 105 * FT, FLOOR_D = 64 * FT, FLOOR_X = 7.09;
 const FLOOR_X0 = FLOOR_X - FLOOR_W / 2, FLOOR_X1 = FLOOR_X + FLOOR_W / 2;   // ≈ −8.91 .. 23.09
 const FLOOR_Z0 = -FLOOR_D / 2, FLOOR_Z1 = FLOOR_D / 2;                       // ≈ −9.60 .. 9.60
 (function buildFloor() {
@@ -1140,10 +1141,36 @@ function buildCadOverlay() {
   cadOverlay = { g, plane, mat, hx: 0, hz: 0 };               // hx/hz = user alignment nudge
 }
 buildCadOverlay();
+// ---- when the CAD is overlaid, mark MY stations in bright teal (drawn on top of
+// the CAD, at every opacity) so it's obvious which tables are mine vs the black
+// CAD drawing beneath. Rebuilt whenever stations move / the overlay toggles. ----
+const myMarksGroup = new THREE.Group(); myMarksGroup.visible = false; level2.add(myMarksGroup);
+const MY_MARK_FILL = new THREE.MeshBasicMaterial({ color: 0x12c2b0, transparent: true, opacity: 0.42, depthTest: false, depthWrite: false });
+const MY_MARK_EDGE = new THREE.LineBasicMaterial({ color: 0x067d70, transparent: true, depthTest: false });
+function stationFootprint(nd) {
+  const s = nd.s; let w = 8 * FT, d = 4 * FT;
+  if (s && s.role === 'fa') d = 5 * FT;
+  if (s && s.double) w = 16 * FT;
+  return [w, d];
+}
+function rebuildMyMarks() {
+  while (myMarksGroup.children.length) myMarksGroup.remove(myMarksGroup.children[0]);
+  myMarksGroup.visible = cadOn;
+  if (!cadOn) return;
+  const all = [...ST.map(s => nodes[s.id]), ...extraStations.map(id => nodes[id])].filter(Boolean);
+  all.forEach(nd => {
+    const [w, d] = stationFootprint(nd);
+    const grp = new THREE.Group(); grp.position.set(nd.x, 0, nd.z); grp.rotation.y = nd.rot || 0;
+    const fill = new THREE.Mesh(new THREE.PlaneGeometry(w, d), MY_MARK_FILL); fill.rotation.x = -Math.PI / 2; fill.position.y = 0.24; fill.renderOrder = 902; grp.add(fill);
+    const edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(w, d)), MY_MARK_EDGE); edge.rotation.x = -Math.PI / 2; edge.position.y = 0.25; edge.renderOrder = 903; grp.add(edge);
+    myMarksGroup.add(grp);
+  });
+}
 function setCadOverlay(on) {
   if (!cadOverlay) return;
   cadOn = on && !!window.__CAD_OVERLAY__;
   cadOverlay.g.visible = cadOn;
+  rebuildMyMarks();
   const box = document.getElementById('cadBox'); if (box) box.style.display = cadOn ? 'flex' : 'none';
   const btn = document.getElementById('cadBtn'); if (btn) btn.classList.toggle('on', cadOn);
 }
@@ -1165,7 +1192,9 @@ function setCadOverlay(on) {
   box.style.cssText = 'display:none;position:absolute;left:12px;bottom:78px;z-index:8;background:rgba(255,255,255,.95);border:1px solid #dfe3e8;border-radius:10px;padding:8px 12px;align-items:center;gap:8px;font:12px system-ui,Arial;box-shadow:0 4px 14px rgba(0,0,0,.15)';
   box.innerHTML = '<b style="color:#1d3a66">CAD overlay</b> <span style="color:#6b7785">opacity</span>' +
     '<input id="cadOpac" type="range" min="5" max="100" value="55" style="width:120px"> ' +
-    '<span style="color:#6b7785">· drag it to align</span>';
+    '<span style="color:#6b7785">· Shift-drag to align ·</span>' +
+    '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:12px;height:12px;background:#12c2b0;border:1px solid #067d70;display:inline-block;border-radius:2px"></span> your stations</span>' +
+    '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:12px;height:12px;background:#3a3a3a;display:inline-block;border-radius:2px"></span> CAD plan</span>';
   document.body.appendChild(box);
   box.querySelector('#cadOpac').oninput = e => { if (cadOverlay) cadOverlay.mat.opacity = (+e.target.value) / 100; };
 })();
@@ -1320,6 +1349,7 @@ function addStation(name, x, z, id, t) {
   extraStations.push(id);
   buildExtraCrew(id);                                         // show its operator figure(s)
   if (typeof applyLabels === 'function') applyLabels();       // follow the current Labels mode (Off / Names / Full)
+  if (typeof cadOn !== 'undefined' && cadOn) rebuildMyMarks();   // include the new station in the teal markers
   return id;
 }
 function buildExtraCrew(id) {                                 // operator figures for an added station (mirrors Meritage)
@@ -1371,6 +1401,7 @@ function deleteStation(id) {                                  // remove an ADDED
   const i = extraStations.indexOf(id); if (i >= 0) extraStations.splice(i, 1);
   delete nodes[id]; delete POS[id];
   renderTimes(); saveLayout();
+  if (typeof cadOn !== 'undefined' && cadOn) rebuildMyMarks();
 }
 function afterEdit(id) {                                     // ST stations re-pace the line; added stations don't
   if (isExtra(id)) { renderTimes(); saveLayout(); }
@@ -1982,6 +2013,7 @@ renderer.domElement.addEventListener('pointermove', e => {
   const z = Math.max(FLOOR_Z0 + 1.4, Math.min(FLOOR_Z1 - 1.4, cz));
   setStationPos(dragId, x, z);
   refreshMeasure(); refreshPath(); if (dragId === 'cart2') refreshCart2Feed();
+  if (cadOn) rebuildMyMarks();   // keep the teal "mine" markers on the bench as it moves
   schedule();                 // walk times + cycle/capacity update live as you move
 });
 renderer.domElement.addEventListener('pointerup', () => {
