@@ -233,8 +233,24 @@ those areas OFF the new floor — user drags them back on.
 CART AISLE (2026-07): each cart route renders a 5'-wide lane (`AISLE_W`,
 `updateAisle(mesh, pts)` builds a triangle-strip ribbon with rounded joints;
 meshes `aisleMesh`/`aisleMesh2` on level2). Shown ONLY in Edit Layout (toggled
-in `setEditing`) as a subtle blue-grey floor tint (opacity 0.25), updated live
-from `refreshPath()`/`refreshCart2Feed()` as waypoints/carts move.
+in `setEditing`) as a blue floor tint (opacity 0.5 after "more discolored"
+feedback), updated live from `refreshPath()`/`refreshCart2Feed()`.
+
+AISLE LOOP + RETURN WAYPOINTS (2026-07): the aisle now LOOPS back —
+elevator → wps → cart spot → `returnWps`/`returnWps2` → elevator. The return
+leg draws as an amber dashed line (`returnLine`/`returnLine2`) with amber
+draggable dots (userData cart `'ret'`/`'ret2'`, same drag/right-click-delete
+plumbing as normal waypoints, shared wpGroup visibility). The injected
+`⟲ Return wp` button adds a return waypoint for the last-selected cart.
+Persisted as `__rwps`/`__rwps2` (working) and `rwps`/`rwps2` (named layouts).
+The SIM is untouched — carts still animate only on the delivery leg; the
+return leg is planning/visual ("future paths").
+
+DBL-CLICK EDITING (2026-07): in the Task chart, the red takt figure
+(`#taktVal`) and the day length (`#dayHrsVal`) are double-click editable
+(generic `dblEdit(id, getCur, apply)` swaps in an input; Enter/blur commits,
+Esc cancels). Typing a takt in MINUTES back-computes `taktDemand = dayMin /
+takt` (now a float — inputs parseFloat) and re-renders the charts live.
 
 STAIRS (2026-07): `buildStairs()` IIFE (in `surroundings`, so the 🏭 Areas
 button hides it too) — a 4'-wide industrial straight flight at the floor's
