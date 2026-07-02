@@ -261,6 +261,21 @@ DBL-CLICK EDITING (2026-07): in the Task chart, the red takt figure
 Esc cancels). Typing a takt in MINUTES back-computes `taktDemand = dayMin /
 takt` (now a float — inputs parseFloat) and re-renders the charts live.
 
+CART SPOTS TRUE SIZE (2026-07): the two materials-cart pads were 2.7 m (≈9')
+squares — shrunk to true 5'x3' taped spots (`CPW/CPD`), and the animated parts
+carts rescaled from ×1.4 (4.8'x3.1') to a true 4'x2.5' footprint
+(`scale.set(1.17,1.2,1.12)`). These were the biggest "cramped vs paper"
+offenders from the scale audit.
+
+2D VIEW (2026-07): `▦ 2D` button (injected after #top). NOT a separate
+camera — `set2D(on)` turns the existing perspective camera into a telephoto
+plan view (fov 5° from ~260 m above the floor centre), so every raycast,
+drag, control, and panel keeps working unchanged in BOTH normal and edit
+mode. Rotate is disabled in 2D (pan+zoom only); `scene.fog` is stashed and
+NULLED while 2D is on (at 260 m the 60–140 fog would white the scene out) and
+restored on exit. `setEditing`'s camera repositioning is skipped while
+`is2D`; the Angle/Top view buttons call `set2D(false)` first.
+
 STATIONS ANYWHERE (2026-07): station + waypoint drag clamps widened from the
 two decks to the WHOLE floor (`FLOOR_X0/X1/Z0/Z1` ± margins) — tables can now
 be dragged onto the side strips beside the lines. `POS.con` default moved from

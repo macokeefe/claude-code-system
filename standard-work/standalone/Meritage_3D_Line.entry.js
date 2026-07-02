@@ -605,11 +605,12 @@ function fillRacks(){ let n=onRacks; for(const r of racks) for(const s of r.slot
 
 // the single materials cart (holds all parts) — draggable; feeders pull from this one spot
 // draggable cart SPOT (front of the queue) — feeders pull parts from here
-const cartPad = new THREE.Group();
-const pad = bx(2.7, 0.04, 2.7, new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.9, transparent: true, opacity: 0.45 }));
+const cartPad = new THREE.Group();                           // a true cart SPOT: 5' x 3' taped outline (was a 9' square)
+const CPW = 5 * FT, CPD = 3 * FT;
+const pad = bx(CPW, 0.04, CPD, new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.9, transparent: true, opacity: 0.45 }));
 pad.position.y = 0.025; cartPad.add(pad);
-for (const dx of [-1.35, 1.35]) { const e = bx(0.1, 0.03, 2.7, MAT.tape); e.position.set(dx, 0.03, 0); cartPad.add(e); }
-for (const dz of [-1.35, 1.35]) { const e = bx(2.7, 0.03, 0.1, MAT.tape); e.position.set(0, 0.03, dz); cartPad.add(e); }
+for (const dx of [-CPW / 2, CPW / 2]) { const e = bx(0.08, 0.03, CPD, MAT.tape); e.position.set(dx, 0.03, 0); cartPad.add(e); }
+for (const dz of [-CPD / 2, CPD / 2]) { const e = bx(CPW, 0.03, 0.08, MAT.tape); e.position.set(0, 0.03, dz); cartPad.add(e); }
 const cartSign = (function(){ const c=document.createElement('canvas'); c.width=320; c.height=72; const x=c.getContext('2d');
   x.fillStyle='#1d3a66'; x.beginPath(); x.roundRect(4,8,312,56,14); x.fill();
   x.fillStyle='#fff'; x.font='700 30px Arial'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('MATERIALS CART',160,38);
@@ -623,7 +624,7 @@ const EL = [DECK.x0 - 1.6, 2];         // elevator docks the left edge of the fl
 const MAXQ = 3, LIFT_RPS = 3.0, ROLL_RPS = 3.2;   // up to 3 carts up; cart roll/elevator speed in units per REAL second (steady visual pace)
 let CART_UNITS = 1;                     // each cart carries the materials for one sofa
 const cartPool = [];
-for (let i = 0; i < 3; i++) { const c = makePartsCart(); c.scale.set(1.4, 1.3, 1.4); c.visible = false; level2.add(c); cartPool.push({ mesh: c, state: 'down', slot: -1, remaining: 0 }); }
+for (let i = 0; i < 3; i++) { const c = makePartsCart(); c.scale.set(1.17, 1.2, 1.12); c.visible = false; level2.add(c); cartPool.push({ mesh: c, state: 'down', slot: -1, remaining: 0 }); }
 let elevBusy = false, carY = 0.4, lastConsumed = 0, lastSimT = 0;
 
 /* ===== Surrounding warehouse areas (from the plant floor plan). The two line
@@ -1003,17 +1004,17 @@ POS.cart = [CART_DEF[0], CART_DEF[1]];
 
 // ---- second materials cart for the SOLA side, fed from the SAME elevator ----
 const CART2_DEF = [13, -1.2];                                 // on the Sola (right) side
-const cart2Pad = new THREE.Group();
-const pad2 = bx(2.7, 0.04, 2.7, new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.9, transparent: true, opacity: 0.45 }));
+const cart2Pad = new THREE.Group();                          // 5' x 3' cart spot, same as the Meritage one
+const pad2 = bx(CPW, 0.04, CPD, new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.9, transparent: true, opacity: 0.45 }));
 pad2.position.y = 0.025; cart2Pad.add(pad2);
-for (const dx of [-1.35, 1.35]) { const e = bx(0.1, 0.03, 2.7, MAT.tape); e.position.set(dx, 0.03, 0); cart2Pad.add(e); }
-for (const dz of [-1.35, 1.35]) { const e = bx(2.7, 0.03, 0.1, MAT.tape); e.position.set(0, 0.03, dz); cart2Pad.add(e); }
+for (const dx of [-CPW / 2, CPW / 2]) { const e = bx(0.08, 0.03, CPD, MAT.tape); e.position.set(dx, 0.03, 0); cart2Pad.add(e); }
+for (const dz of [-CPD / 2, CPD / 2]) { const e = bx(CPW, 0.03, 0.08, MAT.tape); e.position.set(0, 0.03, dz); cart2Pad.add(e); }
 (function(){ const c=document.createElement('canvas'); c.width=360; c.height=72; const x=c.getContext('2d');
   x.fillStyle='#236043'; x.beginPath(); x.roundRect(4,8,352,56,14); x.fill();
   x.fillStyle='#fff'; x.font='700 28px Arial'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('SOLA MATERIALS CART',180,38);
   const tex=new THREE.CanvasTexture(c); tex.anisotropy=8; const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true}));
   sp.scale.set(2.2,0.45,1); sp.position.y=1.6; cart2Pad.add(sp); })();
-const cart2Mesh = makePartsCart(); cart2Mesh.scale.set(1.4,1.3,1.4); cart2Pad.add(cart2Mesh);   // a physical cart sits on the pad
+const cart2Mesh = makePartsCart(); cart2Mesh.scale.set(1.17,1.2,1.12); cart2Pad.add(cart2Mesh);   // a physical cart sits on the pad
 cart2Pad.position.set(CART2_DEF[0], 0, CART2_DEF[1]); level2.add(cart2Pad);
 nodes.cart2 = { id:'cart2', x:CART2_DEF[0], z:CART2_DEF[1], st:cart2Pad, s:{ id:'cart2', title:'Sola materials cart' } };
 POS.cart2 = [CART2_DEF[0], CART2_DEF[1]];
@@ -1086,8 +1087,39 @@ const nInput = document.getElementById('n');
 nInput.value = N;
 nInput.onchange = e => { N = Math.max(1, Math.min(40, parseInt(e.target.value)||8)); schedule(); if (typeof buildSolaSched==='function') buildSolaSched(); T=0; Ts=0; setPlay(false); };
 const speed = document.getElementById('speed');
-document.getElementById('cam').onclick = () => { camera.position.set(7,30,52); controls.target.set(7,FLOOR2+0.8,0); };
-document.getElementById('top').onclick = () => { camera.position.set(4,FLOOR2+38,1); controls.target.set(4,FLOOR2,1); };
+document.getElementById('cam').onclick = () => { if (is2D) set2D(false); camera.position.set(7,30,52); controls.target.set(7,FLOOR2+0.8,0); };
+document.getElementById('top').onclick = () => { if (is2D) set2D(false); camera.position.set(4,FLOOR2+38,1); controls.target.set(4,FLOOR2,1); };
+// ---- 2D plan view: a flat, floor-plan look that works in BOTH normal and edit
+// mode. Implemented as a telephoto overhead camera (5° fov from ~260 m up) so it
+// reads as orthographic while every click, drag, and control keeps working. ----
+let is2D = false, saved3D = null;
+function set2D(on) {
+  is2D = on;
+  const b = document.getElementById('btn2d');
+  if (b) { b.textContent = on ? '▦ 2D: on' : '▦ 2D'; b.classList.toggle('on', on); }
+  if (on) {
+    saved3D = { p: camera.position.clone(), t: controls.target.clone(), fov: camera.fov, fog: scene.fog };
+    scene.fog = null;                                         // the plan camera is ~260 m up — fog would white the scene out
+    camera.fov = 5; camera.updateProjectionMatrix();
+    camera.position.set(7.09, FLOOR2 + 260, 0.01);            // straight above the floor centre
+    controls.target.set(7.09, FLOOR2, 0);
+    controls.enableRotate = false;                            // pan + zoom only — it stays a plan
+    camera.lookAt(controls.target);
+  } else {
+    camera.fov = saved3D ? saved3D.fov : 44; camera.updateProjectionMatrix();
+    if (saved3D) { camera.position.copy(saved3D.p); controls.target.copy(saved3D.t); scene.fog = saved3D.fog; }
+    controls.enableRotate = !editing;
+  }
+}
+(() => {
+  const t = document.getElementById('top'); if (!t) return;
+  const b = document.createElement('button');
+  b.id = 'btn2d'; b.className = t.className || '';
+  b.textContent = '▦ 2D';
+  b.title = 'Flat 2D floor-plan view — works in normal AND edit mode. Click again to go back to 3D.';
+  t.parentNode.insertBefore(b, t.nextSibling);
+  b.onclick = () => set2D(!is2D);
+})();
 // label visibility: 0 = off, 1 = names only (compact), 2 = full cards
 let labelMode = 1;
 const extraStations = [];   // added (Sola) stations — declared early so applyLabels can include them
@@ -1770,7 +1802,7 @@ function setEditing(on) {
     controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };   // drag empty floor to pan; grabbing a station disables pan for that drag
     controls.touches = { ONE: null, TWO: THREE.TOUCH.DOLLY_PAN };
   } else {
-    controls.enabled = true; controls.enableRotate = true; controls.enableZoom = true; controls.enablePan = true;
+    controls.enabled = true; controls.enableRotate = !is2D; controls.enableZoom = true; controls.enablePan = true;
     controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
   }
@@ -1778,13 +1810,15 @@ function setEditing(on) {
   document.getElementById('editHint').style.display = on ? 'block' : 'none';
   if (on) {
     setPlay(false);
-    savedView = { p: camera.position.clone(), t: controls.target.clone() };
-    camera.position.set((DECK.x0 + DECK.x1) / 2, FLOOR2 + 46, (DECK.z0 + DECK.z1) / 2 + 0.01);
-    controls.target.set((DECK.x0 + DECK.x1) / 2, FLOOR2, (DECK.z0 + DECK.z1) / 2);
-    camera.lookAt(controls.target);
+    if (!is2D) {                                             // in 2D the plan view stays exactly as-is
+      savedView = { p: camera.position.clone(), t: controls.target.clone() };
+      camera.position.set((DECK.x0 + DECK.x1) / 2, FLOOR2 + 46, (DECK.z0 + DECK.z1) / 2 + 0.01);
+      controls.target.set((DECK.x0 + DECK.x1) / 2, FLOOR2, (DECK.z0 + DECK.z1) / 2);
+      camera.lookAt(controls.target);
+    }
   } else {
     dragId = null; measure.visible = false; measurePanel.innerHTML = '';
-    if (savedView) { camera.position.copy(savedView.p); controls.target.copy(savedView.t); }
+    if (!is2D && savedView) { camera.position.copy(savedView.p); controls.target.copy(savedView.t); }
     // settle crew back home
     crew.forEach(c => { c.fig.position.x = c.homeX; c.fig.position.z = c.homeZ; });
     saveLayout();
