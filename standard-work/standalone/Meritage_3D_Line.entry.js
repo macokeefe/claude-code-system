@@ -1925,6 +1925,37 @@ document.getElementById('addwp').onclick = () => {
     saveLayout();
   };
 })();
+// Double-click ON a lane (in Edit Layout) to add a waypoint exactly there.
+// Works on every leg: the way OUT to a cart spot (green) and the way BACK to
+// the elevator (amber) — the waypoint is inserted into the right spot in the
+// sequence, so the lane bends where you clicked.
+function segClosest(px, pz, ax, az, bx2, bz2) {
+  const dx = bx2 - ax, dz = bz2 - az, L2 = dx * dx + dz * dz || 1e-9;
+  let t = ((px - ax) * dx + (pz - az) * dz) / L2; t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (ax + dx * t), pz - (az + dz * t));
+}
+renderer.domElement.addEventListener('dblclick', e => {
+  if (!editing) return;
+  const p = deckPoint(e); if (!p) return;
+  const legs = [
+    { pts: [[EL[0], EL[1]], ...cartWaypoints.map(w => [w.x, w.z]), [nodes.cart.x, nodes.cart.z]], arr: cartWaypoints, refresh: refreshPath },
+    { pts: [[nodes.cart.x, nodes.cart.z], ...returnWps.map(w => [w.x, w.z]), [EL[0], EL[1]]], arr: returnWps, refresh: refreshPath },
+    { pts: [[EL[0], EL[1]], ...cart2Waypoints.map(w => [w.x, w.z]), [nodes.cart2.x, nodes.cart2.z]], arr: cart2Waypoints, refresh: refreshCart2Feed },
+    { pts: [[nodes.cart2.x, nodes.cart2.z], ...returnWps2.map(w => [w.x, w.z]), [EL[0], EL[1]]], arr: returnWps2, refresh: refreshCart2Feed },
+  ];
+  let best = null;
+  legs.forEach(leg => {
+    for (let i = 0; i < leg.pts.length - 1; i++) {
+      const d = segClosest(p.x, p.z, leg.pts[i][0], leg.pts[i][1], leg.pts[i + 1][0], leg.pts[i + 1][1]);
+      if (!best || d < best.d - 1e-6) best = { d, leg, i };   // near-ties keep the earlier leg (delivery beats return where the lanes overlap)
+    }
+  });
+  if (!best || best.d > 4) return;                           // not near any lane
+  best.leg.arr.splice(best.i, 0, { x: snap(p.x), z: snap(p.z) });   // insert INTO the clicked segment
+  best.leg.refresh(); saveLayout();
+});
+// mention it in the edit hint
+(() => { const h = document.getElementById('editHint'); if (h) h.innerHTML += ' <b>Double-click on a lane</b> to add a waypoint right there — works on the way out (green) and the return to the elevator (amber).'; })();
 // add a forklift access point on the front edge
 document.getElementById('accesspt').onclick = () => {
   if (!editing) setEditing(true);

@@ -246,6 +246,15 @@ Persisted as `__rwps`/`__rwps2` (working) and `rwps`/`rwps2` (named layouts).
 The SIM is untouched — carts still animate only on the delivery leg; the
 return leg is planning/visual ("future paths").
 
+DBL-CLICK WAYPOINTS (2026-07): in Edit Layout, double-clicking ON a lane
+inserts a waypoint exactly there, into the correct position in the sequence.
+A `dblclick` listener on the canvas checks all four legs (cart/cart2 delivery
++ return) with point-to-segment distance (`segClosest`), threshold 4 m;
+near-ties keep the earlier leg so DELIVERY beats RETURN where the two lanes
+overlap (e.g. before any waypoints exist — they're the same line then).
+Segment index i = splice index into that leg's waypoint array. The edit hint
+text is appended via JS (the hint lives in the frozen HTML head).
+
 DBL-CLICK EDITING (2026-07): in the Task chart, the red takt figure
 (`#taktVal`) and the day length (`#dayHrsVal`) are double-click editable
 (generic `dblEdit(id, getCur, apply)` swaps in an input; Enter/blur commits,
