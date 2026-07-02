@@ -279,7 +279,9 @@ bright-teal fill+outline (renderOrder 902/903, depthTest off) over each of MY
 stations' bench footprints (`stationFootprint` = 8x4, fa 8x5, arms double
 16x4) so they're obvious vs the black CAD tables at any opacity. Rebuilt on
 overlay toggle, station drag (pointermove), and add/delete. `#cadBox` has a
-legend (teal=yours, dark=CAD).
+"highlight your stations" checkbox (`myMarksOn`) to turn the teal off entirely
+and see just the CAD, plus a separate opacity slider for the marks
+(`MY_MARK_FILL.opacity`) — independent of the CAD-plan opacity slider.
 
 CAD OVERLAY (2026-07): `📐 CAD` button (Edit-Layout only) lays the actual
 plant drawing flat on the floor, scaled 1:1, to compare the model to the plan.

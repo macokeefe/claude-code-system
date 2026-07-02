@@ -1153,10 +1153,11 @@ function stationFootprint(nd) {
   if (s && s.double) w = 16 * FT;
   return [w, d];
 }
+let myMarksOn = true;                                        // the teal "my stations" highlight can be toggled off to see just the CAD
 function rebuildMyMarks() {
   while (myMarksGroup.children.length) myMarksGroup.remove(myMarksGroup.children[0]);
-  myMarksGroup.visible = cadOn;
-  if (!cadOn) return;
+  myMarksGroup.visible = cadOn && myMarksOn;
+  if (!cadOn || !myMarksOn) return;
   const all = [...ST.map(s => nodes[s.id]), ...extraStations.map(id => nodes[id])].filter(Boolean);
   all.forEach(nd => {
     const [w, d] = stationFootprint(nd);
@@ -1190,13 +1191,18 @@ function setCadOverlay(on) {
   const box = document.createElement('div');
   box.id = 'cadBox';
   box.style.cssText = 'display:none;position:absolute;left:12px;bottom:78px;z-index:8;background:rgba(255,255,255,.95);border:1px solid #dfe3e8;border-radius:10px;padding:8px 12px;align-items:center;gap:8px;font:12px system-ui,Arial;box-shadow:0 4px 14px rgba(0,0,0,.15)';
-  box.innerHTML = '<b style="color:#1d3a66">CAD overlay</b> <span style="color:#6b7785">opacity</span>' +
-    '<input id="cadOpac" type="range" min="5" max="100" value="55" style="width:120px"> ' +
-    '<span style="color:#6b7785">· Shift-drag to align ·</span>' +
-    '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:12px;height:12px;background:#12c2b0;border:1px solid #067d70;display:inline-block;border-radius:2px"></span> your stations</span>' +
-    '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:12px;height:12px;background:#3a3a3a;display:inline-block;border-radius:2px"></span> CAD plan</span>';
+  box.style.flexWrap = 'wrap'; box.style.maxWidth = '520px';
+  box.innerHTML = '<b style="color:#1d3a66">CAD plan</b> <span style="color:#6b7785">opacity</span>' +
+    '<input id="cadOpac" type="range" min="5" max="100" value="55" style="width:110px"> ' +
+    '<span style="color:#6b7785">· Shift-drag to align</span>' +
+    '<span style="width:100%;height:0"></span>' +   // line break
+    '<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input id="cadMarks" type="checkbox" checked>' +
+    '<span style="width:12px;height:12px;background:#12c2b0;border:1px solid #067d70;display:inline-block;border-radius:2px"></span> highlight your stations</span>' +
+    '<span style="color:#6b7785">opacity</span><input id="cadMarksOpac" type="range" min="10" max="100" value="42" style="width:90px">';
   document.body.appendChild(box);
   box.querySelector('#cadOpac').oninput = e => { if (cadOverlay) cadOverlay.mat.opacity = (+e.target.value) / 100; };
+  box.querySelector('#cadMarks').onchange = e => { myMarksOn = e.target.checked; rebuildMyMarks(); };
+  box.querySelector('#cadMarksOpac').oninput = e => { MY_MARK_FILL.opacity = (+e.target.value) / 100; };
 })();
 // label visibility: 0 = off, 1 = names only (compact), 2 = full cards
 let labelMode = 1;
