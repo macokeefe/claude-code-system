@@ -62,46 +62,55 @@ const bx = (w, h, d, mat) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w,
 const cyl = (r, h, mat) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 10), mat); m.castShadow = true; return m; };
 const rail = (len, mat = MAT.cherry) => bx(len, 0.1, 0.1, mat);
 
+// shrink a font size until the text fits a given pixel width (keeps long titles readable instead of colliding)
+function fitFont(x, text, weight, startPx, maxW, minPx = 34) {
+  let px = startPx;
+  for (; px > minPx; px -= 2) { x.font = weight + ' ' + px + 'px Arial, sans-serif'; if (x.measureText(text).width <= maxW) break; }
+  return px;
+}
+function crispTex(c) {   // sharper, truer label textures: sRGB + max anisotropy, exempt from tone mapping via the material
+  const tex = new THREE.CanvasTexture(c); tex.anisotropy = 16; tex.colorSpace = THREE.SRGBColorSpace; return tex;
+}
 function makeStationLabel(title, sub, timeStr, accent = '#1d3a66') {
   const W = 900, H = 250;
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const x = c.getContext('2d');
-  x.fillStyle = 'rgba(10,16,26,0.18)'; x.beginPath(); x.roundRect(14, 18, W - 22, H - 24, 22); x.fill();
-  x.fillStyle = '#ffffff'; x.beginPath(); x.roundRect(8, 8, W - 26, H - 28, 22); x.fill();
-  x.fillStyle = accent; x.beginPath(); x.roundRect(8, 8, W - 26, 92, 22); x.fill();
-  x.fillStyle = accent; x.fillRect(8, 62, W - 26, 38);
-  x.fillStyle = '#ffffff'; x.font = '900 56px Arial, sans-serif'; x.textAlign = 'left';
-  x.fillText(title, 34, 74);
-  x.textAlign = 'right'; x.font = '800 50px Arial, sans-serif';
-  x.fillText(timeStr, W - 40, 72);
-  x.textAlign = 'left'; x.fillStyle = '#10151d'; x.font = '700 52px Arial, sans-serif';
-  x.fillText(sub, 36, 178);
-  const tex = new THREE.CanvasTexture(c); tex.anisotropy = 8;
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-  sp.scale.set(3.5, 0.95, 1); sp.renderOrder = 999;
-  sp.userData.redraw = (timeStr2, accent2) => {
-    x.clearRect(0,0,W,H);
+  const draw = (timeStr2, accent2) => {
+    x.clearRect(0, 0, W, H);
     x.fillStyle = 'rgba(10,16,26,0.18)'; x.beginPath(); x.roundRect(14, 18, W - 22, H - 24, 22); x.fill();
     x.fillStyle = '#ffffff'; x.beginPath(); x.roundRect(8, 8, W - 26, H - 28, 22); x.fill();
-    x.fillStyle = accent2||accent; x.beginPath(); x.roundRect(8, 8, W - 26, 92, 22); x.fill();
-    x.fillStyle = accent2||accent; x.fillRect(8, 62, W - 26, 38);
-    x.fillStyle = '#ffffff'; x.font = '900 56px Arial, sans-serif'; x.textAlign = 'left';
-    x.fillText(title, 34, 74);
-    x.textAlign = 'right'; x.font = '800 50px Arial, sans-serif'; x.fillText(timeStr2, W - 40, 72);
-    x.textAlign = 'left'; x.fillStyle = '#10151d'; x.font = '700 52px Arial, sans-serif'; x.fillText(sub, 36, 178);
-    tex.needsUpdate = true;
+    x.fillStyle = accent2 || accent; x.beginPath(); x.roundRect(8, 8, W - 26, 96, 22); x.fill();
+    x.fillStyle = accent2 || accent; x.fillRect(8, 62, W - 26, 42);
+    x.textBaseline = 'middle';
+    x.font = '800 54px Arial, sans-serif';
+    const timeW = x.measureText(timeStr2).width;
+    x.textAlign = 'left'; x.fillStyle = '#ffffff';
+    fitFont(x, title, '900', 62, W - 90 - timeW);            // title shrinks instead of running into the time
+    x.fillText(title, 34, 58);
+    x.textAlign = 'right'; x.font = '800 54px Arial, sans-serif';
+    x.fillText(timeStr2, W - 40, 58);
+    x.textAlign = 'left'; x.fillStyle = '#10151d';
+    fitFont(x, sub, '700', 58, W - 90);
+    x.fillText(sub, 36, 172);
+    x.textBaseline = 'alphabetic';
   };
+  draw(timeStr, accent);
+  const tex = crispTex(c);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, toneMapped: false }));
+  sp.scale.set(3.7, 1.0, 1); sp.renderOrder = 999;
+  sp.userData.redraw = (timeStr2, accent2) => { draw(timeStr2, accent2); tex.needsUpdate = true; };
   return sp;
 }
 
 function makeMiniLabel(title, accent) {
   const c = document.createElement('canvas'); c.width = 480; c.height = 96; const x = c.getContext('2d');
-  x.fillStyle = accent || '#1d3a66'; x.beginPath(); x.roundRect(8, 22, 464, 52, 16); x.fill();
-  x.fillStyle = '#ffffff'; x.font = '700 38px Arial'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillStyle = accent || '#1d3a66'; x.beginPath(); x.roundRect(8, 18, 464, 60, 16); x.fill();
+  x.fillStyle = '#ffffff'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  fitFont(x, title, '800', 46, 436);                          // long station names shrink to fit instead of clipping
   x.fillText(title, 240, 49);
-  const tex = new THREE.CanvasTexture(c); tex.anisotropy = 8;
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-  sp.scale.set(2.4, 0.48, 1); sp.renderOrder = 999;
+  const tex = crispTex(c);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, toneMapped: false }));
+  sp.scale.set(2.6, 0.52, 1); sp.renderOrder = 999;
   return sp;
 }
 function makeNameTag(name, colorHex) {
@@ -110,11 +119,13 @@ function makeNameTag(name, colorHex) {
   x.fillStyle = '#ffffff'; x.beginPath(); x.roundRect(0, 0, 320, 92, 28); x.fill();
   x.fillStyle = '#' + colorHex.toString(16).padStart(6, '0');
   x.beginPath(); x.roundRect(0, 0, 18, 92, { tl: 28, bl: 28, tr: 0, br: 0 }); x.fill();
-  x.fillStyle = '#1a2230'; x.font = '800 40px Arial, sans-serif'; x.textAlign = 'center';
-  x.fillText(String(name).slice(0, 14), 168, 58);
-  const tex = new THREE.CanvasTexture(c); tex.anisotropy = 4;
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, opacity: 0.96 }));
-  sp.scale.set(1.25, 0.36, 1); sp.renderOrder = 998;
+  x.fillStyle = '#1a2230'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  const nm = String(name).slice(0, 14);
+  fitFont(x, nm, '800', 46, 280);
+  x.fillText(nm, 168, 48);
+  const tex = crispTex(c);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, opacity: 0.97, toneMapped: false }));
+  sp.scale.set(1.32, 0.38, 1); sp.renderOrder = 998;
   return sp;
 }
 
@@ -730,9 +741,12 @@ function aPad(g, w, d, color) {   // neutral marked-off zone (no colors) — a l
 }
 function aLabel(g, text, w) {
   const c = document.createElement('canvas'); c.width = 512; c.height = 110; const x = c.getContext('2d');
-  x.fillStyle = '#12203a'; x.font = '700 46px Arial'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, 256, 58);
-  const t = new THREE.CanvasTexture(c); t.anisotropy = 4;
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 110 / 512), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false }));
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  fitFont(x, text, '800', 54, 490);
+  x.lineWidth = 10; x.strokeStyle = 'rgba(255,255,255,0.85)'; x.strokeText(text, 256, 58);   // white halo so it reads on the grey floor
+  x.fillStyle = '#0e1a2c'; x.fillText(text, 256, 58);
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 16; t.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 110 / 512), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, toneMapped: false }));
   m.rotation.x = -Math.PI / 2; m.position.y = AY + 0.07; g.add(m);
 }
 function aPallet(g, x, z) {                                  // standard 48" x 40" pallet + load
@@ -1324,8 +1338,10 @@ function refreshBoxZone() {
   const edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(w, d)), new THREE.LineDashedMaterial({ color: 0x5a6672, dashSize: 0.4, gapSize: 0.25 }));
   edge.rotation.x = -Math.PI / 2; edge.position.set(x, 0.06, z); edge.computeLineDistances(); boxZoneG.add(edge);
   const c = document.createElement('canvas'); c.width = 512; c.height = 110; const g2 = c.getContext('2d');
-  g2.fillStyle = '#4a5560'; g2.font = '700 44px Arial'; g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillText('BOX STORAGE', 256, 58);
-  const t = new THREE.CanvasTexture(c);
+  g2.font = '800 50px Arial'; g2.textAlign = 'center'; g2.textBaseline = 'middle';
+  g2.lineWidth = 10; g2.strokeStyle = 'rgba(255,255,255,0.85)'; g2.strokeText('BOX STORAGE', 256, 58);
+  g2.fillStyle = '#37414c'; g2.fillText('BOX STORAGE', 256, 58);
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 16; t.colorSpace = THREE.SRGBColorSpace;
   const lbl = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(w * 0.9, 4.4), Math.min(w * 0.9, 4.4) * 110 / 512), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false }));
   lbl.rotation.x = -Math.PI / 2; lbl.position.set(x, 0.07, z); boxZoneG.add(lbl);
   boxZoneHandle = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.1, 0.55), new THREE.MeshStandardMaterial({ color: 0xc0552c, roughness: 0.5 }));
