@@ -1098,7 +1098,7 @@ const ui = {
   labor: document.getElementById('labor'),
 };
 let T = 0, playing = false;
-let Ts = 0, solaSched = null, solaHorizon = 0, playScope = 'both';   // Sola has its own clock so the lines can run together or separately
+let Ts = 0, solaSched = null, solaScheds = [], solaHorizon = 0, playScope = 'both';   // Sola has its own clock so the lines can run together or separately; solaScheds = one schedule per independent added line (Sola, Canyon Crew, …)
 const playBtn = document.getElementById('play');
 function setPlay(v){ playing=v; playBtn.textContent = v ? '❚❚ Pause' : '▶ Play'; }
 playBtn.onclick = () => { if (playScope !== 'sola' && T >= horizon) T = 0; if (playScope !== 'meritage' && Ts >= solaHorizon) Ts = 0; setPlay(!playing); };
@@ -1284,32 +1284,64 @@ function orderedSola() {
   byX(ids).forEach(id => { if (!seen.has(id)) out.push(id); });   // any leftovers (cycles)
   return out;
 }
-function buildSolaSched() {
-  const ids = orderedSola();
+// Split the added ('other') stations into INDEPENDENT flow lines — the connected
+// components of the flow graph — so Sola and Canyon Crew each run and animate as
+// their OWN line instead of one giant serial chain. Each component is returned in
+// flow (topological) order; components are sorted left-to-right by their first
+// station, so Sola comes before Canyon. Stale flow entries pointing at deleted
+// stations (e.g. old c1..c4) are simply ignored — no layout mutation needed.
+function solaComponents() {
+  const ids = extraStations.filter(id => nodes[id] && sideOf(nodes[id].x) === 'other');
+  if (!ids.length) return [];
+  const set = new Set(ids);
+  const byX = arr => arr.slice().sort((a, b) => nodes[a].x - nodes[b].x);
+  const edges = flowArrows.filter(a => set.has(a.from) && set.has(a.to) && a.from !== a.to);
+  const parent = {}; ids.forEach(id => parent[id] = id);
+  const find = x => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+  edges.forEach(e => { parent[find(e.from)] = find(e.to); });   // union-find: group by connectivity
+  const groups = {}; ids.forEach(id => { const r = find(id); (groups[r] = groups[r] || []).push(id); });
+  const topo = g => {                                           // order one group by its own flow arrows
+    const gs = new Set(g), ge = edges.filter(e => gs.has(e.from) && gs.has(e.to));
+    if (!ge.length) return byX(g);
+    const indeg = {}, adj = {}; g.forEach(id => { indeg[id] = 0; adj[id] = []; });
+    ge.forEach(e => { adj[e.from].push(e.to); indeg[e.to]++; });
+    let q = byX(g.filter(id => indeg[id] === 0)); const out = [], seen = new Set();
+    while (q.length) { const n = q.shift(); if (seen.has(n)) continue; seen.add(n); out.push(n); adj[n].forEach(m => { if (--indeg[m] <= 0 && !seen.has(m)) q.push(m); }); q = byX(q); }
+    byX(g).forEach(id => { if (!seen.has(id)) out.push(id); });
+    return out;
+  };
+  return Object.values(groups).map(topo).sort((A, B) => nodes[A[0]].x - nodes[B[0]].x);
+}
+function schedOne(ids) {   // classic flow-shop schedule for ONE independent line
   const time = ids.map(id => effNet(id));   // per-unit time, reduced by any help arrows pointing INTO this station
   const finish = ids.map(() => []);
   for (let u = 0; u < N; u++) for (let k = 0; k < ids.length; k++) {
     const pk = k > 0 ? finish[k - 1][u] : 0, pu = u > 0 ? finish[k][u - 1] : 0;
     finish[k][u] = Math.max(pk, pu) + time[k];
   }
-  solaSched = { ids, time, finish, N };
-  solaHorizon = ids.length ? ((finish[ids.length - 1][N - 1] || 0) + 4) : 0;
+  return { ids, time, finish, N };
+}
+function buildSolaSched() {
+  solaScheds = solaComponents().map(schedOne);         // one schedule per independent added line
+  solaSched = solaScheds[0] || null;                   // kept for any legacy reference
+  solaHorizon = solaScheds.reduce((h, sc) => Math.max(h, sc.ids.length ? ((sc.finish[sc.ids.length - 1][N - 1] || 0) + 4) : 0), 0);
   buildSolaTravel();
 }
-// traveling parts between consecutive Sola stations + a ship pile at the end
+// traveling parts between consecutive stations of each line + a ship pile at the end
 const solaTravelGroup = new THREE.Group(); level2.add(solaTravelGroup);
-let solaTravel = [];
+let solaTravel = [];   // solaTravel[componentIndex][gapIndex] = pool of part meshes
 function buildSolaTravel() {
   while (solaTravelGroup.children.length) solaTravelGroup.remove(solaTravelGroup.children[0]);
-  solaTravel = [];
-  if (!solaSched) return;
-  const { ids } = solaSched;
-  for (let k = 0; k < ids.length - 1; k++) {
-    const kind = nodes[ids[k]] && nodes[ids[k]].kind || 'connectors';
-    const arr = [];
-    for (let u = 0; u < MAX_UNITS; u++) { const p = buildSub(kind); p.scale.set(0.5, 0.5, 0.5); p.visible = false; solaTravelGroup.add(p); arr.push(p); }
-    solaTravel.push(arr);
-  }
+  solaTravel = solaScheds.map(sc => {
+    const gaps = [];
+    for (let k = 0; k < sc.ids.length - 1; k++) {
+      const kind = nodes[sc.ids[k]] && nodes[sc.ids[k]].kind || 'connectors';
+      const arr = [];
+      for (let u = 0; u < MAX_UNITS; u++) { const p = buildSub(kind); p.scale.set(0.5, 0.5, 0.5); p.visible = false; solaTravelGroup.add(p); arr.push(p); }
+      gaps.push(arr);
+    }
+    return gaps;
+  });
 }
 // Sola's shipped boxes stack just south of the Meritage stack in the same storage slice
 const solaShipBoxes = [];
@@ -1359,44 +1391,48 @@ function refreshBoxZone() {
 refreshBoxZone();
 const SOLA_TRAVEL = 3;            // sim-min a part spends moving to the next station
 function solaUpdate() {
-  if (!solaSched) { solaShipBoxes.forEach(b => b.visible = false); return; }
-  const { ids, time, finish, N: sn } = solaSched; if (!ids.length) { solaShipBoxes.forEach(b => b.visible = false); return; }
-  let shipped = 0; for (let u = 0; u < sn; u++) if (Ts >= finish[ids.length - 1][u]) shipped++;
-  // each station: LED + WIP part growing while it works; operators bob while active
-  ids.forEach((id, k) => {
-    const nd = nodes[id]; if (!nd) return;
-    let active = false, allDone = true, frac = 0;
-    if (Ts > 0) for (let u = 0; u < sn; u++) { const f = finish[k][u], st = f - time[k]; if (Ts >= st && Ts < f) { active = true; frac = (Ts - st) / time[k]; } if (Ts < f) allDone = false; }
-    setLed(nd.led, Ts <= 0 ? 'idle' : (active ? 'active' : (allDone ? 'done' : 'idle')), active);
-    if (nd.visual) nd.visual.update(active ? frac : 0, 0, sn);
-    // operators move like the Meritage crew: walk to the materials cart at the
-    // start of each unit (parts fetch), walk to their help target during idle,
-    // otherwise work at the bench with a gentle sway — all smooth-lerped.
-    crew.forEach(c => {
-      if (c.station !== id) return;
-      let tx = c.homeX, tz = c.homeZ;
-      const fetching = active && frac < 0.14 && nodes.cart2;
-      if (fetching) { tx = nodes.cart2.x + (c.idx - 0.5) * 1.1; tz = nodes.cart2.z + 1.35; }
-      else if (!active && !allDone && Ts > 0 && c.helpTo && (c.helpMin || 0) > 0 && nodes[c.helpTo]) { tx = nodes[c.helpTo].x + 0.7; tz = nodes[c.helpTo].z + 1.7; }
-      c.fig.position.x += (tx - c.fig.position.x) * 0.08;
-      c.fig.position.z += (tz - c.fig.position.z) * 0.08;
-      c.fig.rotation.y = (active && !fetching) ? Math.sin(Ts * 3 + c.idx) * 0.2 : 0;
+  if (!solaScheds.length) { solaShipBoxes.forEach(b => b.visible = false); const el0 = document.getElementById('solaShip'); if (el0) el0.textContent = 0; return; }
+  let shipped = 0;
+  solaScheds.forEach((sc, ci) => {                 // each independent added line (Sola, Canyon Crew, …) on the shared Ts clock
+    const { ids, time, finish, N: sn } = sc; if (!ids.length) return;
+    for (let u = 0; u < sn; u++) if (Ts >= finish[ids.length - 1][u]) shipped++;
+    // each station: LED + WIP part growing while it works; operators bob while active
+    ids.forEach((id, k) => {
+      const nd = nodes[id]; if (!nd) return;
+      let active = false, allDone = true, frac = 0;
+      if (Ts > 0) for (let u = 0; u < sn; u++) { const f = finish[k][u], st = f - time[k]; if (Ts >= st && Ts < f) { active = true; frac = (Ts - st) / time[k]; } if (Ts < f) allDone = false; }
+      setLed(nd.led, Ts <= 0 ? 'idle' : (active ? 'active' : (allDone ? 'done' : 'idle')), active);
+      if (nd.visual) nd.visual.update(active ? frac : 0, 0, sn);
+      // operators move like the Meritage crew: walk to the materials cart at the
+      // start of each unit (parts fetch), walk to their help target during idle,
+      // otherwise work at the bench with a gentle sway — all smooth-lerped.
+      crew.forEach(c => {
+        if (c.station !== id) return;
+        let tx = c.homeX, tz = c.homeZ;
+        const fetching = active && frac < 0.14 && nodes.cart2;
+        if (fetching) { tx = nodes.cart2.x + (c.idx - 0.5) * 1.1; tz = nodes.cart2.z + 1.35; }
+        else if (!active && !allDone && Ts > 0 && c.helpTo && (c.helpMin || 0) > 0 && nodes[c.helpTo]) { tx = nodes[c.helpTo].x + 0.7; tz = nodes[c.helpTo].z + 1.7; }
+        c.fig.position.x += (tx - c.fig.position.x) * 0.08;
+        c.fig.position.z += (tz - c.fig.position.z) * 0.08;
+        c.fig.rotation.y = (active && !fetching) ? Math.sin(Ts * 3 + c.idx) * 0.2 : 0;
+      });
     });
-  });
-  // parts traveling station -> next station
-  for (let k = 0; k < ids.length - 1; k++) {
-    const pool = solaTravel[k]; if (!pool) continue;
-    const A = nodes[ids[k]], B = nodes[ids[k + 1]]; if (!A || !B) continue;
-    for (let u = 0; u < sn; u++) {
-      const part = pool[u]; if (!part) continue;
-      const depart = finish[k][u], cons = finish[k + 1][u] - time[k + 1];
-      if (Ts <= 0 || depart >= cons || Ts < depart || Ts >= cons) { part.visible = false; continue; }
-      const arrive = Math.min(depart + SOLA_TRAVEL, cons);
-      part.visible = true;
-      if (Ts < arrive) { const fr = (arrive > depart) ? (Ts - depart) / (arrive - depart) : 1; part.position.set(A.x + (B.x - A.x) * fr, 1.04 + Math.sin(fr * Math.PI) * 0.4, A.z + (B.z - A.z) * fr); }
-      else part.position.set(B.x, 1.04, B.z);
+    // parts traveling station -> next station (within THIS line only — no cross-floor jumps)
+    const pools = solaTravel[ci] || [];
+    for (let k = 0; k < ids.length - 1; k++) {
+      const pool = pools[k]; if (!pool) continue;
+      const A = nodes[ids[k]], B = nodes[ids[k + 1]]; if (!A || !B) continue;
+      for (let u = 0; u < sn; u++) {
+        const part = pool[u]; if (!part) continue;
+        const depart = finish[k][u], cons = finish[k + 1][u] - time[k + 1];
+        if (Ts <= 0 || depart >= cons || Ts < depart || Ts >= cons) { part.visible = false; continue; }
+        const arrive = Math.min(depart + SOLA_TRAVEL, cons);
+        part.visible = true;
+        if (Ts < arrive) { const fr = (arrive > depart) ? (Ts - depart) / (arrive - depart) : 1; part.position.set(A.x + (B.x - A.x) * fr, 1.04 + Math.sin(fr * Math.PI) * 0.4, A.z + (B.z - A.z) * fr); }
+        else part.position.set(B.x, 1.04, B.z);
+      }
     }
-  }
+  });
   solaShipBoxes.forEach((b, i) => b.visible = Ts > 0 && i < shipped);   // finished boxes populate the storage stack
   const el = document.getElementById('solaShip'); if (el) el.textContent = shipped;
 }

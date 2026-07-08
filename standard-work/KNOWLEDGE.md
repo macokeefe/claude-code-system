@@ -445,6 +445,18 @@ sub-assemblies → Full Assembly → Pack; Sola = numbered single-piece flow via
 steps with times, and the help paths. Uses the live `effNet`/`helpInto`/
 `bottleneckInfo` so numbers match the app. Print → Save as PDF to share.
 
+**Independent added lines / Canyon animation (2026-07):** the added ('other')
+stations no longer run as one serial flow-shop. `solaComponents()` splits them
+into connected components of the flow graph (union-find, then per-group topo
+order, sorted L→R by first-station x), and `buildSolaSched()` builds ONE
+schedule per component into `solaScheds` (Sola, Canyon Crew, …). `buildSolaTravel`
++ `solaUpdate` iterate `solaScheds`, so each line animates on the shared `Ts`
+clock with its own LED wave / operators / traveling parts — no cross-floor jump
+from Sola's last station to Canyon's first. Stale flow edges pointing at deleted
+stations (e.g. legacy `c1..c4`) are filtered out (both endpoints must be live),
+so NO layout mutation is needed to fix an old saved layout. `solaSched` kept as
+`solaScheds[0]` for legacy refs; `orderedSola()` now dead but left in place.
+
 **Undo (2026-07):** `saveLayout()` pushes the previous `__workingLayout` onto
 `undoStack` (cap 50) whenever the JSON differs — since every mutation already
 calls `saveLayout`, undo needs no per-action hooks. `undoLayout()` (↩ Undo
