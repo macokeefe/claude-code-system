@@ -283,6 +283,16 @@ overlay toggle, station drag (pointermove), and add/delete. `#cadBox` has a
 and see just the CAD, plus a separate opacity slider for the marks
 (`MY_MARK_FILL.opacity`) — independent of the CAD-plan opacity slider.
 
+HARD RULE — NEVER MUTATE LOADED LAYOUTS, ABSOLUTE (2026-07, learned THREE
+times): (1) a migration deleted the engineer's Sola line; (2) additive
+seeding polluted layouts and saves; (3) an id-heuristic "clone cleanup"
+(remove s-ids, keep x-ids) deleted the engineer's REDESIGNED line — they had
+rebuilt their design on the restored s-id stations, so the heuristic was
+exactly backwards. NO automated edit of user layout data is ever safe. Not
+migrations, not seeds, not cleanups, not "provably safe" ones. Loaded
+layouts are read-only truth; only the user edits them. Defaults appear only
+on a completely virgin open (no layout anywhere).
+
 HARD RULE — NEVER MUTATE LOADED LAYOUTS (2026-07, learned TWICE): the canyon
 "migration" deleted the engineer's Sola stations; then additive seeding
 polluted layouts and saves with seeded stations, and the engineer reported

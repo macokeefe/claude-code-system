@@ -2289,37 +2289,16 @@ function seedLine(defs, idPrefix) {   // additive: only adds stations that don't
   buildFlow(); if (typeof buildSolaSched === 'function') buildSolaSched();
   renderTimes();
 }
-// Duplicate-Sola cleanup, explicitly requested by the engineer ("only 1, 2 and
-// 4 are supposed to be there"): earlier bad builds injected a CLONE of the
-// Sola line (ids s1..s5 with the seeded names) next to the real one. The
-// engineer said "just remove it" — so any station with a bad-build machine
-// id (s1..s5, an id ONLY those builds ever created; user stations get x-ids
-// and the virgin defaults now use sl-ids) carrying a seeded name is removed,
-// no prompt, on every load path.
-function removeSolaClones() {
-  const SEED_NAMES = SOLA_LINE.map(s => s.name);
-  const dup = extraStations.filter(id => /^s\d+$/.test(id) && SEED_NAMES.includes(nodes[id].s.title));
-  dup.forEach(id => {
-    for (let i = crew.length - 1; i >= 0; i--) if (crew[i].station === id) { level2.remove(crew[i].fig); crew.splice(i, 1); }
-    const nd = nodes[id];
-    [nd.st, nd.label, nd.mini, nd.visual && nd.visual.g].forEach(o => { if (o) level2.remove(o); });
-    const ix = extraStations.indexOf(id); if (ix >= 0) extraStations.splice(ix, 1);
-    delete nodes[id]; delete POS[id];
-  });
-  if (dup.length) { flowArrows = flowArrows.filter(a => nodes[a.from] && nodes[a.to]); buildFlow(); if (typeof buildSolaSched === 'function') buildSolaSched(); renderTimes(); }
-  return dup.length;
-}
-// HARD RULE (learned twice, the hard way): the app NEVER mutates a loaded
-// layout — no seeding into it, no upgrades, no deletions. The ONLY exception
-// is removeSolaClones above, an explicit engineer-ordered cleanup of the bad
-// builds' own injected stations. The default Sola + Canyon lines appear ONLY
-// on a completely virgin open (note: virgin Sola defaults use sl-ids so the
-// clone cleanup can never touch them).
+// HARD RULE — ABSOLUTE, NO EXCEPTIONS (learned three times): the app NEVER
+// mutates a loaded layout. No seeding into it, no upgrades, no "cleanups",
+// no deletions — even ones that look provably safe. An automated cleanup
+// deleted the engineer's redesigned line because the id-based "clone"
+// heuristic was backwards. Loaded layouts are read-only truth; the user
+// edits them, nobody else. Defaults appear ONLY on a completely virgin open.
 if (!hadSavedLayout && !extraStations.length) {
   seedLine(CANYON_LINE, 'c');
   seedLine(SOLA_LINE, 'sl');
 }
-try { if (hadSavedLayout && removeSolaClones()) saveLayout(); } catch (e) {}
 __workingLayout = buildWorkingLayout();   // baseline so the FIRST edit is undoable (saveLayout skips the push while this is empty)
 try { schedule(); } catch (e) { console.error('schedule failed', e); }   // set labor/cycle/readouts FIRST so a bad saved layout can't leave them stuck on the placeholder
 try { renderTimes(); renderSolaData(); } catch (e) { console.error('panel render failed', e); }
@@ -2435,7 +2414,6 @@ function applyLayout(L) {
   if (Array.isArray(L.extras)) { clearExtras(); restoreExtras(L.extras); restoreFlow(L.flow); }   // rebuild the Sola side from this layout
   if (Array.isArray(L.areas)) restoreAreas(L.areas);                                                // rebuild the surrounding areas
   if (Array.isArray(L.boxZone)) { boxZone = { x: L.boxZone[0], z: L.boxZone[1], w: L.boxZone[2], d: L.boxZone[3] }; refreshBoxZone(); }
-  if (typeof removeSolaClones === 'function') removeSolaClones();   // engineer-ordered: strip the bad builds' injected Sola clones from loaded layouts
   renderTimes();
   schedule(); T = 0; setPlay(false); saveLayout();
 }
@@ -2506,7 +2484,6 @@ importFile.onchange = e => {
     try { if (Object.keys(__workingLayout).length) { undoStack.push(__workingLayout); refreshUndoBtn(); } } catch (err) {}   // undo point before the import
     clearExtras();                                          // drop the current Sola side, then apply the imported one
     applyWorkingLayout(o);                                  // apply to the LIVE scene — no reload, works even if storage is blocked
-    if (typeof removeSolaClones === 'function') removeSolaClones();   // engineer-ordered duplicate cleanup
     __workingLayout = buildWorkingLayout(); try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(__workingLayout)); } catch (e) {}
     renderTimes(); schedule(); if (typeof buildSolaSched === 'function') buildSolaSched(); T = 0; setPlay(false);
     alert('Layout imported.');
