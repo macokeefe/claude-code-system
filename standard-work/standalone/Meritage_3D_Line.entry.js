@@ -2260,17 +2260,40 @@ const CANYON_LINE = [
 ];
 function seedCanyonLine() {
   CANYON_LINE.forEach((s, i) => {
-    const id = 'x' + (i + 1);
+    const id = 'c' + (i + 1);                                 // c-ids so they never collide with user-added x-ids
+    if (nodes[id]) return;
     addStation(s.name, s.x, s.z, id, 0);
     nodes[id].s.steps = s.steps.map(a => ({ name: a[0], t: a[1] }));
     recalcAny(id);
   });
   extraSeq = Math.max(extraSeq, CANYON_LINE.length);
-  flowArrows = CANYON_LINE.slice(0, -1).map((_, i) => ({ from: 'x' + (i + 1), to: 'x' + (i + 2) }));
+  flowArrows = [
+    ...flowArrows.filter(a => nodes[a.from] && nodes[a.to]),  // keep the user's arrows among surviving stations
+    ...CANYON_LINE.slice(0, -1).map((_, i) => ({ from: 'c' + (i + 1), to: 'c' + (i + 2) })),
+  ];
   buildFlow(); if (typeof buildSolaSched === 'function') buildSolaSched();
   renderTimes();
 }
-if (!extraStations.length) seedCanyonLine();
+// one-time upgrade for layouts saved before Canyon Crew existed: the OLD
+// right-side line ("Rivet Nuts…", "Frame", "trellis", "final installation",
+// "cushions…") is replaced by the balanced Canyon stations. Any other
+// user-added stations (custom tables etc.) are kept untouched, and layouts
+// that already have Canyon stations are left exactly as saved.
+function migrateToCanyon() {
+  if (extraStations.some(id => /^canyon /i.test(nodes[id].s.title))) return;
+  const OLD = /^(rivet nuts|frame|trellis|final installation|cushions)\b/i;
+  const victims = extraStations.filter(id => sideOf(nodes[id].x) === 'other' && OLD.test((nodes[id].s.title || '').trim()));
+  if (!victims.length) return;                                // custom right-side line — respect it
+  victims.forEach(id => {
+    for (let i = crew.length - 1; i >= 0; i--) if (crew[i].station === id) { level2.remove(crew[i].fig); crew.splice(i, 1); }
+    const nd = nodes[id];
+    [nd.st, nd.label, nd.mini, nd.visual && nd.visual.g].forEach(o => { if (o) level2.remove(o); });
+    const ix = extraStations.indexOf(id); if (ix >= 0) extraStations.splice(ix, 1);
+    delete nodes[id]; delete POS[id];
+  });
+  seedCanyonLine();
+}
+if (!extraStations.length) seedCanyonLine(); else migrateToCanyon();
 __workingLayout = buildWorkingLayout();   // baseline so the FIRST edit is undoable (saveLayout skips the push while this is empty)
 try { schedule(); } catch (e) { console.error('schedule failed', e); }   // set labor/cycle/readouts FIRST so a bad saved layout can't leave them stuck on the placeholder
 try { renderTimes(); renderSolaData(); } catch (e) { console.error('panel render failed', e); }
