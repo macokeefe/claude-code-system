@@ -1247,20 +1247,24 @@ applyLabels();
 // ---- live per-line DATA: Meritage (left, via schedule) + Sola (right). Both
 // lines are always shown; each panel shows that line's totals independently. ----
 function renderSolaData() {
-  const ids = extraStations.filter(id => sideOf(nodes[id].x) === 'other');
-  let labor = 0, cyc = 0, bot = '—';
-  ids.forEach(id => {
-    const s = nodes[id].s, per = effNet(id);   // per-unit time AFTER any help arrows into this station
-    labor += (s.t || 0);
-    if (per > cyc) { cyc = per; bot = s.title; }
-  });
-  const cap = cyc > 0 ? 420 / cyc : 0;
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-  set('solaLabor', labor.toFixed(1));
-  set('solaCyc', cyc > 0 ? cyc.toFixed(1).replace(/\.0$/, '') : '—');
-  set('solaCap', cap > 0 ? cap.toFixed(1) : '—');
-  set('solaBot', cyc > 0 ? `${bot} (${cyc.toFixed(1).replace(/\.0$/, '')})` : '— none yet —');
-  set('solaCount', ids.length);
+  const fill = (sec, pfx) => {   // Sola and Canyon Crew are separate lines — each its own KPI card
+    const ids = extraStations.filter(id => sectionOf(nodes[id].x) === sec);
+    let labor = 0, cyc = 0, bot = '—';
+    ids.forEach(id => {
+      const s = nodes[id].s, per = effNet(id);   // per-unit time AFTER any help arrows into this station
+      labor += (s.t || 0);
+      if (per > cyc) { cyc = per; bot = s.title; }
+    });
+    const cap = cyc > 0 ? 420 / cyc : 0;
+    set(pfx + 'Labor', labor.toFixed(1));
+    set(pfx + 'Cyc', cyc > 0 ? cyc.toFixed(1).replace(/\.0$/, '') : '—');
+    set(pfx + 'Cap', cap > 0 ? cap.toFixed(1) : '—');
+    set(pfx + 'Bot', cyc > 0 ? `${bot} (${cyc.toFixed(1).replace(/\.0$/, '')})` : '— none yet —');
+    set(pfx + 'Count', ids.length);
+  };
+  fill('sola', 'sola');
+  fill('canyon', 'canyon');
   buildSolaSched();
 }
 // Sola flow-shop simulation (its own clock Ts): units flow through the Sola
@@ -1392,10 +1396,12 @@ refreshBoxZone();
 const SOLA_TRAVEL = 3;            // sim-min a part spends moving to the next station
 function solaUpdate() {
   if (!solaScheds.length) { solaShipBoxes.forEach(b => b.visible = false); const el0 = document.getElementById('solaShip'); if (el0) el0.textContent = 0; return; }
-  let shipped = 0;
+  let shipped = 0; const shipSec = { sola: 0, canyon: 0 };
   solaScheds.forEach((sc, ci) => {                 // each independent added line (Sola, Canyon Crew, …) on the shared Ts clock
     const { ids, time, finish, N: sn } = sc; if (!ids.length) return;
-    for (let u = 0; u < sn; u++) if (Ts >= finish[ids.length - 1][u]) shipped++;
+    const sec = sectionOf(nodes[ids[0]].x);
+    let done = 0; for (let u = 0; u < sn; u++) if (Ts >= finish[ids.length - 1][u]) done++;
+    shipped += done; if (shipSec[sec] != null) shipSec[sec] += done;
     // each station: LED + WIP part growing while it works; operators bob while active
     ids.forEach((id, k) => {
       const nd = nodes[id]; if (!nd) return;
@@ -1434,7 +1440,8 @@ function solaUpdate() {
     }
   });
   solaShipBoxes.forEach((b, i) => b.visible = Ts > 0 && i < shipped);   // finished boxes populate the storage stack
-  const el = document.getElementById('solaShip'); if (el) el.textContent = shipped;
+  const el = document.getElementById('solaShip'); if (el) el.textContent = shipSec.sola;
+  const elc = document.getElementById('canyonShip'); if (elc) elc.textContent = shipSec.canyon;
 }
 
 // build editable time rows
@@ -1678,7 +1685,8 @@ let chartLine = 'meritage';   // which line the Idle / Task / Help panels show
 function lineSel() {
   return `<select class="lineSel" style="font-size:11px;padding:2px 4px;margin:0 0 7px">
     <option value="meritage"${chartLine === 'meritage' ? ' selected' : ''}>Meritage</option>
-    <option value="sola"${chartLine === 'sola' ? ' selected' : ''}>Sola + Canyon</option></select>`;
+    <option value="sola"${chartLine === 'sola' ? ' selected' : ''}>Sola</option>
+    <option value="canyon"${chartLine === 'canyon' ? ' selected' : ''}>Canyon Crew</option></select>`;
 }
 function wireLineSel(panel) {
   const s = panel.querySelector('.lineSel');
@@ -1686,10 +1694,15 @@ function wireLineSel(panel) {
 }
 const idlePanel = document.getElementById('idlePanel');
 const FEEDNAME = { con:'Connectors', arm:'Arms', bak:'Back frame', tre:'Trellis', sea:'Seat frame' };
+// ordered station ids for ONE added line, by floor section ('sola' | 'canyon'),
+// in true flow order (reuses the sim's independent-line ordering).
+function orderedLine(sec) {
+  return solaComponents().flat().filter(id => nodes[id] && sectionOf(nodes[id].x) === sec);
+}
 function operatorsList(line) {
   const list = [];
-  if (line === 'sola') {
-    orderedSola().forEach(id => { const s = nodes[id].s, ppl = Math.max(1, s.ppl || 1), per = (s.t || 0) / ppl; for (let i = 0; i < ppl; i++) list.push({ name: s.title + (ppl > 1 ? ' ' + (i + 1) : ''), bpu: per }); });
+  if (line !== 'meritage') {   // Sola or Canyon Crew — its own set of added stations
+    orderedLine(line).forEach(id => { const s = nodes[id].s, ppl = Math.max(1, s.ppl || 1), per = (s.t || 0) / ppl; for (let i = 0; i < ppl; i++) list.push({ name: s.title + (ppl > 1 ? ' ' + (i + 1) : ''), bpu: per }); });
     return list;
   }
   for (const id of ['con','arm','bak','tre','sea']) {
@@ -1740,13 +1753,15 @@ function bottleneckInfo() {
 function isBottleneckTarget(to, bnKey) { return bnKey === 'fapak' ? (to === 'fa' || to === 'pak') : (to === bnKey); }
 function renderHelpPanel() {
   if (!helpPanel || helpPanel.style.display === 'none') return;
-  if (chartLine === 'sola') {
-    const ids = orderedSola();
-    const cyc = solaCyc();
+  if (chartLine !== 'meritage') {   // Sola or Canyon Crew — each its own line
+    const ids = orderedLine(chartLine);
+    const lname = chartLine === 'canyon' ? 'Canyon Crew' : 'Sola';
+    const cyc = ids.length ? Math.max(0.1, ...ids.map(id => effNet(id))) : 0.1;
     const bnId = ids.slice().sort((a, b) => effNet(b) - effNet(a))[0];
-    const sHead = `<h3>Help paths</h3>` + lineSel() + `<div class="ihint"><b>Right side (Sola + Canyon): ${ids.length ? (420 / Math.max(0.1, cyc)).toFixed(1) : '—'} units/day</b>${bnId ? ' · slowest: ' + stName(bnId) + ' (' + effNet(bnId).toFixed(1) + ' min)' : ''}. Click “➤ Help arrow”, then a FROM then a TO station on this side.</div>`;
-    const sHelp = helpArrows.map((a, i) => ({ a, i })).filter(({ a }) => isExtra(a.to) || isExtra(a.from));
-    if (!sHelp.length) { helpPanel.innerHTML = sHead + '<div class="ihint">No right-side help paths yet.</div>'; wireLineSel(helpPanel); return; }
+    const secSet = new Set(ids);
+    const sHead = `<h3>Help paths</h3>` + lineSel() + `<div class="ihint"><b>${lname}: ${ids.length ? (420 / Math.max(0.1, cyc)).toFixed(1) : '—'} units/day</b>${bnId ? ' · slowest: ' + stName(bnId) + ' (' + effNet(bnId).toFixed(1) + ' min)' : ''}. Click “➤ Help arrow”, then a FROM then a TO station on this line.</div>`;
+    const sHelp = helpArrows.map((a, i) => ({ a, i })).filter(({ a }) => secSet.has(a.to) || secSet.has(a.from));
+    if (!sHelp.length) { helpPanel.innerHTML = sHead + `<div class="ihint">No ${lname} help paths yet.</div>`; wireLineSel(helpPanel); return; }
     let sh = sHead;
     sHelp.forEach(({ a, i }) => {
       const spare = availIdleAny(a.from, a.fromIdx || 0) + (a.helpMin || 0);
@@ -1811,8 +1826,8 @@ const taskPanel = document.getElementById('taskPanel');
 function renderTaskChart() {
   if (!taskPanel || taskPanel.style.display === 'none') return;
   let rows, totalLabor;
-  if (chartLine === 'sola') {
-    const ids = orderedSola();
+  if (chartLine !== 'meritage') {   // Sola or Canyon Crew — each its own line
+    const ids = orderedLine(chartLine);
     rows = ids.map(id => { const s = nodes[id].s; return { title: s.title, tt: (s.t || 0) / Math.max(1, s.ppl || 1), steps: s.steps, bn: false }; });
     totalLabor = ids.reduce((a, id) => a + (nodes[id].s.t || 0), 0);
   } else {

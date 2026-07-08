@@ -457,6 +457,22 @@ stations (e.g. legacy `c1..c4`) are filtered out (both endpoints must be live),
 so NO layout mutation is needed to fix an old saved layout. `solaSched` kept as
 `solaScheds[0]` for legacy refs; `orderedSola()` now dead but left in place.
 
+**Three separate lines everywhere (2026-07):** Meritage / Sola / Canyon Crew
+are now distinct lines in every readout, matching the 3-section Edit-times
+panel. Top HUD: the single "SOLA + CANYON" strip became a `.rstack` (vertical,
+right-docked) holding a SOLA strip and a CANYON CREW strip; `renderSolaData()`
+fills both via `fill(sec,pfx)` keyed on `sectionOf` (ids `sola*` + `canyon*`),
+and `solaUpdate()` tracks per-line built counts (`solaShip`/`canyonShip`). The
+dropdown panels (Task chart / Idle / Help) `lineSel()` now offers Meritage /
+Sola / Canyon Crew; `chartLine` gained `'canyon'`; `operatorsList`,
+`renderTaskChart`, `renderHelpPanel` branch on `chartLine !== 'meritage'` and
+filter by `orderedLine(sec)` = `solaComponents().flat()` restricted to that
+section. Run/play scope still groups both right lines on the shared `Ts` clock.
+NOTE for delivery: baked user HTMLs carry the OLD single-card head, so the
+delivery splice must also transform the head (readouts block → rstack + inject
+`.rstack` CSS) or the canyon card ids won't exist and the Sola card would show
+sola-only numbers under a "SOLA + CANYON" label.
+
 **Undo (2026-07):** `saveLayout()` pushes the previous `__workingLayout` onto
 `undoStack` (cap 50) whenever the JSON differs — since every mutation already
 calls `saveLayout`, undo needs no per-action hooks. `undoLayout()` (↩ Undo
