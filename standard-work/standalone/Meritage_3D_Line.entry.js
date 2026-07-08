@@ -2291,15 +2291,14 @@ function seedLine(defs, idPrefix) {   // additive: only adds stations that don't
 }
 // Duplicate-Sola cleanup, explicitly requested by the engineer ("only 1, 2 and
 // 4 are supposed to be there"): earlier bad builds injected a CLONE of the
-// Sola line (ids s1..s5 with the exact seeded names) next to the real one.
-// A station is removed ONLY if (a) it has a machine id s1..s5, (b) its title
-// is one of the seeded names, and (c) a real station (non-s id) with the SAME
-// title exists — i.e. it is provably the duplicate. Consent is asked ONCE;
-// the answer is remembered and applies to later layout loads too.
+// Sola line (ids s1..s5 with the seeded names) next to the real one. The
+// engineer said "just remove it" — so any station with a bad-build machine
+// id (s1..s5, an id ONLY those builds ever created; user stations get x-ids
+// and the virgin defaults now use sl-ids) carrying a seeded name is removed,
+// no prompt, on every load path.
 function removeSolaClones() {
   const SEED_NAMES = SOLA_LINE.map(s => s.name);
-  const dup = extraStations.filter(id => /^s\d+$/.test(id) && SEED_NAMES.includes(nodes[id].s.title)
-    && extraStations.some(o => o !== id && !/^s\d+$/.test(o) && nodes[o].s.title === nodes[id].s.title));
+  const dup = extraStations.filter(id => /^s\d+$/.test(id) && SEED_NAMES.includes(nodes[id].s.title));
   dup.forEach(id => {
     for (let i = crew.length - 1; i >= 0; i--) if (crew[i].station === id) { level2.remove(crew[i].fig); crew.splice(i, 1); }
     const nd = nodes[id];
@@ -2310,30 +2309,17 @@ function removeSolaClones() {
   if (dup.length) { flowArrows = flowArrows.filter(a => nodes[a.from] && nodes[a.to]); buildFlow(); if (typeof buildSolaSched === 'function') buildSolaSched(); renderTimes(); }
   return dup.length;
 }
-const CLONE_FLAG = 'm3d_sola_clone_cleanup';
-function cloneCleanupWanted() { try { return localStorage.getItem(CLONE_FLAG) === 'remove'; } catch (e) { return false; } }
 // HARD RULE (learned twice, the hard way): the app NEVER mutates a loaded
-// layout — no seeding into it, no upgrades, no deletions (the clone cleanup
-// above runs only with the engineer's explicit, remembered consent). The
-// default Sola + Canyon lines appear ONLY on a completely virgin open.
+// layout — no seeding into it, no upgrades, no deletions. The ONLY exception
+// is removeSolaClones above, an explicit engineer-ordered cleanup of the bad
+// builds' own injected stations. The default Sola + Canyon lines appear ONLY
+// on a completely virgin open (note: virgin Sola defaults use sl-ids so the
+// clone cleanup can never touch them).
 if (!hadSavedLayout && !extraStations.length) {
   seedLine(CANYON_LINE, 'c');
-  seedLine(SOLA_LINE, 's');
+  seedLine(SOLA_LINE, 'sl');
 }
-try {
-  const st = localStorage.getItem(CLONE_FLAG);
-  if (st === 'remove') { if (removeSolaClones()) saveLayout(); }
-  else if (!st) {
-    const SEED_NAMES = SOLA_LINE.map(s => s.name);
-    const hasDup = extraStations.some(id => /^s\d+$/.test(id) && SEED_NAMES.includes(nodes[id].s.title)
-      && extraStations.some(o => o !== id && !/^s\d+$/.test(o) && nodes[o].s.title === nodes[id].s.title));
-    if (hasDup) {
-      const ok = confirm('An earlier version injected a DUPLICATE copy of the Sola line into this layout.\n\nRemove the duplicates now (and from any saved layout when you load it)?\nYour own stations are never touched.');
-      localStorage.setItem(CLONE_FLAG, ok ? 'remove' : 'keep');
-      if (ok && removeSolaClones()) saveLayout();
-    }
-  }
-} catch (e) {}
+try { if (hadSavedLayout && removeSolaClones()) saveLayout(); } catch (e) {}
 __workingLayout = buildWorkingLayout();   // baseline so the FIRST edit is undoable (saveLayout skips the push while this is empty)
 try { schedule(); } catch (e) { console.error('schedule failed', e); }   // set labor/cycle/readouts FIRST so a bad saved layout can't leave them stuck on the placeholder
 try { renderTimes(); renderSolaData(); } catch (e) { console.error('panel render failed', e); }
@@ -2449,7 +2435,7 @@ function applyLayout(L) {
   if (Array.isArray(L.extras)) { clearExtras(); restoreExtras(L.extras); restoreFlow(L.flow); }   // rebuild the Sola side from this layout
   if (Array.isArray(L.areas)) restoreAreas(L.areas);                                                // rebuild the surrounding areas
   if (Array.isArray(L.boxZone)) { boxZone = { x: L.boxZone[0], z: L.boxZone[1], w: L.boxZone[2], d: L.boxZone[3] }; refreshBoxZone(); }
-  if (typeof cloneCleanupWanted === 'function' && cloneCleanupWanted()) removeSolaClones();   // engineer-approved: strip duplicate Sola clones from loaded layouts
+  if (typeof removeSolaClones === 'function') removeSolaClones();   // engineer-ordered: strip the bad builds' injected Sola clones from loaded layouts
   renderTimes();
   schedule(); T = 0; setPlay(false); saveLayout();
 }
@@ -2520,7 +2506,7 @@ importFile.onchange = e => {
     try { if (Object.keys(__workingLayout).length) { undoStack.push(__workingLayout); refreshUndoBtn(); } } catch (err) {}   // undo point before the import
     clearExtras();                                          // drop the current Sola side, then apply the imported one
     applyWorkingLayout(o);                                  // apply to the LIVE scene — no reload, works even if storage is blocked
-    if (typeof cloneCleanupWanted === 'function' && cloneCleanupWanted()) removeSolaClones();   // engineer-approved duplicate cleanup
+    if (typeof removeSolaClones === 'function') removeSolaClones();   // engineer-ordered duplicate cleanup
     __workingLayout = buildWorkingLayout(); try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(__workingLayout)); } catch (e) {}
     renderTimes(); schedule(); if (typeof buildSolaSched === 'function') buildSolaSched(); T = 0; setPlay(false);
     alert('Layout imported.');
