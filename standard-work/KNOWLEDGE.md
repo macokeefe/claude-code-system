@@ -288,9 +288,14 @@ SOLA (middle slices), and CANYON CREW (rightmost slice). An earlier
 "migration" DELETED the engineer's Sola stations assuming Canyon replaced
 them — WRONG, and it made the engineer justifiably angry. NEVER delete user
 stations in a migration. Current state: `seedLine(defs, idPrefix)` is
-ADDITIVE-ONLY. `CANYON_LINE` (ids c1..c5, x≈20.4 column in the rightmost
-slice) = the 22-task chair SWI (124 min) balanced 23/25/25/26/25 (26-min
-bottleneck, 16.2/day). `SOLA_LINE` (ids s1..s5, middle, x 7.8–11.3 — MUST be
+ADDITIVE-ONLY. `CANYON_LINE` (ids c1..c4, x≈20.4 column in the rightmost
+slice) = the ASSEMBLY portion per the engineer's SWI reference combination
+sheet (99 min, 4 operators): SWI 10–16 = 30', 17–22 = 26.5', 23–29 = 26.5',
+30–35 = 16' (sheet also lists a 3-op split 10–18/19–24/25–35 ≈ 37/38/24).
+Reference CSV had times but no step text — descriptions mapped from the SWI
+doc where numbering matched, otherwise "SWI step N". Old 5-station canyon
+SEEDS (exact old default names) are auto-upgraded on load; renamed/custom
+stations are never touched. `SOLA_LINE` (ids s1..s5, middle, x 7.8–11.3 — MUST be
 east of the deck divider x=7.09 or renderSolaData counts them as Meritage) =
 the engineer's five stations (Rivet Nuts 33.1 / Frame 38.2 / trellis 33 /
 final installation 28.4 / cushions_ship 36 = 168.7), restored from their

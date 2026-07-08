@@ -2248,15 +2248,19 @@ document.getElementById('rackbtn').onclick = () => {
 };
 loadLayout();
 /* ---- three-line reality: Meritage (left deck), SOLA (middle slices), and
-   CANYON CREW (rightmost slice, east of section line 4). Canyon = the 22-task
-   chair SWI (124 min) balanced 23/25/25/26/25 across 5 stations. Seeding is
-   ADDITIVE ONLY — nothing the user built is ever deleted. ---- */
+   CANYON CREW (rightmost slice, east of section line 4). Seeding is ADDITIVE
+   ONLY — nothing the user built is ever deleted.
+   Canyon split comes from the engineer's SWI reference combination sheet
+   (assembly portion only, 99 min total, 4 operators):
+   Op1 = SWI 10–16 (30'), Op2 = 17–22 (26.5'), Op3 = 23–29 (26.5'),
+   Op4 = 30–35 (16'). The sheet's 3-operator alternative (10–18 / 19–24 /
+   25–35 ≈ 37/38/24) is noted here for reference. Step descriptions come from
+   the SWI where the number maps; "SWI step N" where the sheet gave no text. ---- */
 const CANYON_LINE = [   // rightmost slice — a single north→south column at x≈20.4
-  { name: 'Canyon 1 — Legs & X', x: 20.4, z: -7, steps: [['Press-fit glides into legs', 5], ["Wedges onto X's (1017351 fixture)", 8], ['Internal endcap + sleeve nut', 5], ['Press center bar onto endcap', 2], ['Knob, washer & set screw (logo level)', 3]] },
-  { name: 'Canyon 2 — Connectors', x: 20.4, z: -3.5, steps: [['R/L connectors + X fasten (1015165)', 5], ['Sling support bars (both sides)', 5], ['Middle connector front', 5], ['Middle connector back', 5], ['Top connector front', 5]] },
-  { name: 'Canyon 3 — Sling & Rails', x: 20.4, z: 0, steps: [['Top connector back', 5], ['Neoprene on hand rests', 5], ['Rails into sling loops', 5], ['Sling on seat + backing plates', 10]] },
-  { name: 'Canyon 4 — Caps & Wrap', x: 20.4, z: 3.5, steps: [['Plastic insert + pin on endcap', 2], ['Press-fit end caps + MA300', 4], ['Serial number sticker', 3], ['Pack rubber glides (1015166)', 2], ['Wipe down + wrap backrest', 5], ['Wrap arms — pass 1', 10]] },
-  { name: 'Canyon 5 — Final Pack', x: 20.4, z: 7, steps: [['Wrap arms — pass 2', 10], ['Wrap legs + full chair wrap', 15]] },
+  { name: 'Canyon 1 — SWI 10–16', x: 20.4, z: -6, steps: [["Wedges onto X's (SWI 10)", 5], ['Internal endcap + sleeve nut (11)', 5], ['Center bar onto endcap (12)', 4], ['Knob, washer & set screw (13)', 3], ['R/L connectors + X (14)', 4], ['SWI step 15', 4], ['Sling support bars (16)', 5]] },
+  { name: 'Canyon 2 — SWI 17–22', x: 20.4, z: -2, steps: [['Middle connector front (17)', 2], ['Middle connector back (18)', 5], ['Top connector front (19)', 1.5], ['Top connector back (20)', 2], ['Neoprene on hand rests (21)', 14], ['Rails into sling loops (22)', 2]] },
+  { name: 'Canyon 3 — SWI 23–29', x: 20.4, z: 2, steps: [['Sling on seat + backing plates (23)', 14.5], ['End cap insert + pin (24)', 4], ['Press-fit end caps (25)', 1.5], ['Serial sticker (26)', 1.5], ['SWI step 27', 1], ['SWI step 28', 2], ['SWI step 29', 2]] },
+  { name: 'Canyon 4 — SWI 30–35', x: 20.4, z: 6, steps: [['SWI step 30', 2], ['SWI step 31', 2], ['SWI step 32', 3], ['SWI step 33', 3], ['SWI step 34', 3], ['SWI step 35', 3]] },
 ];
 // the SOLA line (middle) — restore data for layouts damaged by the removed
 // migration, and the default for fresh opens. Times as the engineer had them.
@@ -2284,6 +2288,18 @@ function seedLine(defs, idPrefix) {   // additive: only adds stations that don't
   buildFlow(); if (typeof buildSolaSched === 'function') buildSolaSched();
   renderTimes();
 }
+// upgrade MY earlier canyon seed (pre-reference split) to the reference split.
+// Only stations still carrying the exact old seeded names are replaced —
+// anything renamed or user-built is untouched.
+const OLD_CANYON_SEED = ['Canyon 1 — Legs & X', 'Canyon 2 — Connectors', 'Canyon 3 — Sling & Rails', 'Canyon 4 — Caps & Wrap', 'Canyon 5 — Final Pack'];
+extraStations.filter(id => OLD_CANYON_SEED.includes(nodes[id].s.title)).forEach(id => {
+  for (let i = crew.length - 1; i >= 0; i--) if (crew[i].station === id) { level2.remove(crew[i].fig); crew.splice(i, 1); }
+  const nd = nodes[id];
+  [nd.st, nd.label, nd.mini, nd.visual && nd.visual.g].forEach(o => { if (o) level2.remove(o); });
+  const ix = extraStations.indexOf(id); if (ix >= 0) extraStations.splice(ix, 1);
+  delete nodes[id]; delete POS[id];
+});
+flowArrows = flowArrows.filter(a => nodes[a.from] && nodes[a.to]);
 const hasCanyon = extraStations.some(id => /^canyon /i.test(nodes[id].s.title));
 const hasSola = extraStations.some(id => /^(rivet nuts|frame|trellis|final installation|cushions)\b/i.test((nodes[id].s.title || '').trim()));
 if (!hasCanyon) seedLine(CANYON_LINE, 'c');                   // add the Canyon line in the rightmost slice
