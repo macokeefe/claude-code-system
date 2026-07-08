@@ -300,7 +300,8 @@ function kindForPart(name) {
   if (/plate/.test(n)) return 'plate';
   if (/cushion|pack|ship|box/.test(n)) return 'cushion';
   if (/cap/.test(n)) return 'cap';
-  if (/trellis|slat|seat support/.test(n)) return 'trellis';
+  if (/trellis|slat|seat support|sling|rail/.test(n)) return 'trellis';
+  if (/leg|glide|wedge/.test(n)) return 'frame';
   if (/install|finish/.test(n)) return 'seat';
   if (/frame|sub.?assembl|connection|join/.test(n)) return 'frame';
   if (/connector|conn/.test(n)) return 'connectors';
@@ -1368,7 +1369,19 @@ function solaUpdate() {
     if (Ts > 0) for (let u = 0; u < sn; u++) { const f = finish[k][u], st = f - time[k]; if (Ts >= st && Ts < f) { active = true; frac = (Ts - st) / time[k]; } if (Ts < f) allDone = false; }
     setLed(nd.led, Ts <= 0 ? 'idle' : (active ? 'active' : (allDone ? 'done' : 'idle')), active);
     if (nd.visual) nd.visual.update(active ? frac : 0, 0, sn);
-    crew.forEach(c => { if (c.station === id) { c.fig.position.x = c.homeX; c.fig.position.z = c.homeZ; c.fig.rotation.y = active ? Math.sin(Ts * 3 + c.idx) * 0.2 : 0; } });   // stay planted; gentle working sway
+    // operators move like the Meritage crew: walk to the materials cart at the
+    // start of each unit (parts fetch), walk to their help target during idle,
+    // otherwise work at the bench with a gentle sway — all smooth-lerped.
+    crew.forEach(c => {
+      if (c.station !== id) return;
+      let tx = c.homeX, tz = c.homeZ;
+      const fetching = active && frac < 0.14 && nodes.cart2;
+      if (fetching) { tx = nodes.cart2.x + (c.idx - 0.5) * 1.1; tz = nodes.cart2.z + 1.35; }
+      else if (!active && !allDone && Ts > 0 && c.helpTo && (c.helpMin || 0) > 0 && nodes[c.helpTo]) { tx = nodes[c.helpTo].x + 0.7; tz = nodes[c.helpTo].z + 1.7; }
+      c.fig.position.x += (tx - c.fig.position.x) * 0.08;
+      c.fig.position.z += (tz - c.fig.position.z) * 0.08;
+      c.fig.rotation.y = (active && !fetching) ? Math.sin(Ts * 3 + c.idx) * 0.2 : 0;
+    });
   });
   // parts traveling station -> next station
   for (let k = 0; k < ids.length - 1; k++) {
