@@ -1423,6 +1423,9 @@ const stepsHost2 = { innerHTML: '', querySelectorAll: () => [] };   // legacy sh
   #times .secHdr .secTot{font-weight:600;font-size:10.5px;opacity:.9;text-align:right}
   #times .stblock{border:1px solid #e3e7ec;border-left-width:4px;border-radius:10px;padding:8px 9px;margin:7px 0;background:#fff}
   #times .sttitle{display:flex;align-items:center;gap:6px}
+  #times .stnm{font-weight:800;font-size:12px;color:#15263a;flex:1;min-width:50px;border:1px solid transparent;background:transparent;border-radius:5px;padding:1px 4px}
+  #times .stnm:hover{border-color:#d8dee6;background:#fff}
+  #times .stnm:focus{border-color:#7ba6e0;background:#fff;outline:none}
   #times .sttitle .sttot{margin-left:auto}
   #times .sdelsta{background:#fff;border:1px solid #dcae9f;color:#c0552c;border-radius:6px;padding:2px 7px;font-size:11px;cursor:pointer;flex:none}
   #times .sdelsta:hover{background:#c0552c;color:#fff}
@@ -1489,7 +1492,7 @@ function rowsHtml(list, accent) {
     const ppl = Math.max(1, s.ppl || 1), cyc = (s.t / ppl);
     const canRemove = nodes[s.id] && nodes[s.id].extra;
     html += `<div class="stblock" style="border-left-color:${accent || '#1d3a66'}">
-      <div class="sttitle">${s.title}${s.bot ? ' <b style="color:#c0552c">◄</b>' : ''}
+      <div class="sttitle"><input class="stnm" data-id="${s.id}" value="${(s.title || '').replace(/"/g, '&quot;')}" title="Station name — click to rename"/>${s.bot ? ' <b style="color:#c0552c">◄</b>' : ''}
         <span class="sttot">${cyc.toFixed(1).replace(/\.0$/, '')} min/unit</span><span class="tw" id="walk_${s.id}"></span>
         ${canRemove ? `<button class="sdelsta" data-id="${s.id}" title="Remove this station (its table disappears from the floor)">🗑 remove</button>` : ''}</div>`;
     (s.steps || []).forEach((st, si) => {
@@ -1505,6 +1508,27 @@ function rowsHtml(list, accent) {
     html += `</div>`;
   });
   return html;
+}
+// rename a station everywhere: data, the floating 3D labels, crew name tags,
+// and the chart-name map. Light version (no re-render/save) used at load.
+function setStationTitle(id, name) {
+  const s = getAny(id), nd = nodes[id]; if (!s || !nd || !name) return;
+  s.title = name;
+  if (typeof FEEDNAME !== 'undefined' && FEEDNAME[id]) FEEDNAME[id] = name;
+  if (nd.label) level2.remove(nd.label);
+  if (nd.mini) level2.remove(nd.mini);
+  const tStr = s.t ? +s.t.toFixed(2) + ' min' : '—';
+  nd.label = makeStationLabel(name, s.sub || '', tStr, s.accent); nd.label.position.set(nd.x, 2.85, nd.z); level2.add(nd.label);
+  nd.mini = makeMiniLabel(name, s.accent); nd.mini.position.set(nd.x, 2.55, nd.z); level2.add(nd.mini);
+  if (isExtra(id)) buildExtraCrew(id); else { rebuildCrew(id); placeStation(id); }
+  if (typeof applyLabels === 'function') applyLabels();
+}
+function renameStation(id, name) {
+  name = (name || '').trim();
+  if (!name) { renderTimes(); return; }                       // empty → just restore the field
+  setStationTitle(id, name);
+  renderTimes(); saveLayout();
+  try { renderIdle(); renderHelpPanel(); renderTaskChart(); } catch (e) {}
 }
 function deleteStation(id) {                                  // remove an ADDED station (core Meritage stations stay)
   const nd = nodes[id]; if (!nd || !nd.extra) return;
@@ -1551,6 +1575,7 @@ function restoreFlow(list) {
   buildFlow(); if (typeof buildSolaSched === 'function') buildSolaSched();
 }
 function wireRows(host) {
+  host.querySelectorAll('input.stnm').forEach(inp => inp.onchange = e => renameStation(e.target.dataset.id, e.target.value));
   host.querySelectorAll('input.sppl').forEach(inp => inp.onchange = e => {
     const id = e.target.dataset.id, s = getAny(id); s.ppl = Math.max(1, parseInt(e.target.value) || 1);
     if (isExtra(id)) buildExtraCrew(id); else { rebuildCrew(id); placeStation(id); }
@@ -1863,7 +1888,7 @@ function setStationRot(id, rot) {
 }
 // Build the working-layout object from the LIVE scene (not from storage).
 function buildWorkingLayout() {
-  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); o.__boxZone = [boxZone.x, boxZone.z, boxZone.w, boxZone.d]; return o;
+  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); o.__boxZone = [boxZone.x, boxZone.z, boxZone.w, boxZone.d]; o.__names = Object.fromEntries(ST.map(s2 => [s2.id, s2.title])); return o;
 }
 // In-memory mirror so the layout survives even when localStorage is blocked
 // (Safari / file:// often refuses to persist) — bake reads THIS, never storage.
@@ -1905,7 +1930,7 @@ window.addEventListener('keydown', e => {
   }
 });
 function applyWorkingLayout(o) {   // apply a working-layout object to the LIVE scene (shared by load + import)
-  if (!o) return; if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); }
+  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); }
 }
 let hadSavedLayout = false;   // true when ANY layout (localStorage or baked) was loaded — defaults must then keep their hands off
 function loadLayout() { try { let o = null; try { o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch (e) {} if (!o && window.__M3D_LAYOUT__) o = window.__M3D_LAYOUT__;   // baked-in working layout (travels with the file)
@@ -2436,7 +2461,7 @@ function snapshot() {
   ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
   if (nodes.cart) pos.cart = [nodes.cart.x, nodes.cart.z];
   const cap = sch ? 420 / Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 0;
-  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), ppl: Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), extras: extraSnap(), flow: flowArrows.map(a => [a.from, a.to]), areas: areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]), rwps: returnWps.map(w => [w.x, w.z]), rwps2: returnWps2.map(w => [w.x, w.z]), boxZone: [boxZone.x, boxZone.z, boxZone.w, boxZone.d], cap: +cap.toFixed(1) };
+  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), ppl: Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), extras: extraSnap(), flow: flowArrows.map(a => [a.from, a.to]), areas: areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]), rwps: returnWps.map(w => [w.x, w.z]), rwps2: returnWps2.map(w => [w.x, w.z]), boxZone: [boxZone.x, boxZone.z, boxZone.w, boxZone.d], names: Object.fromEntries(ST.map(s2 => [s2.id, s2.title])), cap: +cap.toFixed(1) };
 }
 function applyLayout(L) {
   if (L.steps) { ST.forEach(s => { if (L.steps[s.id]) { s.steps = L.steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); }
@@ -2458,6 +2483,7 @@ function applyLayout(L) {
   if (Array.isArray(L.extras)) { clearExtras(); restoreExtras(L.extras); restoreFlow(L.flow); }   // rebuild the Sola side from this layout
   if (Array.isArray(L.areas)) restoreAreas(L.areas);                                                // rebuild the surrounding areas
   if (Array.isArray(L.boxZone)) { boxZone = { x: L.boxZone[0], z: L.boxZone[1], w: L.boxZone[2], d: L.boxZone[3] }; refreshBoxZone(); }
+  if (L.names) Object.entries(L.names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); });
   renderTimes();
   schedule(); T = 0; setPlay(false); saveLayout();
 }
