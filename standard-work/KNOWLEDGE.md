@@ -283,18 +283,22 @@ overlay toggle, station drag (pointermove), and add/delete. `#cadBox` has a
 and see just the CAD, plus a separate opacity slider for the marks
 (`MY_MARK_FILL.opacity`) — independent of the CAD-plan opacity slider.
 
-CANYON CREW LINE (2026-07): the right-side line was RENAMED from "Sola (no
-arms)" to "Canyon Crew" (all user-facing strings: top panel, steps-table
-header, chart/help dropdowns, Run dropdown, report, materials-cart label —
-internal ids/vars still say sola). Its default stations carry the Canyon
-chair SWI (22 tasks, 124 min; step numbers 9–31 in the source doc, one blank
-row 15, two identical 10-min "wrap both arms" steps are real): `CANYON_LINE`
-+ `seedCanyonLine()`, seeded at init ONLY when the loaded layout has no
-right-side stations. Split (contiguous, optimal for 5 stations, max 26 min =
-95% balance): 1 Legs & X 23' (glides/wedges/endcap/center bar/knob), 2
-Connectors 25', 3 Sling & Rails 25', 4 Caps & Wrap 26' (BOTTLENECK), 5 Final
-Pack 25'. Flow arrows chain 1→5 in a U on the right deck. Capacity 420/26 =
-16.2/day.
+THREE LINES (2026-07 — after a hard lesson): the plant has Meritage (left),
+SOLA (middle slices), and CANYON CREW (rightmost slice). An earlier
+"migration" DELETED the engineer's Sola stations assuming Canyon replaced
+them — WRONG, and it made the engineer justifiably angry. NEVER delete user
+stations in a migration. Current state: `seedLine(defs, idPrefix)` is
+ADDITIVE-ONLY. `CANYON_LINE` (ids c1..c5, x≈20.4 column in the rightmost
+slice) = the 22-task chair SWI (124 min) balanced 23/25/25/26/25 (26-min
+bottleneck, 16.2/day). `SOLA_LINE` (ids s1..s5, middle, x 7.8–11.3 — MUST be
+east of the deck divider x=7.09 or renderSolaData counts them as Meritage) =
+the engineer's five stations (Rivet Nuts 33.1 / Frame 38.2 / trellis 33 /
+final installation 28.4 / cushions_ship 36 = 168.7), restored from their
+screenshot after the deletion. Seeding: canyon added when no /^canyon /
+station exists; sola added when none of its five names exist. The app still
+has only TWO sim sides — the right-side panel/charts AGGREGATE Sola+Canyon
+(renamed "SOLA + CANYON" everywhere); true 3-line separation (own
+panels/charts/sim per line) is future work.
 
 BOX STORAGE ZONE (2026-07): the shipped-box stack area is a drawable zone —
 `boxZone {x,z,w,d}` rendered by `refreshBoxZone()` (translucent pad + dashed
