@@ -283,6 +283,16 @@ overlay toggle, station drag (pointermove), and add/delete. `#cadBox` has a
 and see just the CAD, plus a separate opacity slider for the marks
 (`MY_MARK_FILL.opacity`) — independent of the CAD-plan opacity slider.
 
+HARD RULE — NEVER MUTATE LOADED LAYOUTS (2026-07, learned TWICE): the canyon
+"migration" deleted the engineer's Sola stations; then additive seeding
+polluted layouts and saves with seeded stations, and the engineer reported
+"even the saved ones are cooked". FINAL STATE: `hadSavedLayout` flag in
+loadLayout; the default Sola+Canyon lines seed ONLY when NO layout exists
+anywhere (no localStorage, no baked __M3D_LAYOUT__, zero extras). Loading any
+layout — working or named — shows exactly its contents. Any future
+"upgrade"/"migration" idea for user layout data: DON'T. Offer a button or
+instructions instead.
+
 THREE LINES (2026-07 — after a hard lesson): the plant has Meritage (left),
 SOLA (middle slices), and CANYON CREW (rightmost slice). An earlier
 "migration" DELETED the engineer's Sola stations assuming Canyon replaced

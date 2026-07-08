@@ -1863,8 +1863,9 @@ window.addEventListener('keydown', e => {
 function applyWorkingLayout(o) {   // apply a working-layout object to the LIVE scene (shared by load + import)
   if (!o) return; if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); }
 }
+let hadSavedLayout = false;   // true when ANY layout (localStorage or baked) was loaded — defaults must then keep their hands off
 function loadLayout() { try { let o = null; try { o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch (e) {} if (!o && window.__M3D_LAYOUT__) o = window.__M3D_LAYOUT__;   // baked-in working layout (travels with the file)
-  applyWorkingLayout(o); } catch (e) {} }
+  hadSavedLayout = !!o; applyWorkingLayout(o); } catch (e) {} }
 
 // 1-yard grid on the deck
 function buildGrid() {
@@ -2288,23 +2289,14 @@ function seedLine(defs, idPrefix) {   // additive: only adds stations that don't
   buildFlow(); if (typeof buildSolaSched === 'function') buildSolaSched();
   renderTimes();
 }
-// upgrade MY earlier canyon seed (pre-reference split) to the reference split.
-// Only stations still carrying the exact old seeded names are replaced —
-// anything renamed or user-built is untouched.
-const OLD_CANYON_SEED = ['Canyon 1 — Legs & X', 'Canyon 2 — Connectors', 'Canyon 3 — Sling & Rails', 'Canyon 4 — Caps & Wrap', 'Canyon 5 — Final Pack'];
-extraStations.filter(id => OLD_CANYON_SEED.includes(nodes[id].s.title)).forEach(id => {
-  for (let i = crew.length - 1; i >= 0; i--) if (crew[i].station === id) { level2.remove(crew[i].fig); crew.splice(i, 1); }
-  const nd = nodes[id];
-  [nd.st, nd.label, nd.mini, nd.visual && nd.visual.g].forEach(o => { if (o) level2.remove(o); });
-  const ix = extraStations.indexOf(id); if (ix >= 0) extraStations.splice(ix, 1);
-  delete nodes[id]; delete POS[id];
-});
-flowArrows = flowArrows.filter(a => nodes[a.from] && nodes[a.to]);
-const hasCanyon = extraStations.some(id => /^canyon /i.test(nodes[id].s.title));
-const hasSola = extraStations.some(id => /^(rivet nuts|frame|trellis|final installation|cushions)\b/i.test((nodes[id].s.title || '').trim()));
-if (!hasCanyon) seedLine(CANYON_LINE, 'c');                   // add the Canyon line in the rightmost slice
-if (!hasSola && (hasCanyon || !extraStations.length || extraStations.some(id => /^c\d/.test(id))))
-  seedLine(SOLA_LINE, 's');                                   // restore / seed the Sola line in the middle
+// HARD RULE (learned twice, the hard way): the app NEVER mutates a loaded
+// layout — no seeding into it, no upgrades, no deletions. What you saved is
+// exactly what you get. The default Sola + Canyon lines appear ONLY on a
+// completely virgin open (no saved layout anywhere, nothing baked in).
+if (!hadSavedLayout && !extraStations.length) {
+  seedLine(CANYON_LINE, 'c');
+  seedLine(SOLA_LINE, 's');
+}
 __workingLayout = buildWorkingLayout();   // baseline so the FIRST edit is undoable (saveLayout skips the push while this is empty)
 try { schedule(); } catch (e) { console.error('schedule failed', e); }   // set labor/cycle/readouts FIRST so a bad saved layout can't leave them stuck on the placeholder
 try { renderTimes(); renderSolaData(); } catch (e) { console.error('panel render failed', e); }
