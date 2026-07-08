@@ -1026,12 +1026,12 @@ for (const dx of [-CPW / 2, CPW / 2]) { const e = bx(0.08, 0.03, CPD, MAT.tape);
 for (const dz of [-CPD / 2, CPD / 2]) { const e = bx(CPW, 0.03, 0.08, MAT.tape); e.position.set(0, 0.03, dz); cart2Pad.add(e); }
 (function(){ const c=document.createElement('canvas'); c.width=360; c.height=72; const x=c.getContext('2d');
   x.fillStyle='#236043'; x.beginPath(); x.roundRect(4,8,352,56,14); x.fill();
-  x.fillStyle='#fff'; x.font='700 28px Arial'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('SOLA MATERIALS CART',180,38);
+  x.fillStyle='#fff'; x.font='700 28px Arial'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('CANYON MATERIALS CART',180,38);
   const tex=new THREE.CanvasTexture(c); tex.anisotropy=8; const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true}));
   sp.scale.set(2.2,0.45,1); sp.position.y=1.6; cart2Pad.add(sp); })();
 const cart2Mesh = makePartsCart(); cart2Mesh.scale.set(1.61,1.2,1.04); cart2Pad.add(cart2Mesh);   // a physical cart sits on the pad
 cart2Pad.position.set(CART2_DEF[0], 0, CART2_DEF[1]); level2.add(cart2Pad);
-nodes.cart2 = { id:'cart2', x:CART2_DEF[0], z:CART2_DEF[1], st:cart2Pad, s:{ id:'cart2', title:'Sola materials cart' } };
+nodes.cart2 = { id:'cart2', x:CART2_DEF[0], z:CART2_DEF[1], st:cart2Pad, s:{ id:'cart2', title:'Canyon materials cart' } };
 POS.cart2 = [CART2_DEF[0], CART2_DEF[1]];
 // a line showing it's supplied from the SAME elevator
 let cart2Waypoints = [];           // [{x,z}] for the Sola cart's route
@@ -1400,7 +1400,7 @@ timeBox.appendChild(moveCtl);
 // Meritage station-times table (top) + a SEPARATE table for the other side.
 const mHdr = document.createElement('div'); mHdr.style.cssText = 'font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#15263a;font-weight:800;margin:4px 0 4px'; mHdr.textContent = 'Meritage — station steps'; timeBox.appendChild(mHdr);
 const stepsHost = document.createElement('div'); stepsHost.id = 'stepsHost'; timeBox.appendChild(stepsHost);
-const oHdr = document.createElement('div'); oHdr.style.cssText = 'font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#5c5f99;font-weight:800;margin:14px 0 4px;border-top:2px solid #e0e3ea;padding-top:10px'; oHdr.textContent = 'Sola (no arms) — station steps'; timeBox.appendChild(oHdr);
+const oHdr = document.createElement('div'); oHdr.style.cssText = 'font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#5c5f99;font-weight:800;margin:14px 0 4px;border-top:2px solid #e0e3ea;padding-top:10px'; oHdr.textContent = 'Canyon Crew — station steps'; timeBox.appendChild(oHdr);
 const stepsHost2 = document.createElement('div'); stepsHost2.id = 'stepsHost2'; timeBox.appendChild(stepsHost2);
 
 /* ---- ADDED STATIONS: extra benches you can drop on either side and drag where
@@ -1543,7 +1543,7 @@ function renderTimes() {
   const mer = [...ST, ...extraStations.filter(id => sideOf(nodes[id].x) === 'meritage').map(id => nodes[id].s)];
   const oth = extraStations.filter(id => sideOf(nodes[id].x) === 'other').map(id => nodes[id].s);
   stepsHost.innerHTML = rowsHtml(mer);
-  stepsHost2.innerHTML = oth.length ? rowsHtml(oth) : '<div style="font-size:11px;color:#8a93a0">No Sola (no arms) stations yet. Add one with “＋ Add station”, or drag a station across the middle line.</div>';
+  stepsHost2.innerHTML = oth.length ? rowsHtml(oth) : '<div style="font-size:11px;color:#8a93a0">No Canyon Crew stations yet. Add one with “＋ Add station”, or drag a station across the middle line.</div>';
   wireRows(stepsHost); wireRows(stepsHost2);
   if (typeof renderSolaData === 'function') renderSolaData();
 }
@@ -1560,7 +1560,7 @@ let chartLine = 'meritage';   // which line the Idle / Task / Help panels show
 function lineSel() {
   return `<select class="lineSel" style="font-size:11px;padding:2px 4px;margin:0 0 7px">
     <option value="meritage"${chartLine === 'meritage' ? ' selected' : ''}>Meritage</option>
-    <option value="sola"${chartLine === 'sola' ? ' selected' : ''}>Sola (no arms)</option></select>`;
+    <option value="sola"${chartLine === 'sola' ? ' selected' : ''}>Canyon Crew</option></select>`;
 }
 function wireLineSel(panel) {
   const s = panel.querySelector('.lineSel');
@@ -1590,7 +1590,7 @@ function operatorsList(line) {
 function renderIdle() {
   if (!idlePanel || idlePanel.style.display === 'none') return;
   const ops = operatorsList(chartLine);
-  if (!ops.length) { idlePanel.innerHTML = `<h3>Idle time per operator</h3>` + lineSel() + '<div class="ihint">No Sola stations yet.</div>'; wireLineSel(idlePanel); return; }
+  if (!ops.length) { idlePanel.innerHTML = `<h3>Idle time per operator</h3>` + lineSel() + '<div class="ihint">No Canyon Crew stations yet.</div>'; wireLineSel(idlePanel); return; }
   const cyc = Math.max(0.001, ...ops.map(o => o.bpu));     // line paces at the busiest operator
   const units = dayMin / cyc;
   let html = `<h3>Idle time per operator — ${(dayMin/60).toFixed(1)}-hr day</h3>` + lineSel();
@@ -1626,9 +1626,9 @@ function renderHelpPanel() {
     const ids = orderedSola();
     const cyc = solaCyc();
     const bnId = ids.slice().sort((a, b) => effNet(b) - effNet(a))[0];
-    const sHead = `<h3>Help paths</h3>` + lineSel() + `<div class="ihint"><b>Sola line: ${ids.length ? (420 / Math.max(0.1, cyc)).toFixed(1) : '—'} units/day</b>${bnId ? ' · slowest: ' + stName(bnId) + ' (' + effNet(bnId).toFixed(1) + ' min)' : ''}. Click “➤ Help arrow”, then a FROM then a TO station on this side.</div>`;
+    const sHead = `<h3>Help paths</h3>` + lineSel() + `<div class="ihint"><b>Canyon Crew line: ${ids.length ? (420 / Math.max(0.1, cyc)).toFixed(1) : '—'} units/day</b>${bnId ? ' · slowest: ' + stName(bnId) + ' (' + effNet(bnId).toFixed(1) + ' min)' : ''}. Click “➤ Help arrow”, then a FROM then a TO station on this side.</div>`;
     const sHelp = helpArrows.map((a, i) => ({ a, i })).filter(({ a }) => isExtra(a.to) || isExtra(a.from));
-    if (!sHelp.length) { helpPanel.innerHTML = sHead + '<div class="ihint">No Sola help paths yet.</div>'; wireLineSel(helpPanel); return; }
+    if (!sHelp.length) { helpPanel.innerHTML = sHead + '<div class="ihint">No Canyon Crew help paths yet.</div>'; wireLineSel(helpPanel); return; }
     let sh = sHead;
     sHelp.forEach(({ a, i }) => {
       const spare = availIdleAny(a.from, a.fromIdx || 0) + (a.helpMin || 0);
@@ -1709,7 +1709,7 @@ function renderTaskChart() {
   const scaleMax = Math.max(cyc, takt) * 1.04;            // fit both the bars and the takt line
   const taktPct = (takt / scaleMax) * 100;
   let html = `<h3>Task distribution — operator loading</h3>` + lineSel();
-  if (!rows.length) { taskPanel.innerHTML = html + '<div class="ihint">No Sola stations yet.</div>'; wireLineSel(taskPanel); return; }
+  if (!rows.length) { taskPanel.innerHTML = html + '<div class="ihint">No Canyon Crew stations yet.</div>'; wireLineSel(taskPanel); return; }
   html += `<div class="ihint"><b>Total labor: ${totalLabor.toFixed(1)} min/unit</b> · cycle ${cyc.toFixed(1)} · <span id="taktVal" title="Double-click to type a takt time — the chart updates to show it" style="color:#d11;font-weight:700;cursor:pointer;border-bottom:1px dashed #d11">takt ${takt.toFixed(1)} min</span> (<input type="number" id="taktDemand" value="${+taktDemand.toFixed(1)}" min="1" style="width:44px"> units / <span id="dayHrsVal" title="Double-click to change the day length" style="cursor:pointer;border-bottom:1px dashed #9aa">${(dayMin/60).toFixed(1)}-hr</span> day). Red line = takt.</div>`;
   rows.forEach(row => {
     const tt = row.tt;
@@ -2234,6 +2234,30 @@ document.getElementById('rackbtn').onclick = () => {
   saveLayout();
 };
 loadLayout();
+/* ---- CANYON CREW: the right-side line's default stations. The 22 Canyon
+   chair SWI tasks (124 min total) are split across 5 stations in build order,
+   balanced to a 26-min bottleneck (95% balance efficiency: 23/25/25/26/25).
+   Seeded only when the loaded layout has no right-side stations of its own. ---- */
+const CANYON_LINE = [
+  { name: 'Canyon 1 — Legs & X', x: 9.5, z: -4, steps: [['Press-fit glides into legs', 5], ["Wedges onto X's (1017351 fixture)", 8], ['Internal endcap + sleeve nut', 5], ['Press center bar onto endcap', 2], ['Knob, washer & set screw (logo level)', 3]] },
+  { name: 'Canyon 2 — Connectors', x: 13, z: -4, steps: [['R/L connectors + X fasten (1015165)', 5], ['Sling support bars (both sides)', 5], ['Middle connector front', 5], ['Middle connector back', 5], ['Top connector front', 5]] },
+  { name: 'Canyon 3 — Sling & Rails', x: 16.5, z: -4, steps: [['Top connector back', 5], ['Neoprene on hand rests', 5], ['Rails into sling loops', 5], ['Sling on seat + backing plates', 10]] },
+  { name: 'Canyon 4 — Caps & Wrap', x: 16.5, z: 2, steps: [['Plastic insert + pin on endcap', 2], ['Press-fit end caps + MA300', 4], ['Serial number sticker', 3], ['Pack rubber glides (1015166)', 2], ['Wipe down + wrap backrest', 5], ['Wrap arms — pass 1', 10]] },
+  { name: 'Canyon 5 — Final Pack', x: 13, z: 2, steps: [['Wrap arms — pass 2', 10], ['Wrap legs + full chair wrap', 15]] },
+];
+function seedCanyonLine() {
+  CANYON_LINE.forEach((s, i) => {
+    const id = 'x' + (i + 1);
+    addStation(s.name, s.x, s.z, id, 0);
+    nodes[id].s.steps = s.steps.map(a => ({ name: a[0], t: a[1] }));
+    recalcAny(id);
+  });
+  extraSeq = Math.max(extraSeq, CANYON_LINE.length);
+  flowArrows = CANYON_LINE.slice(0, -1).map((_, i) => ({ from: 'x' + (i + 1), to: 'x' + (i + 2) }));
+  buildFlow(); if (typeof buildSolaSched === 'function') buildSolaSched();
+  renderTimes();
+}
+if (!extraStations.length) seedCanyonLine();
 __workingLayout = buildWorkingLayout();   // baseline so the FIRST edit is undoable (saveLayout skips the push while this is empty)
 try { schedule(); } catch (e) { console.error('schedule failed', e); }   // set labor/cycle/readouts FIRST so a bad saved layout can't leave them stuck on the placeholder
 try { renderTimes(); renderSolaData(); } catch (e) { console.error('panel render failed', e); }
@@ -2491,7 +2515,7 @@ function buildReportHTML() {
     let sCyc = 0.1, sBot = '—'; sIds.forEach(id => { const e = effNet(id); if (e > sCyc) { sCyc = e; sBot = nodes[id].s.title; } });
     const sCap = sCyc > 0 ? 420 / sCyc : 0;
     const sHelp = helpArrows.filter(a => isExtra(a.to));
-    sola = `<section><h2>Sola (No Arms)</h2>
+    sola = `<section><h2>Canyon Crew</h2>
       <div class="kpis">${kpi('Operators', sPpl)}${kpi('Total labor', num(sLabor) + ' min/unit')}${kpi('Line cycle', num(sCyc) + ' min')}${kpi('Capacity', num(sCap) + ' /day')}${kpi('Stations', sIds.length)}${kpi('Bottleneck', esc(sBot))}</div>
       <h3>Build sequence (in order of flow)</h3>
       <p class="lead">Single-piece flow — each unit moves through the stations below in this order.</p>
@@ -2503,7 +2527,7 @@ function buildReportHTML() {
   const when = new Date().toLocaleString();
   const mapUrl = captureFloorMap();
   const mapSec = mapUrl ? `<section><h2>Floor Plan</h2>
-    <p class="lead">Top-down view of this layout — Meritage on the left deck, Sola (No Arms) on the right, staging areas around them.</p>
+    <p class="lead">Top-down view of this layout — Meritage on the left deck, Canyon Crew on the right, staging areas around them.</p>
     <img class="map" src="${mapUrl}" alt="Floor plan"></section>` : '';
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Assembly Line Plan — ${esc(layoutName)}</title>

@@ -283,6 +283,19 @@ overlay toggle, station drag (pointermove), and add/delete. `#cadBox` has a
 and see just the CAD, plus a separate opacity slider for the marks
 (`MY_MARK_FILL.opacity`) — independent of the CAD-plan opacity slider.
 
+CANYON CREW LINE (2026-07): the right-side line was RENAMED from "Sola (no
+arms)" to "Canyon Crew" (all user-facing strings: top panel, steps-table
+header, chart/help dropdowns, Run dropdown, report, materials-cart label —
+internal ids/vars still say sola). Its default stations carry the Canyon
+chair SWI (22 tasks, 124 min; step numbers 9–31 in the source doc, one blank
+row 15, two identical 10-min "wrap both arms" steps are real): `CANYON_LINE`
++ `seedCanyonLine()`, seeded at init ONLY when the loaded layout has no
+right-side stations. Split (contiguous, optimal for 5 stations, max 26 min =
+95% balance): 1 Legs & X 23' (glides/wedges/endcap/center bar/knob), 2
+Connectors 25', 3 Sling & Rails 25', 4 Caps & Wrap 26' (BOTTLENECK), 5 Final
+Pack 25'. Flow arrows chain 1→5 in a U on the right deck. Capacity 420/26 =
+16.2/day.
+
 BOX STORAGE ZONE (2026-07): the shipped-box stack area is a drawable zone —
 `boxZone {x,z,w,d}` rendered by `refreshBoxZone()` (translucent pad + dashed
 edge + "BOX STORAGE" label + an orange SE corner handle shown only in edit).
