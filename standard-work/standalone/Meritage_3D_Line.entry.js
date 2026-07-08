@@ -1410,11 +1410,31 @@ moveCtl.innerHTML = `<label class="mck"><input type="checkbox" id="walkOn" check
   <div class="mrow">Trips / unit <input type="number" id="trips" value="1" min="0" step="0.5"/></div>
   <div class="mrow" style="color:#6b7785">Each cart = 1 sofa's materials</div>`;
 timeBox.appendChild(moveCtl);
-// Meritage station-times table (top) + a SEPARATE table for the other side.
-const mHdr = document.createElement('div'); mHdr.style.cssText = 'font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#15263a;font-weight:800;margin:4px 0 4px'; mHdr.textContent = 'Meritage — station steps'; timeBox.appendChild(mHdr);
+// ONE host, THREE sections (Meritage / Sola / Canyon Crew) — a station's
+// section comes from which slice of the floor it sits in, so dragging a table
+// across a blue line re-files it automatically.
 const stepsHost = document.createElement('div'); stepsHost.id = 'stepsHost'; timeBox.appendChild(stepsHost);
-const oHdr = document.createElement('div'); oHdr.style.cssText = 'font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#5c5f99;font-weight:800;margin:14px 0 4px;border-top:2px solid #e0e3ea;padding-top:10px'; oHdr.textContent = 'Sola + Canyon — station steps'; timeBox.appendChild(oHdr);
-const stepsHost2 = document.createElement('div'); stepsHost2.id = 'stepsHost2'; timeBox.appendChild(stepsHost2);
+const stepsHost2 = { innerHTML: '', querySelectorAll: () => [] };   // legacy shim — everything renders in stepsHost now
+(() => {   // styling for the 3-section layout
+  const st = document.createElement('style');
+  st.textContent = `
+  #times{width:272px}
+  #times .secHdr{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:12px 0 6px;padding:7px 10px;border-radius:8px;color:#fff;font-weight:800;font-size:12px;letter-spacing:.05em}
+  #times .secHdr .secTot{font-weight:600;font-size:10.5px;opacity:.9;text-align:right}
+  #times .stblock{border:1px solid #e3e7ec;border-left-width:4px;border-radius:10px;padding:8px 9px;margin:7px 0;background:#fff}
+  #times .sttitle{display:flex;align-items:center;gap:6px}
+  #times .sttitle .sttot{margin-left:auto}
+  #times .sdelsta{background:#fff;border:1px solid #dcae9f;color:#c0552c;border-radius:6px;padding:2px 7px;font-size:11px;cursor:pointer;flex:none}
+  #times .sdelsta:hover{background:#c0552c;color:#fff}
+  #times .addInSec{display:block;width:100%;margin:6px 0 2px;background:#f2f6fb;border:1.5px dashed #9db4cf;color:#1d3a66;border-radius:8px;padding:7px;font-size:12px;font-weight:700;cursor:pointer}
+  #times .addInSec:hover{background:#e3edf8}
+  #times .secempty{font-size:11px;color:#8a93a0;margin:4px 2px}
+  #times .stfoot{display:flex;align-items:center;gap:6px;font-size:11px;color:#33414f;margin-top:5px}
+  #times .stfoot .sppl{width:38px}
+  #times .strow .stime{width:52px}
+  #times .sadd{margin-left:auto}`;
+  document.head.appendChild(st);
+})();
 
 /* ---- ADDED STATIONS: extra benches you can drop on either side and drag where
    you want. They are independent — NOT part of the Meritage line, so they never
@@ -1422,6 +1442,8 @@ const stepsHost2 = document.createElement('div'); stepsHost2.id = 'stepsHost2'; 
    shows up in depends on which side of the middle line it sits on. ---- */
 const DIVIDER_X = DECK.x1;                                   // the painted middle line
 const sideOf = x => (x < DIVIDER_X ? 'meritage' : 'other');
+const CANYON_X = 17.6;                                       // section line 4 — everything east of it is the Canyon Crew slice
+const sectionOf = x => (x < DIVIDER_X ? 'meritage' : x < CANYON_X ? 'sola' : 'canyon');
 const STA_COLORS = ['#1d3a66','#9a3b1f','#236043','#8f5390','#a8923a','#3f8f8f','#9c4f45','#c0552c','#2f6df6','#7a5b1f'];
 function addStation(name, x, z, id, t) {
   id = id || ('x' + (++extraSeq));
@@ -1461,24 +1483,25 @@ function recalcAny(id) {
   if (isExtra(id)) { nodes[id].t = s.t; const nd = nodes[id]; if (nd.label && nd.label.userData.redraw) nd.label.userData.redraw(s.t ? +s.t.toFixed(2) + ' min' : '—', s.accent); }
 }
 
-function rowsHtml(list) {
+function rowsHtml(list, accent) {
   let html = '';
   list.forEach(s => {
     const ppl = Math.max(1, s.ppl || 1), cyc = (s.t / ppl);
-    html += `<div class="stblock">
-      <div class="sttitle">${s.title}${s.bot?' <b style="color:#c0552c">◄</b>':''}<span class="sttot">${cyc.toFixed(1).replace(/\.0$/,'')} min/unit</span><span class="tw" id="walk_${s.id}"></span></div>`;
-    (s.steps||[]).forEach((st, si) => {
+    const canRemove = nodes[s.id] && nodes[s.id].extra;
+    html += `<div class="stblock" style="border-left-color:${accent || '#1d3a66'}">
+      <div class="sttitle">${s.title}${s.bot ? ' <b style="color:#c0552c">◄</b>' : ''}
+        <span class="sttot">${cyc.toFixed(1).replace(/\.0$/, '')} min/unit</span><span class="tw" id="walk_${s.id}"></span>
+        ${canRemove ? `<button class="sdelsta" data-id="${s.id}" title="Remove this station (its table disappears from the floor)">🗑 remove</button>` : ''}</div>`;
+    (s.steps || []).forEach((st, si) => {
       html += `<div class="strow">
-        <input class="sname" data-id="${s.id}" data-si="${si}" value="${(st.name||'').replace(/"/g,'&quot;')}"/>
-        <input class="stime" type="number" step="0.25" min="0" data-id="${s.id}" data-si="${si}" value="${st.t}"/>
-        <span class="su">min (total)</span>
-        <button class="sdel" data-id="${s.id}" data-si="${si}">✕</button></div>`;
+        <input class="sname" data-id="${s.id}" data-si="${si}" value="${(st.name || '').replace(/"/g, '&quot;')}" title="Step name — click to edit"/>
+        <input class="stime" type="number" step="0.25" min="0" data-id="${s.id}" data-si="${si}" value="${st.t}" title="Minutes for this step"/>
+        <span class="su">min</span>
+        <button class="sdel" data-id="${s.id}" data-si="${si}" title="Delete this step">✕</button></div>`;
     });
-    html += `<div class="strow"><span class="su" style="flex:1">People at station</span>
-        <input class="sppl" type="number" min="1" max="6" step="1" data-id="${s.id}" value="${ppl}"/>
-        <span class="su">→ ${s.t.toFixed(0)}÷${ppl} = ${cyc.toFixed(1)}m</span></div>`;
-    html += `<button class="sadd" data-id="${s.id}">+ add step</button>`;
-    if (nodes[s.id] && nodes[s.id].extra) html += `<button class="sdelsta" data-id="${s.id}" style="background:#c0552c;color:#fff;border:0;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;margin-left:6px">🗑 Remove station</button>`;
+    html += `<div class="stfoot">👤<input class="sppl" type="number" min="1" max="6" step="1" data-id="${s.id}" value="${ppl}" title="People working at this station"/>
+        <span>people → ${s.t.toFixed(0)} ÷ ${ppl} = <b>${cyc.toFixed(1)} min/unit</b></span>
+        <button class="sadd" data-id="${s.id}" title="Add a step to this station">+ step</button></div>`;
     html += `</div>`;
   });
   return html;
@@ -1552,12 +1575,33 @@ function wireRows(host) {
     if (nd && confirm(`Remove station “${nd.s.title}”?`)) deleteStation(id);
   });
 }
+// where a new station lands for each section (open floor in that slice, staggered)
+function addStationInSection(sec) {
+  const name = (prompt('New station name:', 'New station') || '').trim(); if (!name) return;
+  const n = extraStations.filter(id => sectionOf(nodes[id].x) === sec).length;
+  const x = sec === 'meritage' ? 1.5 : sec === 'sola' ? 12 : 20.4;
+  const z = Math.min(8.5, -7 + n * 2.5);
+  addStation(name, x, z);
+  if (!editing) setEditing(true);                             // straight into edit mode so it can be dragged into place
+  renderTimes(); saveLayout();
+}
 function renderTimes() {
-  const mer = [...ST, ...extraStations.filter(id => sideOf(nodes[id].x) === 'meritage').map(id => nodes[id].s)];
-  const oth = extraStations.filter(id => sideOf(nodes[id].x) === 'other').map(id => nodes[id].s);
-  stepsHost.innerHTML = rowsHtml(mer);
-  stepsHost2.innerHTML = oth.length ? rowsHtml(oth) : '<div style="font-size:11px;color:#8a93a0">No right-side stations yet. Add one with “＋ Add station”, or drag a station across the middle line.</div>';
-  wireRows(stepsHost); wireRows(stepsHost2);
+  const SECTIONS = [
+    { key: 'meritage', label: 'MERITAGE',    color: '#1d3a66', list: [...ST, ...extraStations.filter(id => sectionOf(nodes[id].x) === 'meritage').map(id => nodes[id].s)] },
+    { key: 'sola',     label: 'SOLA',        color: '#236043', list: extraStations.filter(id => sectionOf(nodes[id].x) === 'sola').map(id => nodes[id].s) },
+    { key: 'canyon',   label: 'CANYON CREW', color: '#9a5b1f', list: extraStations.filter(id => sectionOf(nodes[id].x) === 'canyon').map(id => nodes[id].s) },
+  ];
+  let html = '';
+  SECTIONS.forEach(sec => {
+    const tot = sec.list.reduce((a, s) => a + (s.t || 0), 0);
+    html += `<div class="secHdr" style="background:${sec.color}"><span>${sec.label}</span><span class="secTot">${sec.list.length} station${sec.list.length === 1 ? '' : 's'} · ${tot.toFixed(1).replace(/\.0$/, '')} min</span></div>`;
+    html += sec.list.length ? rowsHtml(sec.list, sec.color)
+      : `<div class="secempty">No ${sec.label.toLowerCase()} stations yet — add one below, or drag a table into this part of the floor.</div>`;
+    html += `<button class="addInSec" data-sec="${sec.key}">＋ Add station to ${sec.label}</button>`;
+  });
+  stepsHost.innerHTML = html;
+  wireRows(stepsHost);
+  stepsHost.querySelectorAll('.addInSec').forEach(b => b.onclick = () => addStationInSection(b.dataset.sec));
   if (typeof renderSolaData === 'function') renderSolaData();
 }
 renderTimes();

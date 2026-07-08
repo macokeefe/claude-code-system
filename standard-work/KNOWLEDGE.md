@@ -283,6 +283,17 @@ overlay toggle, station drag (pointermove), and add/delete. `#cadBox` has a
 and see just the CAD, plus a separate opacity slider for the marks
 (`MY_MARK_FILL.opacity`) — independent of the CAD-plan opacity slider.
 
+THREE-SECTION TIMES PANEL (2026-07): the Edit-times panel renders ONE host
+with three colour-coded sections — MERITAGE (navy), SOLA (green), CANYON CREW
+(brown) — assigned by floor slice via `sectionOf(x)`: < DIVIDER_X (7.09) =
+meritage, < CANYON_X (17.6, section line 4) = sola, else canyon. Dragging a
+table across a blue line re-files it live. Each section header shows count +
+total minutes; each section has a "＋ Add station to X" button
+(`addStationInSection` — prompts a name, drops the bench in that slice,
+enters edit mode); every added station card has a 🗑 remove button (core
+Meritage ST stations have none). `stepsHost2` is a no-op shim. The right-side
+top data panel still aggregates sola+canyon ("SOLA + CANYON").
+
 HARD RULE — NEVER MUTATE LOADED LAYOUTS, ABSOLUTE (2026-07, learned THREE
 times): (1) a migration deleted the engineer's Sola line; (2) additive
 seeding polluted layouts and saves; (3) an id-heuristic "clone cleanup"
