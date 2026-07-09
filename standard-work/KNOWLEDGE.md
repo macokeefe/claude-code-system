@@ -464,11 +464,19 @@ to `cart2` (the Sola cart). Added `cart3` — a full third cart for Canyon Crew
 line from the shared elevator, `refreshCart3Feed`), default `CART3_DEF=[17.9,-3]`
 in the Canyon slice. `nodes.cart3`/`POS.cart3` → auto-persist via the generic
 `Object.keys(POS)` save/`Object.keys(o)` restore (no layout-schema change);
-draggable via `stList` (added `nodes.cart3`); feed refreshes in `setStationPos`
-and the drag handler alongside cart2. Fetch target is now per-section: Sola →
-cart2, Canyon → cart3 (`sectionOf(nd.x)`), so operators never cross to another
-line's cart. Old saved layouts lack `cart3` → it loads at default and saves on
-next write.
+draggable via `stList` (added `nodes.cart3`). Fetch target is now per-section:
+Sola → cart2, Canyon → cart3 (`sectionOf(nd.x)`), so operators never cross to
+another line's cart. Old saved layouts lack `cart3` → it loads at default and
+saves on next write. **Full delivery PATH (2026-07, replaced the plain supply
+line):** cart3 has the complete editable loop like cart2 — `cart3Waypoints`
+(delivery, brown WP3_MAT dots) + `returnWps3` (return, amber WPR_MAT dots) +
+`cart3Feed`/`returnLine3`/`aisleMesh3`, all drawn by `refreshCart3Feed`
+(elevator→wps→cart→retwps→elevator + 5' aisle). Wired into every path site:
+`setEditing` visibility, Lanes toggle, `pickWaypoint` (added `wpGroup3`), the
+drag handler (`cart3`/`ret3`), right-click delete, the `＋ Cart waypoint` /
+`⟲ Return wp` buttons (`selectedStation==='cart3'`), double-click lane insertion
+(2 extra legs), and persistence (`__wps3`/`__rwps3` in working layout,
+`wps3`/`rwps3` in named snapshots).
 
 **Three separate lines everywhere (2026-07):** Meritage / Sola / Canyon Crew
 are now distinct lines in every readout, matching the 3-section Edit-times
