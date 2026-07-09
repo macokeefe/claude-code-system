@@ -1415,7 +1415,10 @@ function solaUpdate() {
       crew.forEach(c => {
         if (c.station !== id) return;
         let tx = c.homeX, tz = c.homeZ;
-        const fetching = active && frac < 0.14 && nodes.cart2;
+        // parts-fetch walk goes to the Sola materials cart (cart2) — only Sola
+        // operators use it. Canyon Crew has no cart there, so they stay at their
+        // bench instead of trekking across to the Sola line.
+        const fetching = active && frac < 0.14 && nodes.cart2 && sectionOf(nd.x) === 'sola';
         if (fetching) { tx = nodes.cart2.x + (c.idx - 0.5) * 1.1; tz = nodes.cart2.z + 1.35; }
         else if (!active && !allDone && Ts > 0 && c.helpTo && (c.helpMin || 0) > 0 && nodes[c.helpTo]) { tx = nodes[c.helpTo].x + 0.7; tz = nodes[c.helpTo].z + 1.7; }
         c.fig.position.x += (tx - c.fig.position.x) * 0.08;
