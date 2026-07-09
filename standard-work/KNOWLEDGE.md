@@ -457,6 +457,19 @@ stations (e.g. legacy `c1..c4`) are filtered out (both endpoints must be live),
 so NO layout mutation is needed to fix an old saved layout. `solaSched` kept as
 `solaScheds[0]` for legacy refs; `orderedSola()` now dead but left in place.
 
+**Canyon materials cart / cart3 (2026-07):** the parts-fetch walk (operator
+→ materials cart at frac<0.14 of each unit) sent EVERY added-station operator
+to `cart2` (the Sola cart). Added `cart3` — a full third cart for Canyon Crew
+(pad + `makePartsCart` mesh + "CANYON MATERIALS CART" label + `cart3Feed` supply
+line from the shared elevator, `refreshCart3Feed`), default `CART3_DEF=[17.9,-3]`
+in the Canyon slice. `nodes.cart3`/`POS.cart3` → auto-persist via the generic
+`Object.keys(POS)` save/`Object.keys(o)` restore (no layout-schema change);
+draggable via `stList` (added `nodes.cart3`); feed refreshes in `setStationPos`
+and the drag handler alongside cart2. Fetch target is now per-section: Sola →
+cart2, Canyon → cart3 (`sectionOf(nd.x)`), so operators never cross to another
+line's cart. Old saved layouts lack `cart3` → it loads at default and saves on
+next write.
+
 **Three separate lines everywhere (2026-07):** Meritage / Sola / Canyon Crew
 are now distinct lines in every readout, matching the 3-section Edit-times
 panel. Top HUD: the single "SOLA + CANYON" strip became a `.rstack` (vertical,

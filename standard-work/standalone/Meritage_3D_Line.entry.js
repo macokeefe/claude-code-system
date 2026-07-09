@@ -1053,6 +1053,31 @@ function refreshCart2Feed(){
   updateAisle(aisleMesh2, [...p, ...ret.slice(1)]);
 }
 refreshCart2Feed();
+// ---- third materials cart for the CANYON CREW line, fed from the same elevator ----
+const CART3_DEF = [17.9, -3.0];                              // in the Canyon slice (east of section line 4)
+const cart3Pad = new THREE.Group();
+const pad3 = bx(CPW, 0.04, CPD, new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.9, transparent: true, opacity: 0.45 }));
+pad3.position.y = 0.025; cart3Pad.add(pad3);
+for (const dx of [-CPW / 2, CPW / 2]) { const e = bx(0.08, 0.03, CPD, MAT.tape); e.position.set(dx, 0.03, 0); cart3Pad.add(e); }
+for (const dz of [-CPD / 2, CPD / 2]) { const e = bx(CPW, 0.03, 0.08, MAT.tape); e.position.set(0, 0.03, dz); cart3Pad.add(e); }
+(function(){ const c=document.createElement('canvas'); c.width=420; c.height=72; const x=c.getContext('2d');
+  x.fillStyle='#9a5b1f'; x.beginPath(); x.roundRect(4,8,412,56,14); x.fill();
+  x.fillStyle='#fff'; x.font='700 26px Arial'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('CANYON MATERIALS CART',210,38);
+  const tex=new THREE.CanvasTexture(c); tex.anisotropy=8; const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true}));
+  sp.scale.set(2.4,0.45,1); sp.position.y=1.6; cart3Pad.add(sp); })();
+const cart3Mesh = makePartsCart(); cart3Mesh.scale.set(1.61,1.2,1.04); cart3Pad.add(cart3Mesh);
+cart3Pad.position.set(CART3_DEF[0], 0, CART3_DEF[1]); level2.add(cart3Pad);
+nodes.cart3 = { id:'cart3', x:CART3_DEF[0], z:CART3_DEF[1], st:cart3Pad, s:{ id:'cart3', title:'Canyon materials cart' } };
+POS.cart3 = [CART3_DEF[0], CART3_DEF[1]];
+const cart3Feed = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: 0x9a5b1f, dashSize:0.5, gapSize:0.3, transparent:true, opacity:0.6 }));
+level2.add(cart3Feed);
+function refreshCart3Feed(){                                 // supply line from the shared elevator to the Canyon cart
+  const p = [[EL[0], EL[1]], [nodes.cart3.x, nodes.cart3.z]]; const arr = [];
+  for (const pt of p) arr.push(pt[0], 0.18, pt[1]);
+  cart3Feed.geometry.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
+  cart3Feed.geometry.setDrawRange(0, p.length); cart3Feed.geometry.computeBoundingSphere(); cart3Feed.computeLineDistances();
+}
+refreshCart3Feed();
 // shipped boxes pool near packing/ship dock
 // shipped boxes stack in the STORAGE slice (upper-left, west of section line 1):
 // organized 3 columns x 2 levels, filling row by row from the north end
@@ -1415,11 +1440,12 @@ function solaUpdate() {
       crew.forEach(c => {
         if (c.station !== id) return;
         let tx = c.homeX, tz = c.homeZ;
-        // parts-fetch walk goes to the Sola materials cart (cart2) — only Sola
-        // operators use it. Canyon Crew has no cart there, so they stay at their
-        // bench instead of trekking across to the Sola line.
-        const fetching = active && frac < 0.14 && nodes.cart2 && sectionOf(nd.x) === 'sola';
-        if (fetching) { tx = nodes.cart2.x + (c.idx - 0.5) * 1.1; tz = nodes.cart2.z + 1.35; }
+        // parts-fetch walk goes to that line's OWN materials cart: Sola → cart2,
+        // Canyon Crew → cart3. Operators never trek across to another line's cart.
+        const sec = sectionOf(nd.x);
+        const cartNode = sec === 'sola' ? nodes.cart2 : sec === 'canyon' ? nodes.cart3 : null;
+        const fetching = active && frac < 0.14 && cartNode;
+        if (fetching) { tx = cartNode.x + (c.idx - 0.5) * 1.1; tz = cartNode.z + 1.35; }
         else if (!active && !allDone && Ts > 0 && c.helpTo && (c.helpMin || 0) > 0 && nodes[c.helpTo]) { tx = nodes[c.helpTo].x + 0.7; tz = nodes[c.helpTo].z + 1.7; }
         c.fig.position.x += (tx - c.fig.position.x) * 0.08;
         c.fig.position.z += (tz - c.fig.position.z) * 0.08;
@@ -1935,6 +1961,7 @@ function setStationPos(id, x, z) {
   placeStation(id);
   if (id === 'con' && typeof rebuildDivider === 'function') rebuildDivider();   // crossing follows the connector
   if (id === 'cart2' && typeof refreshCart2Feed === 'function') refreshCart2Feed();
+  if (id === 'cart3' && typeof refreshCart3Feed === 'function') refreshCart3Feed();
 }
 function setStationRot(id, rot) {
   const nd = nodes[id]; if (!nd) return;
@@ -2028,7 +2055,7 @@ const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 const deckPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(FLOOR2 - 0.0)); // y = FLOOR2
 let editing = false, dragId = null, savedView = null;
-const stList = () => [...ST.map(s => nodes[s.id]), ...extraStations.map(id => nodes[id]), nodes.cart, nodes.cart2].filter(n => n && n.st);
+const stList = () => [...ST.map(s => nodes[s.id]), ...extraStations.map(id => nodes[id]), nodes.cart, nodes.cart2, nodes.cart3].filter(n => n && n.st);
 const measurePanel = document.getElementById('measure');
 const editBtn = document.getElementById('edit');
 
@@ -2239,7 +2266,7 @@ renderer.domElement.addEventListener('pointermove', e => {
   const x = Math.max(FLOOR_X0 + 1.4, Math.min(FLOOR_X1 - 1.4, cx));        // stations can sit ANYWHERE on the floor — side strips included
   const z = Math.max(FLOOR_Z0 + 1.4, Math.min(FLOOR_Z1 - 1.4, cz));
   setStationPos(dragId, x, z);
-  refreshMeasure(); refreshPath(); if (dragId === 'cart2') refreshCart2Feed();
+  refreshMeasure(); refreshPath(); if (dragId === 'cart2') refreshCart2Feed(); if (dragId === 'cart3') refreshCart3Feed();
   if (cadOn) rebuildMyMarks();   // keep the teal "mine" markers on the bench as it moves
   schedule();                 // walk times + cycle/capacity update live as you move
 });
