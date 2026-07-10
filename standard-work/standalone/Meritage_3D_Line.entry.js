@@ -2981,6 +2981,7 @@ function update(){
   const packing = (cur>=0 && phase==='pack');
   const cyc = Math.max(0.001, sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK);
   crew.forEach(c => {
+    if (typeof isExtra === 'function' && isExtra(c.station)) return;   // added-line (Sola/Canyon) crew belong to solaUpdate — moving them here too made both lerps fight and operators hovered between stations
     let tx = c.homeX, tz = c.homeZ;
     if (c.station === 'fa' && packing) { tx = POS.pak[0] + (c.idx - 0.5) * 1.1; tz = POS.pak[1] + 1.7; }
     else if (c.helpTo && playing && nodes[c.helpTo] && (c.helpMin || 0) > 0) {
