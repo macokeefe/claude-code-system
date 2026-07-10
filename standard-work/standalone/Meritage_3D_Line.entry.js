@@ -1169,16 +1169,13 @@ const prodAisles = PROD_COLS.map(() => { const m = new THREE.Mesh(new THREE.Buff
 const prodLines = PROD_COLS.map(c => { const l = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: c, dashSize: 0.6, gapSize: 0.3, transparent: true, opacity: 0.95 })); l.visible = false; level2.add(l); return l; });
 const prodWpGroup = new THREE.Group(); prodWpGroup.visible = false; level2.add(prodWpGroup);
 const PROD_WP_MATS = PROD_COLS.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.5 }));
+let prodStart = [null, null, null];   // per-line SHIP-POINT override (station id, null = auto/flow order) — set via the ⇊ Ship point button
 function lineEndNode(i) {                                    // where each line's finished furniture leaves from
   if (i === 0) return nodes.pak || null;
+  const ov = prodStart[i];                                   // pinned ship point wins (if the station still exists on this line's slice)
+  if (ov && nodes[ov] && sectionOf(nodes[ov].x) === (i === 1 ? 'sola' : 'canyon')) return nodes[ov];
   const ids = (typeof orderedLine === 'function') ? orderedLine(i === 1 ? 'sola' : 'canyon') : [];
-  if (!ids.length) return null;
-  // numbered tables ("Station 4", "table 4", "Canyon 4 — …") → product leaves
-  // at the HIGHEST number, regardless of how the flow arrows happen to point;
-  // unnumbered lines fall back to the last station in flow order.
-  let best = null, bn = -Infinity;
-  ids.forEach(id => { const m = ((nodes[id].s.title || '').match(/\d+/) || [])[0]; if (m != null && +m > bn) { bn = +m; best = id; } });
-  return nodes[best || ids[ids.length - 1]];
+  return ids.length ? nodes[ids[ids.length - 1]] : null;     // auto: the last station in flow order
 }
 function nearestAccess(x, z) {
   // a forklift pickup is EITHER an @ access-point marker OR a drawn
@@ -2101,7 +2098,7 @@ function setStationRot(id, rot) {
 }
 // Build the working-layout object from the LIVE scene (not from storage).
 function buildWorkingLayout() {
-  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); o.__wps3 = cart3Waypoints.map(w => [w.x, w.z]); o.__rwps3 = returnWps3.map(w => [w.x, w.z]); o.__ends = [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null); o.__fwps = prodWps.map(l => l.map(w => [w.x, w.z])); o.__boxZone = [boxZone.x, boxZone.z, boxZone.w, boxZone.d]; o.__names = Object.fromEntries(ST.map(s2 => [s2.id, s2.title])); return o;
+  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); o.__wps3 = cart3Waypoints.map(w => [w.x, w.z]); o.__rwps3 = returnWps3.map(w => [w.x, w.z]); o.__ends = [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null); o.__fwps = prodWps.map(l => l.map(w => [w.x, w.z])); o.__fstart = prodStart.slice(); o.__boxZone = [boxZone.x, boxZone.z, boxZone.w, boxZone.d]; o.__names = Object.fromEntries(ST.map(s2 => [s2.id, s2.title])); return o;
 }
 // In-memory mirror so the layout survives even when localStorage is blocked
 // (Safari / file:// often refuses to persist) — bake reads THIS, never storage.
@@ -2144,7 +2141,7 @@ window.addEventListener('keydown', e => {
   }
 });
 function applyWorkingLayout(o) {   // apply a working-layout object to the LIVE scene (shared by load + import)
-  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } if (Array.isArray(o.__ends)) { const e = o.__ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; } if (Array.isArray(o.__fwps)) prodWps = [0, 1, 2].map(i => (o.__fwps[i] || []).map(a => ({ x: a[0], z: a[1] }))); refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } if (typeof refreshProdFlow === 'function') refreshProdFlow();
+  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } if (Array.isArray(o.__ends)) { const e = o.__ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; } if (Array.isArray(o.__fwps)) prodWps = [0, 1, 2].map(i => (o.__fwps[i] || []).map(a => ({ x: a[0], z: a[1] }))); if (Array.isArray(o.__fstart)) prodStart = [0, 1, 2].map(i => o.__fstart[i] || null); refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } if (typeof refreshProdFlow === 'function') refreshProdFlow();
 }
 let hadSavedLayout = false;   // true when ANY layout (localStorage or baked) was loaded — defaults must then keep their hands off
 function loadLayout() { try { let o = null; try { o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch (e) {} if (!o && window.__M3D_LAYOUT__) o = window.__M3D_LAYOUT__;   // baked-in working layout (travels with the file)
@@ -2526,6 +2523,25 @@ document.getElementById('addwp').onclick = () => {
     ends.classList.toggle('on', endpointsOn);
     refreshEnds();
   };
+  // ⇊ Ship point: pin which table a line's green furniture lane starts from.
+  // Click a Sola/Canyon table (in Edit Layout), then this button — that table
+  // becomes the line's ship point (saved with the layout). Click again on the
+  // same table to go back to automatic (flow-order) selection.
+  const shipB = document.createElement('button');
+  shipB.id = 'shipStartBtn'; shipB.className = awp.className || '';
+  shipB.textContent = '⇊ Ship point';
+  shipB.title = 'Click a Sola or Canyon Crew table, then this button — its line\'s green furniture lane will start from that table. Click again on the same table to return to automatic (flow order).';
+  ends.parentNode.insertBefore(shipB, ends.nextSibling);
+  shipB.onclick = () => {
+    if (!editing) { setEditing(true); return; }
+    const id = selectedStation;
+    if (!id || !nodes[id] || !nodes[id].extra) { alert('Click a Sola or Canyon Crew table first, then “⇊ Ship point”.'); return; }
+    const sec = sectionOf(nodes[id].x);
+    const i = sec === 'sola' ? 1 : sec === 'canyon' ? 2 : -1;
+    if (i < 0) { alert('That table is on the Meritage side — its furniture ships from Cushions & Pack.'); return; }
+    prodStart[i] = (prodStart[i] === id) ? null : id;   // same table again = back to auto
+    refreshProdFlow(); saveLayout();
+  };
 })();
 // Double-click ON a lane (in Edit Layout) to add a waypoint exactly there.
 // Works on every leg: the way OUT to a cart spot (green) and the way BACK to
@@ -2718,7 +2734,7 @@ function snapshot() {
   ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
   if (nodes.cart) pos.cart = [nodes.cart.x, nodes.cart.z];
   const cap = sch ? 420 / Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 0;
-  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), ppl: Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), extras: extraSnap(), flow: flowArrows.map(a => [a.from, a.to]), areas: areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]), rwps: returnWps.map(w => [w.x, w.z]), rwps2: returnWps2.map(w => [w.x, w.z]), wps3: cart3Waypoints.map(w => [w.x, w.z]), rwps3: returnWps3.map(w => [w.x, w.z]), ends: [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null), fwps: prodWps.map(l => l.map(w => [w.x, w.z])), boxZone: [boxZone.x, boxZone.z, boxZone.w, boxZone.d], names: Object.fromEntries(ST.map(s2 => [s2.id, s2.title])), cap: +cap.toFixed(1) };
+  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), ppl: Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), extras: extraSnap(), flow: flowArrows.map(a => [a.from, a.to]), areas: areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]), rwps: returnWps.map(w => [w.x, w.z]), rwps2: returnWps2.map(w => [w.x, w.z]), wps3: cart3Waypoints.map(w => [w.x, w.z]), rwps3: returnWps3.map(w => [w.x, w.z]), ends: [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null), fwps: prodWps.map(l => l.map(w => [w.x, w.z])), fstart: prodStart.slice(), boxZone: [boxZone.x, boxZone.z, boxZone.w, boxZone.d], names: Object.fromEntries(ST.map(s2 => [s2.id, s2.title])), cap: +cap.toFixed(1) };
 }
 function applyLayout(L) {
   if (L.steps) { ST.forEach(s => { if (L.steps[s.id]) { s.steps = L.steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); }
@@ -2735,6 +2751,7 @@ function applyLayout(L) {
   if (Array.isArray(L.wps3)) { cart3Waypoints = L.wps3.map(a => ({ x: a[0], z: a[1] })); }
   if (Array.isArray(L.ends)) { const e = L.ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; }
   if (Array.isArray(L.fwps)) prodWps = [0, 1, 2].map(i => (L.fwps[i] || []).map(a => ({ x: a[0], z: a[1] })));
+  if (Array.isArray(L.fstart)) prodStart = [0, 1, 2].map(i => L.fstart[i] || null);
   refreshCart3Feed();
   if (Array.isArray(L.wps)) { cartWaypoints = L.wps.map(a => ({ x: a[0], z: a[1] })); refreshPath(); }
   if (Array.isArray(L.help)) { helpArrows = L.help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); }
