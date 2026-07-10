@@ -478,6 +478,31 @@ drag handler (`cart3`/`ret3`), right-click delete, the `＋ Cart waypoint` /
 (2 extra legs), and persistence (`__wps3`/`__rwps3` in working layout,
 `wps3`/`rwps3` in named snapshots).
 
+**Cart line endpoints (2026-07):** each cart's RETURN leg used to hard-end at
+the elevator. Now each has a movable endpoint `retEnd`/`retEnd2`/`retEnd3`
+(null = the shared elevator, so it tracks it). `endPt(1|2|3)` resolves the leg's
+final point; `refreshPath`/`refreshCart2Feed`/`refreshCart3Feed` end their `ret`
+there and call `refreshEnds()`. A `⚑ Endpoints` toggle (`endpointsOn`, button by
+Lanes) shows labeled flag markers (`endGroup`, `makeEndMarker`) at each line's
+end — fanned when at the elevator. In Edit Layout: drag a marker → sets that
+`retEnd*` (line ends off the elevator); right-click → back to null/elevator.
+Picking gated on `endpointsOn` (raycaster ignores group visibility). Persisted
+as `__ends` (working) / `ends` (named) = `[retEnd,retEnd2,retEnd3]` each `[x,z]`
+or null. `moveElevator` now refreshes all three cart feeds so null endpoints
+follow it.
+
+**Container-reset recovery (2026-07):** the ephemeral container was reclaimed
+mid-session; local clone came back on the default branch with `standard-work/`
+absent and node_modules/scratchpad gone. Recovery: `git fetch origin` +
+`git checkout -B <branch> origin/<branch>` restored all pushed work; rebuilt the
+scratchpad `m3d_head.html` by slicing the committed HTML before its last
+`<script>` (has the CAD overlay, no baked layout), recreated `build.sh`, and
+`npm install` in `client/` restored esbuild+three. A clean rebuild reproduced
+the committed HTML byte-for-byte. Uploads dir did NOT survive — the user's
+baked file was gone, so deliveries reverted to the clean build (their layout
+still loads from browser localStorage, which `loadLayout` reads before the
+baked fallback).
+
 **Three separate lines everywhere (2026-07):** Meritage / Sola / Canyon Crew
 are now distinct lines in every readout, matching the 3-section Edit-times
 panel. Top HUD: the single "SOLA + CANYON" strip became a `.rstack` (vertical,

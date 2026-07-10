@@ -551,7 +551,7 @@ scene.add(elevator.shaft);
 
 // ---- forklift ACCESS POINTS (@) on the platform edge + editable elevator ----
 const elBX = DECK.x0 - 1.6, elBZ = 2;     // elevator built position (for dragging)
-function moveElevator(x,z){ elevator.shaft.position.set(x - elBX, 0, z - elBZ); EL[0]=x; EL[1]=z; if (typeof refreshPath==='function') refreshPath(); }
+function moveElevator(x,z){ elevator.shaft.position.set(x - elBX, 0, z - elBZ); EL[0]=x; EL[1]=z; if (typeof refreshPath==='function') refreshPath(); if (typeof refreshCart2Feed==='function') refreshCart2Feed(); if (typeof refreshCart3Feed==='function') refreshCart3Feed(); }
 // finished-goods package (boxed sofa)
 function makePackage(){ const g=new THREE.Group(); const b=bx(1.5,0.55,0.75,MAT.box); b.position.y=0.3; g.add(b); const t=bx(1.52,0.05,0.26,MAT.boxWhite); t.position.set(0,0.58,0); g.add(t); return g; }
 // forklift openings: gaps in the platform; a forklift carries a package DOWN when triggered
@@ -859,6 +859,39 @@ const RET_MAT_LINE = () => new THREE.LineDashedMaterial({ color: 0xb0812f, dashS
 const returnLine = new THREE.Line(new THREE.BufferGeometry(), RET_MAT_LINE()); returnLine.visible = false; level2.add(returnLine);
 const returnLine2 = new THREE.Line(new THREE.BufferGeometry(), RET_MAT_LINE()); returnLine2.visible = false; level2.add(returnLine2);
 const WPR_MAT = new THREE.MeshStandardMaterial({ color: 0xb0812f, roughness: 0.5 });
+// ---- cart RETURN endpoints: where each cart's return leg ENDS. null = the
+// shared elevator (so it tracks the elevator). Drag the ⚑ marker to end a cart's
+// line somewhere else; right-click it to snap back to the elevator. The ⚑
+// Endpoints toggle shows/hides the markers so you can see where every line ends.
+let retEnd = null, retEnd2 = null, retEnd3 = null;
+let endpointsOn = false;
+const endGroup = new THREE.Group(); endGroup.visible = false; level2.add(endGroup);
+function makeEndMarker(text, color) {
+  const hit = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.7, 18), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.3, roughness: 0.5 }));
+  hit.position.y = 0.35;
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.7, 10), new THREE.MeshStandardMaterial({ color: 0x37414c })); pole.position.y = 1.2; hit.add(pole);
+  const flag = new THREE.Mesh(new THREE.SphereGeometry(0.34, 14, 10), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.4, roughness: 0.4 })); flag.position.y = 1.75; hit.add(flag);
+  const c = document.createElement('canvas'); c.width = 320; c.height = 60; const g2 = c.getContext('2d');
+  g2.fillStyle = 'rgba(255,255,255,0.94)'; g2.beginPath(); g2.roundRect(2, 2, 316, 56, 12); g2.fill();
+  g2.fillStyle = '#1a2430'; g2.font = '700 24px Arial'; g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillText(text, 160, 32);
+  const tex = new THREE.CanvasTexture(c); tex.anisotropy = 8; tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true })); sp.scale.set(3.2, 0.6, 1); sp.position.y = 2.6; hit.add(sp);
+  return hit;
+}
+function refreshEnds() {
+  while (endGroup.children.length) endGroup.remove(endGroup.children[0]);
+  endGroup.visible = endpointsOn;
+  if (!endpointsOn) return;
+  [{ end: retEnd, col: 0xc0552c, tag: 'end', nm: 'Meritage cart' },
+   { end: retEnd2, col: 0x236043, tag: 'end2', nm: 'Sola cart' },
+   { end: retEnd3, col: 0x9a5b1f, tag: 'end3', nm: 'Canyon cart' }].forEach((d, i) => {
+    const at = d.end ? [d.end.x, d.end.z] : [EL[0] + (i - 1) * 0.9, EL[1]];   // fan the "at elevator" markers so labels don't stack
+    const m = makeEndMarker(d.nm + (d.end ? ' — END' : ' → elevator'), d.col);
+    m.position.set(at[0], 0, at[1]); m.userData = { cart: d.tag };
+    endGroup.add(m);
+  });
+}
+function endPt(which) { const e = which === 2 ? retEnd2 : which === 3 ? retEnd3 : retEnd; return e ? [e.x, e.z] : [EL[0], EL[1]]; }
 function setLinePts(line, pts, y) {
   const arr = []; for (const pt of pts) arr.push(pt[0], y, pt[1]);
   line.geometry.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
@@ -896,10 +929,11 @@ function refreshPath() {
   if (pathLine.computeLineDistances) pathLine.computeLineDistances();
   while (wpGroup.children.length) wpGroup.remove(wpGroup.children[0]);
   cartWaypoints.forEach((w, i) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.7, 16), WP_MAT); m.position.set(w.x, 0.35, w.z); m.userData = { cart:'cart', wp:i }; wpGroup.add(m); });
-  const ret = [[nodes.cart.x, nodes.cart.z], ...returnWps.map(w => [w.x, w.z]), [EL[0], EL[1]]];   // return leg: cart spot → elevator
+  const ret = [[nodes.cart.x, nodes.cart.z], ...returnWps.map(w => [w.x, w.z]), endPt(1)];   // return leg: cart spot → endpoint (elevator by default)
   setLinePts(returnLine, ret, 0.12);
   returnWps.forEach((w, i) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.7, 16), WPR_MAT); m.position.set(w.x, 0.35, w.z); m.userData = { cart: 'ret', wp: i }; wpGroup.add(m); });
   updateAisle(aisleMesh, [...p, ...ret.slice(1)]);           // the aisle is the FULL loop back to the elevator
+  refreshEnds();
 }
 
 // ---- help-movement arrows: where an operator goes to help after finishing ----
@@ -1047,10 +1081,11 @@ function refreshCart2Feed(){
   cart2Feed.geometry.setDrawRange(0, p.length); cart2Feed.geometry.computeBoundingSphere(); cart2Feed.computeLineDistances();
   while (wpGroup2.children.length) wpGroup2.remove(wpGroup2.children[0]);
   cart2Waypoints.forEach((w, i) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,0.7,16), WP2_MAT); m.position.set(w.x,0.35,w.z); m.userData = { cart:'cart2', wp:i }; wpGroup2.add(m); });
-  const ret = [[nodes.cart2.x, nodes.cart2.z], ...returnWps2.map(w => [w.x, w.z]), [EL[0], EL[1]]];
+  const ret = [[nodes.cart2.x, nodes.cart2.z], ...returnWps2.map(w => [w.x, w.z]), endPt(2)];
   setLinePts(returnLine2, ret, 0.12);
   returnWps2.forEach((w, i) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.7, 16), WPR_MAT); m.position.set(w.x, 0.35, w.z); m.userData = { cart: 'ret2', wp: i }; wpGroup2.add(m); });
   updateAisle(aisleMesh2, [...p, ...ret.slice(1)]);
+  refreshEnds();
 }
 refreshCart2Feed();
 // ---- third materials cart for the CANYON CREW line, fed from the same elevator ----
@@ -1085,10 +1120,11 @@ function refreshCart3Feed(){
   cart3Feed.geometry.setDrawRange(0, p.length); cart3Feed.geometry.computeBoundingSphere(); cart3Feed.computeLineDistances();
   while (wpGroup3.children.length) wpGroup3.remove(wpGroup3.children[0]);
   cart3Waypoints.forEach((w, i) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,0.7,16), WP3_MAT); m.position.set(w.x,0.35,w.z); m.userData = { cart:'cart3', wp:i }; wpGroup3.add(m); });
-  const ret = [[nodes.cart3.x, nodes.cart3.z], ...returnWps3.map(w => [w.x, w.z]), [EL[0], EL[1]]];
+  const ret = [[nodes.cart3.x, nodes.cart3.z], ...returnWps3.map(w => [w.x, w.z]), endPt(3)];
   setLinePts(returnLine3, ret, 0.12);
   returnWps3.forEach((w, i) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.7, 16), WPR_MAT); m.position.set(w.x, 0.35, w.z); m.userData = { cart: 'ret3', wp: i }; wpGroup3.add(m); });
   updateAisle(aisleMesh3, [...p, ...ret.slice(1)]);
+  refreshEnds();
 }
 refreshCart3Feed();
 // shipped boxes pool near packing/ship dock
@@ -1982,7 +2018,7 @@ function setStationRot(id, rot) {
 }
 // Build the working-layout object from the LIVE scene (not from storage).
 function buildWorkingLayout() {
-  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); o.__wps3 = cart3Waypoints.map(w => [w.x, w.z]); o.__rwps3 = returnWps3.map(w => [w.x, w.z]); o.__boxZone = [boxZone.x, boxZone.z, boxZone.w, boxZone.d]; o.__names = Object.fromEntries(ST.map(s2 => [s2.id, s2.title])); return o;
+  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); o.__wps3 = cart3Waypoints.map(w => [w.x, w.z]); o.__rwps3 = returnWps3.map(w => [w.x, w.z]); o.__ends = [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null); o.__boxZone = [boxZone.x, boxZone.z, boxZone.w, boxZone.d]; o.__names = Object.fromEntries(ST.map(s2 => [s2.id, s2.title])); return o;
 }
 // In-memory mirror so the layout survives even when localStorage is blocked
 // (Safari / file:// often refuses to persist) — bake reads THIS, never storage.
@@ -2024,7 +2060,7 @@ window.addEventListener('keydown', e => {
   }
 });
 function applyWorkingLayout(o) {   // apply a working-layout object to the LIVE scene (shared by load + import)
-  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); }
+  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } if (Array.isArray(o.__ends)) { const e = o.__ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; } refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); }
 }
 let hadSavedLayout = false;   // true when ANY layout (localStorage or baked) was loaded — defaults must then keep their hands off
 function loadLayout() { try { let o = null; try { o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch (e) {} if (!o && window.__M3D_LAYOUT__) o = window.__M3D_LAYOUT__;   // baked-in working layout (travels with the file)
@@ -2163,8 +2199,8 @@ editBtn.onclick = () => setEditing(!editing);
 let dragWp = null, helpArming = false, armSource = null, selectedStation = null, dragFix = null, flowArming = false, flowSource = null;
 function pickWaypoint(e) {
   pointerNDC(e); raycaster.setFromCamera(ndc, camera);
-  const hits = raycaster.intersectObjects([...wpGroup.children, ...wpGroup2.children, ...wpGroup3.children], false);
-  return hits.length ? hits[0].object.userData : null;   // { cart, wp } or null
+  const hits = raycaster.intersectObjects([...wpGroup.children, ...wpGroup2.children, ...wpGroup3.children, ...(endpointsOn ? endGroup.children : [])], false);
+  return hits.length ? hits[0].object.userData : null;   // { cart, wp } or { cart:'end*' } or null
 }
 function fixtureList() {   // draggable non-station objects: access points, racks, then the elevator
   const arr = [];
@@ -2274,6 +2310,9 @@ renderer.domElement.addEventListener('pointermove', e => {
     else if (dragWp.cart === 'ret') { returnWps[dragWp.wp] = { x: cx, z: cz }; refreshPath(); }
     else if (dragWp.cart === 'ret2') { returnWps2[dragWp.wp] = { x: cx, z: cz }; refreshCart2Feed(); }
     else if (dragWp.cart === 'ret3') { returnWps3[dragWp.wp] = { x: cx, z: cz }; refreshCart3Feed(); }
+    else if (dragWp.cart === 'end') { retEnd = { x: cx, z: cz }; refreshPath(); }
+    else if (dragWp.cart === 'end2') { retEnd2 = { x: cx, z: cz }; refreshCart2Feed(); }
+    else if (dragWp.cart === 'end3') { retEnd3 = { x: cx, z: cz }; refreshCart3Feed(); }
     else { cartWaypoints[dragWp.wp] = { x: cx, z: cz }; refreshPath(); }
     return;
   }
@@ -2311,6 +2350,9 @@ renderer.domElement.addEventListener('contextmenu', e => {
     else if (wp.cart === 'ret') { returnWps.splice(wp.wp, 1); refreshPath(); }
     else if (wp.cart === 'ret2') { returnWps2.splice(wp.wp, 1); refreshCart2Feed(); }
     else if (wp.cart === 'ret3') { returnWps3.splice(wp.wp, 1); refreshCart3Feed(); }
+    else if (wp.cart === 'end') { retEnd = null; refreshPath(); }        // right-click endpoint → snap back to the elevator
+    else if (wp.cart === 'end2') { retEnd2 = null; refreshCart2Feed(); }
+    else if (wp.cart === 'end3') { retEnd3 = null; refreshCart3Feed(); }
     else { cartWaypoints.splice(wp.wp, 1); refreshPath(); }
     saveLayout(); return;
   }
@@ -2377,6 +2419,21 @@ document.getElementById('addwp').onclick = () => {
     aisleOn = !aisleOn;
     lanes.textContent = '🔵 Lanes: ' + (aisleOn ? 'on' : 'off');
     aisleMesh.visible = editing && aisleOn; aisleMesh2.visible = editing && aisleOn; aisleMesh3.visible = editing && aisleOn;
+  };
+  // ⚑ Endpoints toggle: show the marker at each cart line's END (elevator by
+  // default). Turn it on to see which carts loop back to the elevator and which
+  // don't; in Edit Layout, drag a marker to move that line's endpoint, right-click
+  // it to snap back to the elevator.
+  const ends = document.createElement('button');
+  ends.id = 'endsBtn'; ends.className = awp.className || '';
+  ends.textContent = '⚑ Endpoints: off';
+  ends.title = 'Show the endpoint of each cart line. In Edit Layout, drag a marker to end that line somewhere other than the elevator; right-click to snap it back.';
+  lanes.parentNode.insertBefore(ends, lanes.nextSibling);
+  ends.onclick = () => {
+    endpointsOn = !endpointsOn;
+    ends.textContent = '⚑ Endpoints: ' + (endpointsOn ? 'on' : 'off');
+    ends.classList.toggle('on', endpointsOn);
+    refreshEnds();
   };
 })();
 // Double-click ON a lane (in Edit Layout) to add a waypoint exactly there.
@@ -2569,7 +2626,7 @@ function snapshot() {
   ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
   if (nodes.cart) pos.cart = [nodes.cart.x, nodes.cart.z];
   const cap = sch ? 420 / Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 0;
-  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), ppl: Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), extras: extraSnap(), flow: flowArrows.map(a => [a.from, a.to]), areas: areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]), rwps: returnWps.map(w => [w.x, w.z]), rwps2: returnWps2.map(w => [w.x, w.z]), wps3: cart3Waypoints.map(w => [w.x, w.z]), rwps3: returnWps3.map(w => [w.x, w.z]), boxZone: [boxZone.x, boxZone.z, boxZone.w, boxZone.d], names: Object.fromEntries(ST.map(s2 => [s2.id, s2.title])), cap: +cap.toFixed(1) };
+  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), ppl: Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), extras: extraSnap(), flow: flowArrows.map(a => [a.from, a.to]), areas: areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]), rwps: returnWps.map(w => [w.x, w.z]), rwps2: returnWps2.map(w => [w.x, w.z]), wps3: cart3Waypoints.map(w => [w.x, w.z]), rwps3: returnWps3.map(w => [w.x, w.z]), ends: [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null), boxZone: [boxZone.x, boxZone.z, boxZone.w, boxZone.d], names: Object.fromEntries(ST.map(s2 => [s2.id, s2.title])), cap: +cap.toFixed(1) };
 }
 function applyLayout(L) {
   if (L.steps) { ST.forEach(s => { if (L.steps[s.id]) { s.steps = L.steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); }
@@ -2583,7 +2640,9 @@ function applyLayout(L) {
   if (Array.isArray(L.rwps)) returnWps = L.rwps.map(a => ({ x: a[0], z: a[1] }));
   if (Array.isArray(L.rwps2)) { returnWps2 = L.rwps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); }
   if (Array.isArray(L.rwps3)) returnWps3 = L.rwps3.map(a => ({ x: a[0], z: a[1] }));
-  if (Array.isArray(L.wps3)) { cart3Waypoints = L.wps3.map(a => ({ x: a[0], z: a[1] })); } refreshCart3Feed();
+  if (Array.isArray(L.wps3)) { cart3Waypoints = L.wps3.map(a => ({ x: a[0], z: a[1] })); }
+  if (Array.isArray(L.ends)) { const e = L.ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; }
+  refreshCart3Feed();
   if (Array.isArray(L.wps)) { cartWaypoints = L.wps.map(a => ({ x: a[0], z: a[1] })); refreshPath(); }
   if (Array.isArray(L.help)) { helpArrows = L.help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); }
   if (L.rot) Object.keys(L.rot).forEach(id => { if (nodes[id]) setStationRot(id, L.rot[id]); });
