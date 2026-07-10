@@ -491,6 +491,19 @@ as `__ends` (working) / `ends` (named) = `[retEnd,retEnd2,retEnd3]` each `[x,z]`
 or null. `moveElevator` now refreshes all three cart feeds so null endpoints
 follow it. **Hide the elevator (2026-07):** right-click the elevator in Edit Layout to hide it when it buries an endpoint marker — `setElevHidden` sets `elevator.shaft.visible=false` (path anchoring via EL stays), shows a faint `elevGhost` disc at EL; right-click the ghost to restore; `pickElevatorOrGhost` raycasts whichever is showing (before pickFixture in the contextmenu handler); leaving Edit Layout always restores it. Session-only, not persisted.
 
+**Furniture-flow lanes (2026-07):** 5'-wide finished-goods lanes from each
+line's END to the NEAREST forklift access point: Meritage = `nodes.pak`, Sola /
+Canyon = last station of `orderedLine(sec)` (`lineEndNode`). Green ribbon tint
+(`prodAisleMat` 0x2e7d4f) + dashed centerline in the line accent (PROD_COLS) +
+waypoint dots (`prodWpGroup`, userData `{cart:'pf<i>'}`). `prodPts(i)` =
+[end, ...prodWps[i], nearestAccess(last wp)] — the access endpoint re-picks by
+proximity, so dragging an access point or the line's last station re-routes
+live (`refreshProdFlow` called from buildSolaSched, setEditing, Lanes toggle,
+station-drag, fixture-drag for access/elev, and both restores). Editable like
+cart lanes: dblclick lane inserts (3 extra legs), drag dots, right-click
+deletes. Edit-mode only + Lanes toggle. Persisted `__fwps` (working) / `fwps`
+(named) = 3 arrays of [x,z].
+
 **Container-reset recovery (2026-07):** the ephemeral container was reclaimed
 mid-session; local clone came back on the default branch with `standard-work/`
 absent and node_modules/scratchpad gone. Recovery: `git fetch origin` +
