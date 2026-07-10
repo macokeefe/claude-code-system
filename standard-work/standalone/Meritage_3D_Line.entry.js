@@ -905,10 +905,14 @@ function refreshEnds() {
   while (endGroup.children.length) endGroup.remove(endGroup.children[0]);
   endGroup.visible = endpointsOn;
   if (!endpointsOn) return;
+  // when an endpoint is still "at the elevator" (null), fan the markers into a
+  // triangle CLEAR of the elevator footprint (~±1.4 m) so every one — Sola
+  // included — is grabbable without being buried in the elevator.
+  const foff = [[-2.1, -1.3], [0, 2.3], [2.1, -1.3]];
   [{ end: retEnd, col: 0xc0552c, tag: 'end', nm: 'Meritage cart' },
    { end: retEnd2, col: 0x236043, tag: 'end2', nm: 'Sola cart' },
    { end: retEnd3, col: 0x9a5b1f, tag: 'end3', nm: 'Canyon cart' }].forEach((d, i) => {
-    const at = d.end ? [d.end.x, d.end.z] : [EL[0] + (i - 1) * 0.9, EL[1]];   // fan the "at elevator" markers so labels don't stack
+    const at = d.end ? [d.end.x, d.end.z] : [EL[0] + foff[i][0], EL[1] + foff[i][1]];
     const m = makeEndMarker(d.nm + (d.end ? ' — END' : ' → elevator'), d.col);
     m.position.set(at[0], 0, at[1]); m.userData = { cart: d.tag };
     endGroup.add(m);
