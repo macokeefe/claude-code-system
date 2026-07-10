@@ -2420,16 +2420,16 @@ document.getElementById('addwp').onclick = () => {
   b.onclick = () => {
     if (!editing) setEditing(true);
     if (selectedStation === 'cart2') {
-      const a = returnWps2.length ? returnWps2[returnWps2.length - 1] : { x: nodes.cart2.x, z: nodes.cart2.z };
-      returnWps2.push({ x: (a.x + EL[0]) / 2, z: (a.z + EL[1]) / 2 });
+      const a = returnWps2.length ? returnWps2[returnWps2.length - 1] : { x: nodes.cart2.x, z: nodes.cart2.z }; const e = endPt(2);
+      returnWps2.push({ x: (a.x + e[0]) / 2, z: (a.z + e[1]) / 2 });
       refreshCart2Feed();
     } else if (selectedStation === 'cart3') {
-      const a = returnWps3.length ? returnWps3[returnWps3.length - 1] : { x: nodes.cart3.x, z: nodes.cart3.z };
-      returnWps3.push({ x: (a.x + EL[0]) / 2, z: (a.z + EL[1]) / 2 });
+      const a = returnWps3.length ? returnWps3[returnWps3.length - 1] : { x: nodes.cart3.x, z: nodes.cart3.z }; const e = endPt(3);
+      returnWps3.push({ x: (a.x + e[0]) / 2, z: (a.z + e[1]) / 2 });
       refreshCart3Feed();
     } else {
-      const a = returnWps.length ? returnWps[returnWps.length - 1] : { x: nodes.cart.x, z: nodes.cart.z };
-      returnWps.push({ x: (a.x + EL[0]) / 2, z: (a.z + EL[1]) / 2 });
+      const a = returnWps.length ? returnWps[returnWps.length - 1] : { x: nodes.cart.x, z: nodes.cart.z }; const e = endPt(1);
+      returnWps.push({ x: (a.x + e[0]) / 2, z: (a.z + e[1]) / 2 });
       refreshPath();
     }
     saveLayout();
@@ -2475,11 +2475,11 @@ renderer.domElement.addEventListener('dblclick', e => {
   const p = deckPoint(e); if (!p) return;
   const legs = [
     { pts: [[EL[0], EL[1]], ...cartWaypoints.map(w => [w.x, w.z]), [nodes.cart.x, nodes.cart.z]], arr: cartWaypoints, refresh: refreshPath },
-    { pts: [[nodes.cart.x, nodes.cart.z], ...returnWps.map(w => [w.x, w.z]), [EL[0], EL[1]]], arr: returnWps, refresh: refreshPath },
+    { pts: [[nodes.cart.x, nodes.cart.z], ...returnWps.map(w => [w.x, w.z]), endPt(1)], arr: returnWps, refresh: refreshPath },
     { pts: [[EL[0], EL[1]], ...cart2Waypoints.map(w => [w.x, w.z]), [nodes.cart2.x, nodes.cart2.z]], arr: cart2Waypoints, refresh: refreshCart2Feed },
-    { pts: [[nodes.cart2.x, nodes.cart2.z], ...returnWps2.map(w => [w.x, w.z]), [EL[0], EL[1]]], arr: returnWps2, refresh: refreshCart2Feed },
+    { pts: [[nodes.cart2.x, nodes.cart2.z], ...returnWps2.map(w => [w.x, w.z]), endPt(2)], arr: returnWps2, refresh: refreshCart2Feed },
     { pts: [[EL[0], EL[1]], ...cart3Waypoints.map(w => [w.x, w.z]), [nodes.cart3.x, nodes.cart3.z]], arr: cart3Waypoints, refresh: refreshCart3Feed },
-    { pts: [[nodes.cart3.x, nodes.cart3.z], ...returnWps3.map(w => [w.x, w.z]), [EL[0], EL[1]]], arr: returnWps3, refresh: refreshCart3Feed },
+    { pts: [[nodes.cart3.x, nodes.cart3.z], ...returnWps3.map(w => [w.x, w.z]), endPt(3)], arr: returnWps3, refresh: refreshCart3Feed },
   ];
   let best = null;
   legs.forEach(leg => {
