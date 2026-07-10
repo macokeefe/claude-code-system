@@ -1172,7 +1172,13 @@ const PROD_WP_MATS = PROD_COLS.map(c => new THREE.MeshStandardMaterial({ color: 
 function lineEndNode(i) {                                    // where each line's finished furniture leaves from
   if (i === 0) return nodes.pak || null;
   const ids = (typeof orderedLine === 'function') ? orderedLine(i === 1 ? 'sola' : 'canyon') : [];
-  return ids.length ? nodes[ids[ids.length - 1]] : null;
+  if (!ids.length) return null;
+  // numbered tables ("Station 4", "table 4", "Canyon 4 — …") → product leaves
+  // at the HIGHEST number, regardless of how the flow arrows happen to point;
+  // unnumbered lines fall back to the last station in flow order.
+  let best = null, bn = -Infinity;
+  ids.forEach(id => { const m = ((nodes[id].s.title || '').match(/\d+/) || [])[0]; if (m != null && +m > bn) { bn = +m; best = id; } });
+  return nodes[best || ids[ids.length - 1]];
 }
 function nearestAccess(x, z) {
   // a forklift pickup is EITHER an @ access-point marker OR a drawn
