@@ -1190,8 +1190,10 @@ function refreshProdFlow() {
   const ed = (typeof editing !== 'undefined') && editing;
   for (let i = 0; i < 3; i++) {
     const pts = prodPts(i), has = !!(pts && pts.length >= 2);
-    prodAisles[i].visible = has && ed && aisleOn;
-    prodLines[i].visible = has && ed;
+    // furniture-flow lanes are ALWAYS shown (they document the floor's product
+    // flow); in Edit Layout the Lanes toggle can hide them with the cart lanes
+    prodAisles[i].visible = has && (ed ? aisleOn : true);
+    prodLines[i].visible = has;
     if (!has) continue;
     setLinePts(prodLines[i], pts, 0.14);
     updateAisle(prodAisles[i], pts);
