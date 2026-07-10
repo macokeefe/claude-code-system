@@ -548,6 +548,29 @@ function makeElevator(x,z){
 }
 const elevator = makeElevator(DECK.x0 - 1.6, 2);   // docks left edge (matches EL below)
 scene.add(elevator.shaft);
+// ---- hide/show the elevator (right-click it in Edit Layout). Its path anchoring
+// still works when hidden — the mesh just gets out of the way so you can grab an
+// endpoint marker tucked under it. A faint ghost marks the spot; right-click it to
+// bring the elevator back. ----
+let elevHidden = false;
+const elevGhost = new THREE.Group(); elevGhost.visible = false; scene.add(elevGhost);
+(function(){
+  const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.7, 0.06, 28), new THREE.MeshBasicMaterial({ color: 0x1d3a66, transparent: true, opacity: 0.2, depthWrite: false }));
+  disc.position.y = 0.04; elevGhost.add(disc);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.07, 8, 32), new THREE.MeshBasicMaterial({ color: 0x1d3a66, transparent: true, opacity: 0.55 }));
+  ring.rotation.x = Math.PI / 2; ring.position.y = 0.06; elevGhost.add(ring);
+  const c = document.createElement('canvas'); c.width = 360; c.height = 64; const g = c.getContext('2d');
+  g.fillStyle = 'rgba(29,58,102,0.92)'; g.beginPath(); g.roundRect(0, 0, 360, 64, 10); g.fill();
+  g.fillStyle = '#fff'; g.font = '700 22px Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('ELEVATOR — right-click to show', 180, 34);
+  const tex = new THREE.CanvasTexture(c); tex.anisotropy = 8; tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true })); sp.scale.set(3.6, 0.64, 1); sp.position.y = 1.0; elevGhost.add(sp);
+})();
+function setElevHidden(h){ elevHidden = h; elevator.shaft.visible = !h; elevGhost.visible = h; elevGhost.position.set(EL[0], 0, EL[1]); }
+function pickElevatorOrGhost(e){
+  pointerNDC(e); raycaster.setFromCamera(ndc, camera);
+  const hits = raycaster.intersectObjects(elevHidden ? [elevGhost] : [elevator.shaft], true);
+  return hits.length > 0;
+}
 
 // ---- forklift ACCESS POINTS (@) on the platform edge + editable elevator ----
 const elBX = DECK.x0 - 1.6, elBZ = 2;     // elevator built position (for dragging)
@@ -2188,6 +2211,7 @@ function setEditing(on) {
     }
   } else {
     dragId = null; measure.visible = false; measurePanel.innerHTML = '';
+    if (elevHidden) setElevHidden(false);            // always bring the elevator back when leaving Edit Layout
     if (typeof setCadOverlay === 'function') setCadOverlay(false);   // the CAD overlay is an edit-only comparison aid
     if (!is2D && savedView) { camera.position.copy(savedView.p); controls.target.copy(savedView.t); }
     // settle crew back home
@@ -2336,6 +2360,7 @@ renderer.domElement.addEventListener('pointerup', () => {
 renderer.domElement.addEventListener('contextmenu', e => {
   if (!editing) return;
   e.preventDefault();                                  // no browser menu while editing
+  if (pickElevatorOrGhost(e)) { setElevHidden(!elevHidden); return; }   // right-click the elevator to hide it (path stays); right-click its ghost to show it
   const fi = pickFixture(e);
   if (fi != null) {   // delete access point or rack on right-click
     const f = fixtureList()[fi];

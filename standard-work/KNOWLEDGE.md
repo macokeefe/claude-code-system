@@ -489,7 +489,7 @@ end — fanned when at the elevator. In Edit Layout: drag a marker → sets that
 Picking gated on `endpointsOn` (raycaster ignores group visibility). Persisted
 as `__ends` (working) / `ends` (named) = `[retEnd,retEnd2,retEnd3]` each `[x,z]`
 or null. `moveElevator` now refreshes all three cart feeds so null endpoints
-follow it.
+follow it. **Hide the elevator (2026-07):** right-click the elevator in Edit Layout to hide it when it buries an endpoint marker — `setElevHidden` sets `elevator.shaft.visible=false` (path anchoring via EL stays), shows a faint `elevGhost` disc at EL; right-click the ghost to restore; `pickElevatorOrGhost` raycasts whichever is showing (before pickFixture in the contextmenu handler); leaving Edit Layout always restores it. Session-only, not persisted.
 
 **Container-reset recovery (2026-07):** the ephemeral container was reclaimed
 mid-session; local clone came back on the default branch with `standard-work/`
