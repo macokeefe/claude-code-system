@@ -1175,8 +1175,11 @@ function lineEndNode(i) {                                    // where each line'
   return ids.length ? nodes[ids[ids.length - 1]] : null;
 }
 function nearestAccess(x, z) {
+  // a forklift pickup is EITHER an @ access-point marker OR a drawn
+  // "Forklift Access" area (kind 'forklift') — lanes go to whichever is closest
   let best = null, bd = Infinity;
   accessPts.forEach(a => { const d = Math.hypot(a.x - x, a.z - z); if (d < bd) { bd = d; best = a; } });
+  areas.forEach(a => { if (a.kind !== 'forklift') return; const d = Math.hypot(a.x - x, a.z - z); if (d < bd) { bd = d; best = a; } });
   return best;
 }
 function prodPts(i) {
@@ -2110,6 +2113,7 @@ function saveLayout() {
   } catch (e) {}
   __workingLayout = next;
   try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(next)); } catch (e) {}
+  try { refreshProdFlow(); } catch (e) {}   // catch-all: any layout mutation may move a forklift access — re-route the furniture lanes
 }
 function undoLayout() {
   if (!undoStack.length) return;
@@ -2376,7 +2380,7 @@ renderer.domElement.addEventListener('pointermove', e => {
   if (dragFix != null) {   // fixtures + surrounding areas can sit anywhere on the warehouse floor
     const f = fixtureList()[dragFix];
     if (f) f.set(Math.max(FLOOR_X0 - 1.2, Math.min(FLOOR_X1 + 1.2, snap(p.x))), Math.max(FLOOR_Z0 - 0.5, Math.min(FLOOR_Z1 + 0.5, snap(p.z))));
-    if (f && (f.kind === 'access' || f.kind === 'elev')) refreshProdFlow();   // furniture lanes end at the nearest access point — track it
+    if (f && (f.kind === 'access' || f.kind === 'elev' || f.kind === 'area')) refreshProdFlow();   // furniture lanes end at the nearest access point / forklift area — track it
     return;
   }
   const cx = Math.max(FLOOR_X0 + 0.6, Math.min(FLOOR_X1 - 0.6, snap(p.x)));   // stations + waypoints can go ANYWHERE on the 35x21 floor (side strips included)
