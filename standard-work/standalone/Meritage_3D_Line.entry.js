@@ -1182,7 +1182,7 @@ function nearestAccess(x, z) {
 function prodPts(i) {
   const s = lineEndNode(i); if (!s) return null;
   const wps = prodWps[i], last = wps.length ? wps[wps.length - 1] : s;
-  const acc = nearestAccess(last.x, last.z); if (!acc) return null;
+  const acc = nearestAccess(last.x, last.z) || { x: EL[0], z: EL[1] };   // no @ on the floor → fall back to the elevator so the lanes ALWAYS draw
   return [[s.x, s.z], ...wps.map(w => [w.x, w.z]), [acc.x, acc.z]];
 }
 function refreshProdFlow() {
