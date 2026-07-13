@@ -955,6 +955,23 @@ SECTION_LINES.forEach(pl => {
   g.position.set(pl[0][0], 0, pl[0][1]);
   sectionGroup.add(g);
 });
+// ---- PROMINENT line zones: each line's slice gets a soft tint in its accent
+// color, and the two LINE boundaries (middle line + section line 4) get low
+// "light-curtain" walls — so which line a table belongs to is unmistakable.
+(function lineZones() {
+  const B1 = 7.09, B2 = 17.6;                                // line boundaries (= DIVIDER_X / CANYON_X)
+  const zones = [[FLOOR_X0, B1, 0x1d3a66, 0.05], [B1, B2, 0x236043, 0.05], [B2, FLOOR_X1, 0x9a5b1f, 0.07]];
+  zones.forEach(([x0, x1, col, op]) => {
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, FLOOR_D - 0.1),
+      new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: op, depthWrite: false }));
+    p.rotation.x = -Math.PI / 2; p.position.set((x0 + x1) / 2, 0.021, 0); sectionGroup.add(p);
+  });
+  for (const bx2 of [B1, B2]) {                              // low glowing boundary walls
+    const w = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.5, FLOOR_D - 0.1),
+      new THREE.MeshBasicMaterial({ color: 0x00b7d4, transparent: true, opacity: 0.28, depthWrite: false }));
+    w.position.set(bx2, 0.25, 0); sectionGroup.add(w);
+  }
+})();
 // ---- object builders: each adds meshes to a group `g`, relative to the group origin ----
 function aPad(g, w, d, color) {   // neutral marked-off zone (no colors) — a light-grey pad with a slightly darker outline
   const p = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), AM(0xbcc2c8, { transparent: true, opacity: 0.32, roughness: 0.9 })); p.position.y = AY + 0.03; g.add(p);
@@ -1864,6 +1881,7 @@ function addStation(name, x, z, id, t) {
   buildExtraCrew(id);                                         // show its operator figure(s)
   if (typeof applyLabels === 'function') applyLabels();       // follow the current Labels mode (Off / Names / Full)
   if (typeof cadOn !== 'undefined' && cadOn) rebuildMyMarks();   // include the new station in the teal markers
+  applyLineAccent(id);                                        // label tinted with its line's color
   return id;
 }
 function buildExtraCrew(id) {                                 // operator figures for an added station (mirrors Meritage)
@@ -1880,6 +1898,14 @@ function buildExtraCrew(id) {                                 // operator figure
 }
 const getAny = id => ST.find(s => s.id === id) || (nodes[id] && nodes[id].s) || null;
 const isExtra = id => !!(nodes[id] && nodes[id].extra);
+// an added table's label is tinted with its LINE's color, so membership is
+// visible on the floor itself (navy = Meritage, green = Sola, brown = Canyon)
+const SEC_LABEL_COL = { meritage: '#1d3a66', sola: '#236043', canyon: '#9a5b1f' };
+function applyLineAccent(id) {
+  const nd = nodes[id]; if (!nd || !nd.extra) return;
+  const c = SEC_LABEL_COL[sectionOf(nd.x)] || '#1d3a66';
+  if (nd.s.accent !== c) { nd.s.accent = c; setStationTitle(id, nd.s.title); }   // full label rebuild so the pill recolors
+}
 function recalcAny(id) {
   const s = getAny(id); if (!s) return;
   if (s.steps) s.t = s.steps.reduce((a, st) => a + (parseFloat(st.t) || 0), 0);
@@ -2340,7 +2366,7 @@ window.addEventListener('keydown', e => {
   }
 });
 function applyWorkingLayout(o) {   // apply a working-layout object to the LIVE scene (shared by load + import)
-  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } if (Array.isArray(o.__ends)) { const e = o.__ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; } if (Array.isArray(o.__fwps)) prodWps = [0, 1, 2].map(i => (o.__fwps[i] || []).map(a => ({ x: a[0], z: a[1] }))); if (Array.isArray(o.__fstart)) prodStart = [0, 1, 2].map(i => o.__fstart[i] || null); refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } if (typeof refreshProdFlow === 'function') refreshProdFlow();
+  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } if (Array.isArray(o.__ends)) { const e = o.__ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; } if (Array.isArray(o.__fwps)) prodWps = [0, 1, 2].map(i => (o.__fwps[i] || []).map(a => ({ x: a[0], z: a[1] }))); if (Array.isArray(o.__fstart)) prodStart = [0, 1, 2].map(i => o.__fstart[i] || null); refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } extraStations.forEach(applyLineAccent); if (typeof refreshProdFlow === 'function') refreshProdFlow();
 }
 let hadSavedLayout = false;   // true when ANY layout (localStorage or baked) was loaded — defaults must then keep their hands off
 function loadLayout() { try { let o = null; try { o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch (e) {} if (!o && window.__M3D_LAYOUT__) o = window.__M3D_LAYOUT__;   // baked-in working layout (travels with the file)
@@ -2478,7 +2504,7 @@ function setEditing(on) {
   }
 }
 editBtn.onclick = () => setEditing(!editing);
-let dragWp = null, helpArming = false, armSource = null, selectedStation = null, dragFix = null, flowArming = false, flowSource = null;
+let dragWp = null, helpArming = false, armSource = null, selectedStation = null, dragFix = null, flowArming = false, flowSource = null, dragFenceR = null;
 function pickWaypoint(e) {
   pointerNDC(e); raycaster.setFromCamera(ndc, camera);
   const hits = raycaster.intersectObjects([...wpGroup.children, ...wpGroup2.children, ...wpGroup3.children, ...prodWpGroup.children, ...(endpointsOn ? endGroup.children : [])], false);
@@ -2560,7 +2586,13 @@ renderer.domElement.addEventListener('pointerdown', e => {
   const wp = pickWaypoint(e);
   if (wp != null) { dragWp = wp; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId); return; }
   const id = pickStation(e);
-  if (id) { dragId = id; selectedStation = id; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId); refreshMeasure(); }
+  if (id) {
+    dragId = id; selectedStation = id; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId); refreshMeasure();
+    // fence the drag inside the table's OWN line slice — a table can't drift
+    // across a boundary by accident. Hold SHIFT while dragging to cross on purpose.
+    const s0 = sectionOf(nodes[id].x);
+    dragFenceR = s0 === 'meritage' ? [FLOOR_X0 + 0.6, DIVIDER_X - 0.35] : s0 === 'sola' ? [DIVIDER_X + 0.35, CANYON_X - 0.35] : [CANYON_X + 0.35, FLOOR_X1 - 0.6];
+  }
   // else: clicked empty floor -> OrbitControls pans the camera
 });
 document.getElementById('rotbtn').onclick = () => {
@@ -2601,7 +2633,9 @@ renderer.domElement.addEventListener('pointermove', e => {
     return;
   }
   if (!dragId) return;
-  const x = Math.max(FLOOR_X0 + 1.4, Math.min(FLOOR_X1 - 1.4, cx));        // stations can sit ANYWHERE on the floor — side strips included
+  let x = Math.max(FLOOR_X0 + 1.4, Math.min(FLOOR_X1 - 1.4, cx));        // stations can sit ANYWHERE on the floor — side strips included
+  if (dragFenceR && !e.shiftKey) x = Math.max(dragFenceR[0], Math.min(dragFenceR[1], x));   // fenced inside its line (Shift-drag crosses)
+  else if (e.shiftKey) dragFenceR = null;                                 // once you cross with Shift, the fence re-arms on the next grab
   const z = Math.max(FLOOR_Z0 + 1.4, Math.min(FLOOR_Z1 - 1.4, cz));
   setStationPos(dragId, x, z);
   refreshMeasure(); refreshPath(); if (dragId === 'cart2') refreshCart2Feed(); if (dragId === 'cart3') refreshCart3Feed(); refreshProdFlow();
@@ -2614,7 +2648,7 @@ renderer.domElement.addEventListener('pointerup', () => {
   if (editing) controls.enabled = true;                  // re-enable camera pan after a station/waypoint drag
   if (dragFix != null) { dragFix = null; saveLayout(); }
   if (dragWp != null) { dragWp = null; saveLayout(); }
-  if (dragId) { dragId = null; measure.visible = false; measurePanel.innerHTML = ''; renderTimes(); saveLayout(); }   // dragging across the middle line re-routes a station to the other side's table
+  if (dragId) { if (isExtra(dragId)) applyLineAccent(dragId); dragId = null; dragFenceR = null; measure.visible = false; measurePanel.innerHTML = ''; renderTimes(); saveLayout(); }   // a Shift-drag across a boundary re-files the table + recolors its label
 });
 // right-click a waypoint to delete it; right-click a station to delete its help arrows
 renderer.domElement.addEventListener('contextmenu', e => {
@@ -2796,7 +2830,7 @@ renderer.domElement.addEventListener('dblclick', e => {
   best.leg.refresh(); saveLayout();
 });
 // mention it in the edit hint
-(() => { const h = document.getElementById('editHint'); if (h) h.innerHTML += ' <b>Double-click on a lane</b> to add a waypoint right there — works on the way out (green) and the return to the elevator (amber).'; })();
+(() => { const h = document.getElementById('editHint'); if (h) h.innerHTML += ' <b>Double-click on a lane</b> to add a waypoint right there — works on the way out (green) and the return to the elevator (amber). <b>Tables are fenced inside their own line</b> (tinted zones) — hold <b>Shift</b> while dragging to move one across a boundary; its label recolors to the new line.'; })();
 // add a forklift access point on the front edge
 document.getElementById('accesspt').onclick = () => {
   if (!editing) setEditing(true);
@@ -2991,6 +3025,7 @@ function applyLayout(L) {
   if (Array.isArray(L.help)) { helpArrows = L.help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); }
   if (L.rot) Object.keys(L.rot).forEach(id => { if (nodes[id]) setStationRot(id, L.rot[id]); });
   if (Array.isArray(L.access)) { clearAccess(); L.access.forEach(p => addAccess(p[0], p[1])); refreshProdFlow(); }
+  extraStations.forEach(applyLineAccent);
   if (Array.isArray(L.elev)) moveElevator(L.elev[0], L.elev[1]);
   if (Array.isArray(L.racks)) { clearRacks(); L.racks.forEach(p => addRack(p[0], p[1], p[2])); }
   if (Array.isArray(L.extras)) { clearExtras(); restoreExtras(L.extras); restoreFlow(L.flow); }   // rebuild the Sola side from this layout
