@@ -579,28 +579,106 @@ function moveElevator(x,z){ elevator.shaft.position.set(x - elBX, 0, z - elBZ); 
 function makePackage(){ const g=new THREE.Group(); const b=bx(1.5,0.55,0.75,MAT.box); b.position.y=0.3; g.add(b); const t=bx(1.52,0.05,0.26,MAT.boxWhite); t.position.set(0,0.58,0); g.add(t); return g; }
 // forklift openings: gaps in the platform; a forklift carries a package DOWN when triggered
 const forkLifts = [];
-// ---- the animated forklift rig: a truck on the GROUND, mast rails up to the
-// deck, and a fork carriage that rides down carrying a furniture package when a
-// takedown fires. Shared by the @ access points AND the "Forklift Access" areas.
+// ---- the animated forklift rig: a detailed counterbalance truck on the GROUND
+// with a telescoping mast up to the deck; the fork carriage rides the mast and
+// carries a furniture package down when a takedown fires. Shared by the @
+// access points AND the "Forklift Access" areas. ----
+const FKM = {                                              // shared materials
+  body:  new THREE.MeshStandardMaterial({ color:0xe8a90c, roughness:0.42, metalness:0.35 }),
+  cwt:   new THREE.MeshStandardMaterial({ color:0xc98f07, roughness:0.5,  metalness:0.35 }),
+  blk:   new THREE.MeshStandardMaterial({ color:0x22262b, roughness:0.82 }),
+  tire:  new THREE.MeshStandardMaterial({ color:0x191c20, roughness:0.92 }),
+  hub:   new THREE.MeshStandardMaterial({ color:0x9aa3ad, roughness:0.4, metalness:0.6 }),
+  mast:  new THREE.MeshStandardMaterial({ color:0x39404a, roughness:0.45, metalness:0.55 }),
+  mast2: new THREE.MeshStandardMaterial({ color:0x4d5661, roughness:0.45, metalness:0.55 }),
+  slv:   new THREE.MeshStandardMaterial({ color:0xc3cbd3, roughness:0.25, metalness:0.75 }),
+  seat:  new THREE.MeshStandardMaterial({ color:0x2c3138, roughness:0.9 }),
+  bcn:   new THREE.MeshStandardMaterial({ color:0xff8a00, emissive:0xff8a00, emissiveIntensity:0.9, roughness:0.4 }),
+  lite:  new THREE.MeshStandardMaterial({ color:0xfff2c0, emissive:0xfff2c0, emissiveIntensity:0.7, roughness:0.3 }),
+};
 function buildLiftRig(g, D){
-  const yel = new THREE.MeshStandardMaterial({ color:0xd9a300, roughness:0.55, metalness:0.3 });
   const groundY = -FLOOR2;
-  const truck = new THREE.Group(); truck.position.set(0, groundY, D/2 + 1.1);          // parked in front of the opening
-  const body = bx(1.8,0.9,1.1,yel); body.position.y=0.6; truck.add(body);
-  const cwt = bx(0.5,0.8,1.1,yel); cwt.position.set(0,0.55,0.85); truck.add(cwt);
-  for (const [px,pz] of [[-0.7,-0.45],[-0.7,0.45],[0.7,-0.45],[0.7,0.45]]) { const w=cyl(0.3,0.24,MAT.pants); w.rotation.x=Math.PI/2; w.position.set(px,0.3,pz); truck.add(w); }
-  for (const px of [-0.45,0.45]) { const p=bx(0.08,1.3,0.08,MAT.steel); p.position.set(px,1.6,0.3); truck.add(p); }   // overhead guard
-  const guard = bx(1.1,0.08,1.0,MAT.steel); guard.position.set(0,2.25,0.2); truck.add(guard);
-  const drv = makeCrewFigure(0x767d88,'Forklift'); drv.scale.set(0.8,0.65,0.8); drv.position.set(0,0.8,0.4); truck.add(drv);
+  const zM = -D/2 + 0.5;                                   // mast plane (under the deck edge / opening)
+  const TRAVEL_H = FLOOR2 - 0.3;                           // carriage travel: 0.3 m off the ground → deck level
+
+  /* ---- truck (front faces the mast / deck, −z) ---- */
+  const truck = new THREE.Group(); truck.position.set(0, groundY, zM + 1.15);
+  // chassis: floor plate, hood, sculpted nose
+  const plate = bx(1.02, 0.07, 1.15, FKM.blk); plate.position.set(0, 0.46, -0.12); truck.add(plate);
+  const hood  = bx(1.05, 0.52, 1.55, FKM.body); hood.position.set(0, 0.72, 0.28); truck.add(hood);
+  const nose  = bx(1.05, 0.34, 0.35, FKM.body); nose.position.set(0, 0.63, -0.72); truck.add(nose);
+  const skirt = bx(1.05, 0.3, 2.1, FKM.blk);  skirt.position.set(0, 0.32, 0.15); truck.add(skirt);
+  // counterweight: stepped block + rounded top edge
+  const cw1 = bx(1.12, 0.78, 0.6, FKM.cwt); cw1.position.set(0, 0.72, 1.22); truck.add(cw1);
+  const cw2 = bx(1.12, 0.4, 0.28, FKM.cwt); cw2.position.set(0, 1.28, 1.1); truck.add(cw2);
+  const cwr = cyl(0.19, 1.12, FKM.cwt); cwr.rotation.z = Math.PI/2; cwr.position.set(0, 1.12, 1.42); truck.add(cwr);
+  // LPG tank on the counterweight
+  const tank = cyl(0.16, 0.8, FKM.slv); tank.rotation.z = Math.PI/2; tank.position.set(0, 1.5, 1.18); truck.add(tank);
+  const strap = bx(0.06, 0.36, 0.36, FKM.blk); strap.position.set(0, 1.44, 1.18); truck.add(strap);
+  // wheels: big drive fronts, smaller steer rears, with hubs
+  for (const [px, pz, r, w] of [[-0.56,-0.5,0.34,0.3],[0.56,-0.5,0.34,0.3],[-0.47,0.92,0.27,0.24],[0.47,0.92,0.27,0.24]]) {
+    const t = cyl(r, w, FKM.tire); t.rotation.z = Math.PI/2; t.position.set(px, r, pz); truck.add(t);
+    const h = cyl(r*0.55, w+0.02, FKM.hub); h.rotation.z = Math.PI/2; h.position.set(px, r, pz); truck.add(h);
+    const fender = bx(w+0.06, 0.05, r*1.9, FKM.body); fender.position.set(px, r*2+0.06, pz); truck.add(fender);
+  }
+  // operator compartment: seat, steering column + wheel, dash
+  const seatB = bx(0.5, 0.09, 0.48, FKM.seat); seatB.position.set(0, 1.03, 0.3); truck.add(seatB);
+  const seatR = bx(0.5, 0.52, 0.1, FKM.seat); seatR.position.set(0, 1.32, 0.56); seatR.rotation.x = -0.12; truck.add(seatR);
+  const dash = bx(0.62, 0.24, 0.16, FKM.blk); dash.position.set(0, 1.06, -0.5); truck.add(dash);
+  const col = bx(0.05, 0.42, 0.05, FKM.blk); col.position.set(0, 1.22, -0.42); col.rotation.x = 0.55; truck.add(col);
+  const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.025, 10, 22), FKM.blk);
+  wheel.position.set(0, 1.4, -0.34); wheel.rotation.x = Math.PI/2 - 0.55; truck.add(wheel);
+  // overhead guard with roof slats + beacon + headlights
+  for (const [px, pz] of [[-0.5,-0.52],[0.5,-0.52],[-0.5,0.66],[0.5,0.66]]) {
+    const p = bx(0.07, 1.32, 0.07, FKM.blk); p.position.set(px, 1.68, pz); truck.add(p);
+  }
+  const roof = bx(1.14, 0.06, 1.4, FKM.blk); roof.position.set(0, 2.36, 0.07); truck.add(roof);
+  for (let i = 0; i < 4; i++) { const s = bx(1.1, 0.03, 0.09, FKM.blk); s.position.set(0, 2.41, -0.5 + i*0.38); truck.add(s); }
+  const bcnB = cyl(0.055, 0.1, FKM.blk); bcnB.position.set(0.36, 2.44, 0.5); truck.add(bcnB);
+  const bcn = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 10), FKM.bcn); bcn.position.set(0.36, 2.52, 0.5); truck.add(bcn);
+  for (const px of [-0.42, 0.42]) { const l = bx(0.12, 0.08, 0.05, FKM.lite); l.position.set(px, 1.0, -0.9); truck.add(l); }
+  // driver
+  const drv = makeCrewFigure(0x767d88, 'Forklift'); drv.scale.set(0.8, 0.6, 0.8); drv.position.set(0, 0.62, 0.28); truck.add(drv);
   g.add(truck);
-  // tall mast rails from the ground up to the deck (the lift travels these)
-  for (const px of [-0.55,0.55]) { const m=bx(0.12, FLOOR2+0.2, 0.12, MAT.steel); m.position.set(px, groundY + (FLOOR2+0.2)/2, -D/2 + 0.5); g.add(m); }
-  // fork carriage + furniture that rides up/down
-  const lift = new THREE.Group();
-  for (const pz of [-0.35,0.35]) { const fk = bx(1.3,0.08,0.16,MAT.steel); fk.position.set(0,0,pz); lift.add(fk); }   // forks
-  const pkg = makePackage(); pkg.scale.set(0.7,0.7,0.7); pkg.position.y=0.12; pkg.visible=false; lift.add(pkg);
+
+  /* ---- telescoping mast (based at the ground, in rig space) ---- */
+  const H1 = TRAVEL_H * 0.62;                              // fixed outer stage
+  const H2 = TRAVEL_H * 0.58;                              // sliding inner stage
+  for (const px of [-0.5, 0.5]) {                          // outer channels + web
+    const c = bx(0.11, H1, 0.18, FKM.mast); c.position.set(px, groundY + H1/2, zM); g.add(c);
+  }
+  for (const fy of [0.18, 0.5, 0.86]) { const b = bx(1.0, 0.08, 0.1, FKM.mast); b.position.set(0, groundY + H1*fy, zM + 0.08); g.add(b); }
+  const inner = new THREE.Group(); inner.position.set(0, groundY, zM);   // slides up as the carriage rises
+  for (const px of [-0.38, 0.38]) { const c = bx(0.09, H2, 0.14, FKM.mast2); c.position.set(px, H2/2, 0); inner.add(c); }
+  const tie = bx(0.82, 0.09, 0.1, FKM.mast2); tie.position.set(0, H2 - 0.06, 0.05); inner.add(tie);
+  g.add(inner);
+  const cylT = cyl(0.05, H1*0.85, FKM.mast); cylT.position.set(0, groundY + H1*0.42, zM + 0.14); g.add(cylT);   // hydraulic tube
+  const rod = cyl(0.028, 1, FKM.slv); rod.position.set(0, groundY + H1*0.85, zM + 0.14); g.add(rod);            // rod extends with the inner stage
+
+  /* ---- fork carriage (rec.lift): y = 0 at deck level, rides down the mast ---- */
+  const lift = new THREE.Group(); lift.position.set(0, 0, zM);
+  const back1 = bx(0.95, 0.09, 0.06, FKM.blk); back1.position.set(0, 0.52, 0.06); lift.add(back1);
+  const back2 = bx(0.95, 0.09, 0.06, FKM.blk); back2.position.set(0, 0.18, 0.06); lift.add(back2);
+  for (let i = 0; i < 5; i++) { const v = bx(0.06, 0.66, 0.05, FKM.blk); v.position.set(-0.4 + i*0.2, 0.33, 0.06); lift.add(v); }
+  for (const px of [-0.3, 0.3]) {                          // L-shaped forks: shank + blade pointing into the deck
+    const shank = bx(0.05, 0.5, 0.07, FKM.blk); shank.position.set(px, 0.25, 0.1); lift.add(shank);
+    const blade = bx(0.11, 0.045, 1.05, FKM.blk); blade.position.set(px, 0.02, 0.62); lift.add(blade);
+  }
+  for (const px of [-0.14, 0.14]) { const ch = bx(0.03, 0.9, 0.02, FKM.seat); ch.position.set(px, 0.95, 0.02); lift.add(ch); }   // lift chains
+  const pkg = makePackage(); pkg.scale.set(0.7, 0.7, 0.7); pkg.position.set(0, 0.06, 0.62); pkg.visible = false; lift.add(pkg);
   g.add(lift);
-  const rec = { lift, busy:false, t:0, pkg }; forkLifts.push(rec);
+
+  // keep the inner stage + rod tracking the carriage height (called from the render loop)
+  const sync = () => {
+    const h = lift.position.y + FLOOR2;                    // carriage height above the ground (0.3 .. FLOOR2)
+    const topNeed = Math.max(H1, Math.min(h + 0.5, FLOOR2 + 0.4));
+    inner.position.y = groundY + (topNeed - H2);
+    const ext = Math.max(0, topNeed - H1);
+    rod.scale.y = Math.max(0.001, ext + 0.2);
+    rod.position.y = groundY + H1*0.85 + (ext + 0.2)/2 - 0.1;
+  };
+  sync();
+  const rec = { lift, busy:false, t:0, pkg, sync }; forkLifts.push(rec);
   return rec;
 }
 function makeForkGap(){
@@ -3144,12 +3222,15 @@ function loop(now){
   updateHelp();    // help-movement arrows follow the stations
   updateFlow();    // part-flow arrows follow the stations
   solaUpdate();    // animate the Sola line on its own clock
-  for (const fl of forkLifts) {                    // forklift carries a package DOWN when triggered, else idle at deck
+  for (const fl of forkLifts) {                    // forklift carries a package DOWN when triggered, else parks low
     if (fl.busy) {
-      fl.t += dt; const p = fl.t / 4;               // ~4s round trip
-      if (p >= 1) { fl.busy = false; fl.lift.position.y = 0; fl.pkg.visible = false; }
-      else { const down = p < 0.5 ? p / 0.5 : 1 - (p - 0.5) / 0.5; fl.lift.position.y = -down * (FLOOR2 - 0.3); fl.pkg.visible = p < 0.55; }
-    } else { fl.lift.position.y = 0; }
+      fl.t += dt; const p = fl.t / 6;               // ~6s: rise empty, take the package, carry it down
+      if (p >= 1) { fl.busy = false; fl.lift.position.y = -(FLOOR2 - 0.3); fl.pkg.visible = false; }
+      else if (p < 0.4) { fl.lift.position.y = -(1 - p / 0.4) * (FLOOR2 - 0.3); fl.pkg.visible = false; }        // up to the deck, forks empty
+      else if (p < 0.5) { fl.lift.position.y = 0; fl.pkg.visible = true; }                                        // pick up the furniture
+      else { fl.lift.position.y = -((p - 0.5) / 0.5) * (FLOOR2 - 0.3); fl.pkg.visible = p < 0.97; }               // carry it down
+    } else { fl.lift.position.y = -(FLOOR2 - 0.3); }   // idle: forks parked just off the ground, like a real truck
+    if (fl.sync) fl.sync();
   }
   update();
   controls.update();
