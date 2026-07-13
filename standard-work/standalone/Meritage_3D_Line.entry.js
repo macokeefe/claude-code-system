@@ -579,6 +579,30 @@ function moveElevator(x,z){ elevator.shaft.position.set(x - elBX, 0, z - elBZ); 
 function makePackage(){ const g=new THREE.Group(); const b=bx(1.5,0.55,0.75,MAT.box); b.position.y=0.3; g.add(b); const t=bx(1.52,0.05,0.26,MAT.boxWhite); t.position.set(0,0.58,0); g.add(t); return g; }
 // forklift openings: gaps in the platform; a forklift carries a package DOWN when triggered
 const forkLifts = [];
+// ---- the animated forklift rig: a truck on the GROUND, mast rails up to the
+// deck, and a fork carriage that rides down carrying a furniture package when a
+// takedown fires. Shared by the @ access points AND the "Forklift Access" areas.
+function buildLiftRig(g, D){
+  const yel = new THREE.MeshStandardMaterial({ color:0xd9a300, roughness:0.55, metalness:0.3 });
+  const groundY = -FLOOR2;
+  const truck = new THREE.Group(); truck.position.set(0, groundY, D/2 + 1.1);          // parked in front of the opening
+  const body = bx(1.8,0.9,1.1,yel); body.position.y=0.6; truck.add(body);
+  const cwt = bx(0.5,0.8,1.1,yel); cwt.position.set(0,0.55,0.85); truck.add(cwt);
+  for (const [px,pz] of [[-0.7,-0.45],[-0.7,0.45],[0.7,-0.45],[0.7,0.45]]) { const w=cyl(0.3,0.24,MAT.pants); w.rotation.x=Math.PI/2; w.position.set(px,0.3,pz); truck.add(w); }
+  for (const px of [-0.45,0.45]) { const p=bx(0.08,1.3,0.08,MAT.steel); p.position.set(px,1.6,0.3); truck.add(p); }   // overhead guard
+  const guard = bx(1.1,0.08,1.0,MAT.steel); guard.position.set(0,2.25,0.2); truck.add(guard);
+  const drv = makeCrewFigure(0x767d88,'Forklift'); drv.scale.set(0.8,0.65,0.8); drv.position.set(0,0.8,0.4); truck.add(drv);
+  g.add(truck);
+  // tall mast rails from the ground up to the deck (the lift travels these)
+  for (const px of [-0.55,0.55]) { const m=bx(0.12, FLOOR2+0.2, 0.12, MAT.steel); m.position.set(px, groundY + (FLOOR2+0.2)/2, -D/2 + 0.5); g.add(m); }
+  // fork carriage + furniture that rides up/down
+  const lift = new THREE.Group();
+  for (const pz of [-0.35,0.35]) { const fk = bx(1.3,0.08,0.16,MAT.steel); fk.position.set(0,0,pz); lift.add(fk); }   // forks
+  const pkg = makePackage(); pkg.scale.set(0.7,0.7,0.7); pkg.position.y=0.12; pkg.visible=false; lift.add(pkg);
+  g.add(lift);
+  const rec = { lift, busy:false, t:0, pkg }; forkLifts.push(rec);
+  return rec;
+}
 function makeForkGap(){
   const g = new THREE.Group();
   const W = 2.6, D = 2.0;                                   // ~8.5' x 6.5' opening (fits a sofa)
@@ -591,25 +615,7 @@ function makeForkGap(){
     const dx=x1-x0,dz=z1-z0,len=Math.hypot(dx,dz),ang=Math.atan2(dz,dx);
     const r=bx(len,0.05,0.05,MAT.steel); r.position.set((x0+x1)/2,1.0,(z0+z1)/2); r.rotation.y=-ang; g.add(r);   // 3-sided guard rail
   }
-  // forklift truck on the GROUND below the opening, doing the lifting
-  const yel = new THREE.MeshStandardMaterial({ color:0xd9a300, roughness:0.55, metalness:0.3 });
-  const groundY = -FLOOR2;
-  const truck = new THREE.Group(); truck.position.set(0, groundY, D/2 + 1.1);          // parked in front of the opening
-  const body = bx(1.8,0.9,1.1,yel); body.position.y=0.6; truck.add(body);
-  const cwt = bx(0.5,0.8,1.1,yel); cwt.position.set(0,0.55,0.85); truck.add(cwt);
-  for (const [px,pz] of [[-0.7,-0.45],[-0.7,0.45],[0.7,-0.45],[0.7,0.45]]) { const w=cyl(0.3,0.24,MAT.pants); w.rotation.x=Math.PI/2; w.position.set(px,0.3,pz); truck.add(w); }
-  for (const px of [-0.45,0.45]) { const p=bx(0.08,1.3,0.08,MAT.steel); p.position.set(px,1.6,0.3); truck.add(p); }   // overhead guard
-  const guard = bx(1.1,0.08,1.0,MAT.steel); guard.position.set(0,2.25,0.2); truck.add(guard);
-  const drv = makeCrewFigure(0x767d88,'Forklift'); drv.scale.set(0.8,0.65,0.8); drv.position.set(0,0.8,0.4); truck.add(drv);
-  g.add(truck);
-  // tall mast rails from the ground up to the deck at the opening (the lift travels these)
-  for (const px of [-0.55,0.55]) { const m=bx(0.12, FLOOR2+0.2, 0.12, MAT.steel); m.position.set(px, groundY + (FLOOR2+0.2)/2, -D/2 + 0.5); g.add(m); }
-  // fork carriage + furniture that rides up/down through the gap
-  const lift = new THREE.Group();
-  for (const pz of [-0.35,0.35]) { const fk = bx(1.3,0.08,0.16,MAT.steel); fk.position.set(0,0,pz); lift.add(fk); }   // forks
-  const pkg = makePackage(); pkg.scale.set(0.7,0.7,0.7); pkg.position.y=0.12; pkg.visible=false; lift.add(pkg);
-  g.add(lift);
-  const rec = { lift, busy:false, t:0, pkg }; forkLifts.push(rec);
+  const rec = buildLiftRig(g, D);
   return { g, rec };
 }
 const accessPts = [];
@@ -803,7 +809,7 @@ function aGate(g, w) {                                       // 6' slide gate (w
 }
 // ---- area-kind registry: label + builder (drawn at the group origin) ----
 const AREA_KINDS = {   // pads sized to fit the ~12.5' strips between the decks and the 35x21 yd floor edge
-  forklift:    g => { aPad(g, 3.6, 3.6, AC.fork); aLabel(g, 'Forklift Access', 3.3); },
+  forklift:    g => { aPad(g, 3.6, 3.6, AC.fork); aLabel(g, 'Forklift Access', 3.3); g.userData.forkRec = buildLiftRig(g, 2.0); },   // a real forklift lives here: truck below, mast, forks that carry furniture down
   pallets:     g => { aPad(g, 3.4, 3.4, AC.pallet); aLabel(g, 'Pallet Staging', 3.1); aPallet(g, 0, -0.9); aPallet(g, 0, 0.9); },
   solaPallets: g => { aPad(g, 3.4, 3.4, AC.pallet); aLabel(g, 'Sola Pallets', 3.1); aPallet(g, -0.85, 0.6); aPallet(g, 0.85, 0.6); },
   upholstery:  g => { aPad(g, 2.8, 3.4, AC.uph); aLabel(g, 'Upholstery Rack', 2.6); aRack(g, 0, -0.7, 6 * FT, 2 * FT, 0, 1.7); },   // 6' x 2' garment-height rack
@@ -822,7 +828,8 @@ function addArea(kind, x, z, rot) {
   const g = new THREE.Group(); build(g); g.position.set(x, 0, z); if (rot) g.rotation.y = rot;
   surroundings.add(g); const a = { g, kind, x, z, rot: rot || 0 }; areas.push(a); return a;
 }
-function clearAreas() { areas.forEach(a => surroundings.remove(a.g)); areas.length = 0; }
+function dropForkRec(g) { const r = g && g.userData && g.userData.forkRec; if (r) { const i = forkLifts.indexOf(r); if (i >= 0) forkLifts.splice(i, 1); } }
+function clearAreas() { areas.forEach(a => { dropForkRec(a.g); surroundings.remove(a.g); }); areas.length = 0; }
 function restoreAreas(list) {
   // section lines are no longer areas — drop any sline entries from old saves
   // (the fixed sectionGroup always draws them at the exact CAD positions)
@@ -1548,6 +1555,7 @@ function refreshBoxZone() {
 }
 refreshBoxZone();
 const SOLA_TRAVEL = 3;            // sim-min a part spends moving to the next station
+let lastAddedShipped = 0;         // tracks Sola/Canyon ships so each 3rd sends a forklift down
 function solaUpdate() {
   if (!solaScheds.length) { solaShipBoxes.forEach(b => b.visible = false); const el0 = document.getElementById('solaShip'); if (el0) el0.textContent = 0; return; }
   let shipped = 0; const shipSec = { sola: 0, canyon: 0 };
@@ -1598,6 +1606,9 @@ function solaUpdate() {
     }
   });
   solaShipBoxes.forEach((b, i) => b.visible = Ts > 0 && i < shipped);   // finished boxes populate the storage stack
+  // every 3rd Sola/Canyon unit shipped sends a forklift down with furniture (same cadence as Meritage)
+  if (shipped < lastAddedShipped) lastAddedShipped = shipped;           // clock reset/seek
+  while (lastAddedShipped < shipped) { lastAddedShipped++; if (lastAddedShipped % 3 === 0) triggerTakedown(); }
   const el = document.getElementById('solaShip'); if (el) el.textContent = shipSec.sola;
   const elc = document.getElementById('canyonShip'); if (elc) elc.textContent = shipSec.canyon;
 }
@@ -2427,7 +2438,7 @@ renderer.domElement.addEventListener('contextmenu', e => {
     const f = fixtureList()[fi];
     if (f.kind === 'access') { level2.remove(f.ref.g); const i=forkLifts.indexOf(f.ref.rec); if(i>=0) forkLifts.splice(i,1); accessPts.splice(accessPts.indexOf(f.ref), 1); saveLayout(); return; }
     if (f.kind === 'rack') { level2.remove(f.ref.g); racks.splice(racks.indexOf(f.ref), 1); saveLayout(); return; }
-    if (f.kind === 'area') { surroundings.remove(f.ref.g); areas.splice(areas.indexOf(f.ref), 1); saveLayout(); return; }
+    if (f.kind === 'area') { dropForkRec(f.ref.g); surroundings.remove(f.ref.g); areas.splice(areas.indexOf(f.ref), 1); saveLayout(); return; }
   }
   const wp = pickWaypoint(e);
   if (wp != null) {
@@ -3145,5 +3156,60 @@ function loop(now){
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
 }
+/* ---- hover tooltips: every toolbar control shows a short plain-English
+   description of what it does. One styled bubble (instant, consistent);
+   existing title attributes are absorbed so nothing double-shows. ---- */
+(() => {
+  const TIPS = {
+    play: 'Run / pause the simulation', reset: 'Set both line clocks back to 0',
+    playScope: 'Choose which lines run when you press Play',
+    n: 'How many units this run builds', speed: 'Simulation speed',
+    addStation: 'Add a new station table — it lands on the floor and in Edit times',
+    edit: 'Edit layout: drag tables, carts, waypoints and areas; grid + lanes turn on',
+    addwp: 'Add a waypoint to the selected cart’s DELIVERY path (elevator → cart)',
+    returnwp: 'Add a waypoint to the selected cart’s RETURN path (cart → endpoint)',
+    lanesBtn: 'Show / hide the 5′ lanes while editing',
+    endsBtn: 'Show each cart line’s endpoint flag — drag one to end that line somewhere other than the elevator; right-click it to snap back',
+    shipStartBtn: 'Choose which table each line’s green furniture lane ships from',
+    helparrow: 'Draw a help path: click the FROM station, then the TO station',
+    flowarrow: 'Draw a flow line between stations: click FROM, then TO — sets the build order',
+    rotbtn: 'Rotate the selected table 90°',
+    accesspt: 'Add a forklift access point — the green furniture lanes run to the nearest one',
+    rackbtn: 'Add a finished-goods rack',
+    labels: 'Cycle the station labels: names / times / hidden',
+    timesbtn: 'Open the station-times panel — edit steps, minutes and people per station',
+    idlebtn: 'Idle time per operator across the day',
+    helppaths: 'List and tune the help paths (minutes of help per unit)',
+    taskbtn: 'Task distribution chart — operator loading vs the takt line',
+    cam: 'Angled 3-quarter camera view', top: 'Straight-down plan view',
+    btn2d: 'Flat 2D layout view', cadBtn: 'Overlay the CAD floor plan 1:1 to compare against the model',
+    layoutSel: 'Switch between saved layouts', saveLayout: 'Save the current layout under a name',
+    delLayout: 'Delete the selected saved layout',
+    bakeApp: 'Download a copy of this app with your layouts built in — opens correctly on any computer',
+    exportLayout: 'Download the current layout as a file you can share',
+    importLayout: 'Load a layout file shared with you',
+    reportBtn: 'Open a printable report of the current layout for the line lead',
+    areasBtn: 'Show / hide the surrounding warehouse areas',
+    undoBtn: 'Undo the last layout change (Ctrl/Cmd+Z)',
+  };
+  const tipEl = document.createElement('div');
+  tipEl.style.cssText = 'position:fixed;display:none;z-index:99;background:#1a2430;color:#fff;padding:6px 10px;border-radius:8px;font:11.5px/1.4 Arial,sans-serif;max-width:270px;box-shadow:0 6px 18px rgba(0,0,0,.3);pointer-events:none';
+  document.body.appendChild(tipEl);
+  document.querySelectorAll('button, select, input').forEach(el => {
+    const tip = TIPS[el.id] || el.title || null;
+    if (!tip) return;
+    el.removeAttribute('title');
+    el.dataset.tip = tip;
+    el.addEventListener('mouseenter', () => {
+      tipEl.textContent = el.dataset.tip;
+      tipEl.style.display = 'block';
+      const r = el.getBoundingClientRect();
+      tipEl.style.left = Math.max(6, Math.min(window.innerWidth - tipEl.offsetWidth - 8, r.left)) + 'px';
+      tipEl.style.top = (r.bottom + 7) + 'px';
+    });
+    el.addEventListener('mouseleave', () => { tipEl.style.display = 'none'; });
+    el.addEventListener('click', () => { tipEl.style.display = 'none'; });
+  });
+})();
 try { schedule(); update(); } catch (e) { console.error('init schedule/update failed', e); }
 requestAnimationFrame(loop);   // always start the render loop
