@@ -709,6 +709,7 @@ function parkWaiters(rec) {
    takes them down. Wall-clock speed, so the slide reads naturally at any sim
    speed. ---- */
 const OUT_SPEED = 12;                                        // metres per SIM-MINUTE along the lane (scales with the speed slider)
+const OUT_HEADWAY = 2.6;                                     // minimum spacing between boxes in transit — no bunching, no "snake"
 const outBoxes = [];                                         // traveler pool
 let spawnedM = 0, spawnedSola = 0, spawnedCanyon = 0;        // ship events already spawned
 let gShipSola = 0, gShipCanyon = 0;                          // per-line ship counts (set by solaUpdate)
@@ -719,52 +720,76 @@ function laneRigOf(i) {                                      // which forklift s
   return acc.rec || (acc.g && acc.g.userData && acc.g.userData.forkRec) || null;
 }
 function enqueueAtRig(rec, mesh) { rec.waitMeshes.push(mesh); parkWaiters(rec); }
+function laneLen(pts) { let L = 0; for (let i = 0; i < pts.length - 1; i++) L += Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]); return L; }
+function lanePos(pts, prog) {
+  for (let i = 0; i < pts.length - 1; i++) {
+    const sl = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]) || 1e-6;
+    if (prog <= sl) { const f = prog / sl; return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * f, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * f]; }
+    prog -= sl;
+  }
+  return pts[pts.length - 1];
+}
+/* Finished boxes STAGE in a tidy stack at the line's ship point, feed onto the
+   lane ONE AT A TIME, and keep a minimum headway while in transit — the flow
+   reads as an orderly, evenly-spaced procession, not a snake. */
 function spawnOutBox(lineIdx) {
   const pts = (typeof prodPts === 'function') ? prodPts(lineIdx) : null;
   const rig = laneRigOf(lineIdx);
   if (!pts || pts.length < 2 || !rig) return;                // no lane / no forklift → nothing to animate
-  let o = outBoxes.find(b => !b.active && !b.queued);
+  let o = outBoxes.find(b => !b.active && !b.queued && !b.staged);
   if (!o) {
-    if (outBoxes.length >= 30) {                             // pool cap: arrive instantly rather than stall
+    if (outBoxes.length >= 40) {                             // pool cap: arrive instantly rather than stall
       const m = makeShipBox(); m.scale.set(0.8, 0.8, 0.8); level2.add(m); m.visible = focusShows(LINE_KEYS[lineIdx]); m.userData.lineIdx = lineIdx;
-      enqueueAtRig(rig, m); outBoxes.push({ mesh: m, active: false, queued: true, rig, line: lineIdx }); return;
+      enqueueAtRig(rig, m); outBoxes.push({ mesh: m, active: false, queued: true, staged: false, rig, line: lineIdx }); return;
     }
-    o = { mesh: makeShipBox(), active: false, queued: false, rig: null };
+    o = { mesh: makeShipBox(), active: false, queued: false, staged: false, rig: null };
     o.mesh.scale.set(0.8, 0.8, 0.8); level2.add(o.mesh); outBoxes.push(o);
   }
-  o.active = true; o.queued = false; o.rig = rig; o.pts = pts; o.seg = 0; o.d = 0;
+  o.staged = true; o.active = false; o.queued = false;
+  o.rig = rig; o.pts = pts; o.len = laneLen(pts); o.prog = 0;
   o.line = lineIdx; o.mesh.userData.lineIdx = lineIdx;
-  o.mesh.visible = focusShows(LINE_KEYS[lineIdx]); o.mesh.position.set(pts[0][0], 0.05, pts[0][1]);
+  parkStaged(lineIdx);
+}
+function parkStaged(line) {                                  // neat 2x2 (+ second layer) stack beside the ship point
+  const st = outBoxes.filter(o => o.staged && o.line === line);
+  st.forEach((o, i) => {
+    const base = o.pts[0], col = i % 2, row = (i >> 1) % 2, lay = i >> 2;
+    o.mesh.position.set(base[0] - 0.55 + col * 1.15, 0.05 + lay * 0.45, base[1] - 0.55 + row * 0.95);
+    o.mesh.visible = focusShows(LINE_KEYS[line]);
+  });
 }
 function advanceOutBoxes(dt) {
-  for (const o of outBoxes) {
-    if (!o.active) continue;
-    let move = OUT_SPEED * dt;
-    while (move > 0 && o.seg < o.pts.length - 1) {
-      const a = o.pts[o.seg], b = o.pts[o.seg + 1];
-      const segLen = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1e-6;
-      const left = segLen - o.d;
-      if (move < left) { o.d += move; move = 0; }
-      else { move -= left; o.seg++; o.d = 0; }
+  for (let L = 0; L < 3; L++) {
+    const act = outBoxes.filter(o => o.active && o.line === L).sort((a, b) => b.prog - a.prog);
+    let lead = Infinity;
+    for (const o of act) {
+      const maxP = Math.min(o.len, lead - OUT_HEADWAY);      // never closer than one headway to the box ahead
+      o.prog = Math.min(o.prog + OUT_SPEED * dt, Math.max(o.prog, maxP));
+      if (o.prog >= o.len - 1e-6) {                          // arrived at the access point → join the pallet queue
+        o.active = false; o.queued = true; enqueueAtRig(o.rig, o.mesh);
+      } else {
+        const p = lanePos(o.pts, o.prog);
+        o.mesh.visible = focusShows(LINE_KEYS[o.line ?? 0]);
+        o.mesh.position.set(p[0], 0.05, p[1]);
+        lead = o.prog;
+      }
     }
-    if (o.seg >= o.pts.length - 1) {                         // arrived at the access point → join the queue
-      o.active = false; o.queued = true;
-      enqueueAtRig(o.rig, o.mesh);
-    } else {
-      const a = o.pts[o.seg], b = o.pts[o.seg + 1];
-      const segLen = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1e-6, f = o.d / segLen;
-      o.mesh.visible = focusShows(LINE_KEYS[o.line ?? 0]);
-      o.mesh.position.set(a[0] + (b[0] - a[0]) * f, 0.05, a[1] + (b[1] - a[1]) * f);
+    if (dt > 0) {                                            // release the next staged box once the lane entry is clear
+      const staged = outBoxes.filter(o => o.staged && o.line === L);
+      if (staged.length && !act.some(o => o.active && o.prog < OUT_HEADWAY)) {
+        const o = staged[0]; o.staged = false; o.active = true; o.prog = 0;
+        parkStaged(L);
+      }
     }
   }
 }
 function releaseOutMesh(mesh) {                              // a forklift took this box — free it back to the pool
   const o = outBoxes.find(b => b.mesh === mesh);
-  if (o) { o.active = false; o.queued = false; o.rig = null; }
+  if (o) { o.active = false; o.queued = false; o.staged = false; o.rig = null; }
   mesh.visible = false;
 }
 function resetOutbound() {
-  outBoxes.forEach(o => { o.active = false; o.queued = false; o.rig = null; o.mesh.visible = false; });
+  outBoxes.forEach(o => { o.active = false; o.queued = false; o.staged = false; o.rig = null; o.mesh.visible = false; });
   forkLifts.forEach(fl => { if (fl.waitMeshes) fl.waitMeshes.length = 0; });
   spawnedM = spawnedSola = spawnedCanyon = 0;
 }
