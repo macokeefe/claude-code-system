@@ -2530,17 +2530,38 @@ document.getElementById('addwp').onclick = () => {
   const shipB = document.createElement('button');
   shipB.id = 'shipStartBtn'; shipB.className = awp.className || '';
   shipB.textContent = '⇊ Ship point';
-  shipB.title = 'Click a Sola or Canyon Crew table, then this button — its line\'s green furniture lane will start from that table. Click again on the same table to return to automatic (flow order).';
+  shipB.title = 'Choose which table each line\'s green furniture lane starts from';
   ends.parentNode.insertBefore(shipB, ends.nextSibling);
+  // a simple picker: one dropdown per line, listing that line's tables
+  const shipPanel = document.createElement('div');
+  shipPanel.id = 'shipPanel';
+  shipPanel.style.cssText = 'position:fixed;display:none;z-index:60;background:#fff;border:1px solid #d8dee6;border-radius:12px;box-shadow:0 12px 30px rgba(20,30,45,.18);padding:12px 14px;font:12px/1.5 Arial,sans-serif;color:#15263a;min-width:260px;max-width:320px';
+  document.body.appendChild(shipPanel);
+  function renderShipPanel() {
+    const opts = (sec, idx) => {
+      const ids = extraStations.filter(id => nodes[id] && sectionOf(nodes[id].x) === sec);
+      const cur = prodStart[idx];
+      return `<select data-i="${idx}" style="width:100%;padding:5px;border:1px solid #c9d2dd;border-radius:6px;margin:2px 0 10px;font-size:12px">
+        <option value="">Auto — last table in flow order</option>` +
+        ids.map(id => `<option value="${id}"${cur === id ? ' selected' : ''}>${(nodes[id].s.title || id).replace(/</g, '&lt;')}</option>`).join('') +
+        `</select>`;
+    };
+    shipPanel.innerHTML = `<b style="font-size:13px">⇊ Ship points</b>
+      <div style="color:#5a6672;margin:2px 0 8px">Where each line's furniture lane starts.</div>
+      <div style="color:#1d3a66;font-weight:700">MERITAGE</div><div style="margin:2px 0 10px">Cushions &amp; Pack (fixed)</div>
+      <div style="color:#236043;font-weight:700">SOLA</div>${opts('sola', 1)}
+      <div style="color:#9a5b1f;font-weight:700">CANYON CREW</div>${opts('canyon', 2)}
+      <button id="shipClose" style="width:100%;padding:6px;border:1px solid #c9d2dd;border-radius:8px;background:#f2f6fb;cursor:pointer;font-weight:700">Done</button>`;
+    shipPanel.querySelectorAll('select').forEach(s => s.onchange = e => { prodStart[+e.target.dataset.i] = e.target.value || null; refreshProdFlow(); saveLayout(); });
+    const c = shipPanel.querySelector('#shipClose'); if (c) c.onclick = () => { shipPanel.style.display = 'none'; };
+  }
   shipB.onclick = () => {
-    if (!editing) { setEditing(true); return; }
-    const id = selectedStation;
-    if (!id || !nodes[id] || !nodes[id].extra) { alert('Click a Sola or Canyon Crew table first, then “⇊ Ship point”.'); return; }
-    const sec = sectionOf(nodes[id].x);
-    const i = sec === 'sola' ? 1 : sec === 'canyon' ? 2 : -1;
-    if (i < 0) { alert('That table is on the Meritage side — its furniture ships from Cushions & Pack.'); return; }
-    prodStart[i] = (prodStart[i] === id) ? null : id;   // same table again = back to auto
-    refreshProdFlow(); saveLayout();
+    if (shipPanel.style.display === 'block') { shipPanel.style.display = 'none'; return; }
+    renderShipPanel();
+    const r = shipB.getBoundingClientRect();
+    shipPanel.style.left = Math.max(8, Math.min(window.innerWidth - 330, r.left)) + 'px';
+    shipPanel.style.top = (r.bottom + 8) + 'px';
+    shipPanel.style.display = 'block';
   };
 })();
 // Double-click ON a lane (in Edit Layout) to add a waypoint exactly there.
