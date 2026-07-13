@@ -175,11 +175,11 @@ function makeBench(lenFt = 8, depFt = 3) {
     const bin = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.2, Math.min(0.28, D - 0.3)), b % 3 === 2 ? MAT.binBlue : MAT.binYellow);
     bin.position.set(-W/2 + 0.25 + b * (W - 0.5) / (nb - 1 || 1), 0.57, -D/2 + 0.16); bin.castShadow = true; st.add(bin);
   }
-  // anti-fatigue mat on the operator side (front, +z) — true 8' x 1 yd
-  const mat = new THREE.Mesh(new THREE.BoxGeometry(8 * FT, 0.025, YARD), MAT.mat);
+  // anti-fatigue mat on the operator side (front, +z) — bench length x 1 yd
+  const mat = new THREE.Mesh(new THREE.BoxGeometry(W, 0.025, YARD), MAT.mat);
   mat.position.set(0, 0.013, D/2 + 0.6); mat.receiveShadow = true; st.add(mat);
   for (const dz of [-YARD/2, YARD/2]) {
-    const edge = new THREE.Mesh(new THREE.BoxGeometry(8 * FT, 0.027, 0.08), MAT.matEdge);
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(W, 0.027, 0.08), MAT.matEdge);
     edge.position.set(0, 0.014, D/2 + 0.6 + dz); st.add(edge);
   }
   const led = new THREE.Mesh(new THREE.BoxGeometry(W - 0.2, 0.05, 0.05),
@@ -1936,7 +1936,9 @@ const sectionOf = (x, z = 0) => (x < SOLA_BX(z) ? 'meritage' : x < CANYON_BX(z) 
 const STA_COLORS = ['#1d3a66','#9a3b1f','#236043','#8f5390','#a8923a','#3f8f8f','#9c4f45','#c0552c','#2f6df6','#7a5b1f'];
 function addStation(name, x, z, id, t) {
   id = id || ('x' + (++extraSeq));
-  const r = makeBench(8, 4); r.st.position.set(x, 0, z); level2.add(r.st);   // added (Sola) tables 8' x 4'
+  const cSec = sectionOf(x, z);                              // Canyon Crew assembly tables are 6' x 3'; other added tables 8' x 4'
+  const r = cSec === 'canyon' ? makeBench(6, 3) : makeBench(8, 4);
+  r.st.position.set(x, 0, z); level2.add(r.st);
   const accent = STA_COLORS[extraStations.length % STA_COLORS.length];   // varied colour per added station (like Meritage)
   const label = makeStationLabel(name, 'Added station', t ? t + ' min' : '—', accent);
   label.position.set(x, 2.85, z); level2.add(label);
@@ -1944,7 +1946,7 @@ function addStation(name, x, z, id, t) {
   setLed(r.led, 'idle', false);
   const kind = kindForPart(name);                            // part shape matches what this station makes (from the SWI name)
   const visual = makeFeederWIP(kind); visual.g.position.set(x, 1.04, z); level2.add(visual.g);   // a WIP part that grows as it works
-  nodes[id] = { s: { id, title: name, sub: 'Added station', accent, steps: [{ name, t: t || 0 }], ppl: 1, t: t || 0 }, st: r.st, led: r.led, label, mini, visual, kind, x, z, rot: 0, extra: true, t: t || 0 };
+  nodes[id] = { s: { id, title: name, sub: 'Added station', accent, steps: [{ name, t: t || 0 }], ppl: 1, t: t || 0 }, st: r.st, led: r.led, label, mini, visual, kind, x, z, rot: 0, extra: true, t: t || 0, benchFt: cSec === 'canyon' ? '6x3' : '8x4' };
   POS[id] = [x, z];
   extraStations.push(id);
   buildExtraCrew(id);                                         // show its operator figure(s)
@@ -1961,7 +1963,8 @@ function buildExtraCrew(id) {                                 // operator figure
   for (let i = 0; i < np; i++) {
     const color = OP_COLORS[(base * 2 + i + 3) % OP_COLORS.length];
     const fig = makeCrewFigure(color, s.title.split(' ')[0] + (np > 1 ? ' ' + (i + 1) : ''));
-    const spread = 1.1, bdx = (np > 1 ? (i - (np - 1) / 2) * 2 * spread : 0), bdz = (4 * FT) / 2 + 0.6;   // stand on the anti-fatigue mat (8'x4' bench)
+    const depFt = nd.benchFt === '6x3' ? 3 : 4;
+    const spread = 1.1, bdx = (np > 1 ? (i - (np - 1) / 2) * 2 * spread : 0), bdz = (depFt * FT) / 2 + 0.6;   // stand on the anti-fatigue mat
     fig.position.set(nd.x + bdx, 0, nd.z + bdz); level2.add(fig);
     crew.push({ fig, station: id, bdx, bdz, homeX: nd.x + bdx, homeZ: nd.z + bdz, idx: i });
   }
@@ -1973,7 +1976,20 @@ const isExtra = id => !!(nodes[id] && nodes[id].extra);
 const SEC_LABEL_COL = { meritage: '#1d3a66', sola: '#236043', canyon: '#9a5b1f' };
 function applyLineAccent(id) {
   const nd = nodes[id]; if (!nd || !nd.extra) return;
-  const c = SEC_LABEL_COL[sectionOf(nd.x, nd.z)] || '#1d3a66';
+  const sec = sectionOf(nd.x, nd.z);
+  // Canyon Crew assembly tables are 6' x 3'; other lines' added tables are 8' x 4'.
+  // A table that changes lines (Shift-drag) swaps to the right bench.
+  const want = sec === 'canyon' ? '6x3' : '8x4';
+  if (nd.benchFt !== want) {
+    const wasVisible = nd.st.visible;
+    level2.remove(nd.st);
+    const r = want === '6x3' ? makeBench(6, 3) : makeBench(8, 4);
+    r.st.position.set(nd.x, 0, nd.z); r.st.rotation.y = nd.rot || 0; r.st.visible = wasVisible;
+    level2.add(r.st); nd.st = r.st; nd.led = r.led; setLed(nd.led, 'idle', false);
+    nd.benchFt = want;
+    buildExtraCrew(id);                                        // crew re-seats at the new bench depth
+  }
+  const c = SEC_LABEL_COL[sec] || '#1d3a66';
   if (nd.s.accent !== c) { nd.s.accent = c; setStationTitle(id, nd.s.title); }   // full label rebuild so the pill recolors
 }
 function recalcAny(id) {
