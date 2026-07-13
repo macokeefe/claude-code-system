@@ -679,38 +679,7 @@ function buildLiftRig(g, D){
   };
   sync();
 
-  /* ---- deck-side access point, like the real thing: yellow/black striped
-     edge, an up-and-over pivot gate (open), side guardrails with kick plates,
-     and a painted pallet square where outbound boxes queue for pickup ---- */
-  (function deckAccess(){
-    // striped hazard band along the pick edge
-    const sc = document.createElement('canvas'); sc.width = 256; sc.height = 32; const sg = sc.getContext('2d');
-    sg.fillStyle = '#e8c53a'; sg.fillRect(0, 0, 256, 32); sg.fillStyle = '#1a1d21';
-    for (let x = -32; x < 256; x += 32) { sg.beginPath(); sg.moveTo(x,32); sg.lineTo(x+16,0); sg.lineTo(x+32,0); sg.lineTo(x+16,32); sg.fill(); }
-    const stex = new THREE.CanvasTexture(sc); stex.wrapS = THREE.RepeatWrapping; stex.repeat.set(2,1);
-    const band = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.035, 0.5), new THREE.MeshStandardMaterial({ map: stex, roughness: 0.8 }));
-    band.position.set(0, 0.035, zM + 0.5); g.add(band);
-    // up-and-over pivot gate, parked OPEN (arms up) at the edge
-    for (const px of [-1.15, 1.15]) {
-      const post = bx(0.08, 1.15, 0.08, FKM.body); post.position.set(px, 0.58, zM + 0.75); g.add(post);
-      const arm = bx(0.06, 0.06, 1.5, FKM.body); arm.position.set(px, 1.55, zM + 1.2); arm.rotation.x = -1.05; g.add(arm);
-    }
-    const gateBar = bx(2.3, 0.07, 0.07, FKM.body); gateBar.position.set(0, 2.15, zM + 1.85); g.add(gateBar);
-    const gateMid = bx(2.3, 0.05, 0.05, FKM.body); gateMid.position.set(0, 1.85, zM + 1.55); g.add(gateMid);
-    // side guardrails with mid-rail + yellow kick plates (edge side open for the gate)
-    for (const px of [-1.45, 1.45]) {
-      for (const rz of [zM + 1.0, zM + 2.2, zM + 3.3]) { const p = bx(0.06, 1.1, 0.06, MAT.steel); p.position.set(px, 0.55, rz); g.add(p); }
-      const top = bx(0.05, 0.05, 2.3, MAT.steel); top.position.set(px, 1.08, zM + 2.15); g.add(top);
-      const mid = bx(0.04, 0.04, 2.3, MAT.steel); mid.position.set(px, 0.62, zM + 2.15); g.add(mid);
-      const kick = bx(0.04, 0.16, 2.3, FKM.body); kick.position.set(px, 0.1, zM + 2.15); g.add(kick);
-    }
-    // painted pallet square (queue spot)
-    const paintM = new THREE.MeshBasicMaterial({ color: 0xe8c53a });
-    const sq = [[0, zM + 1.55, 1.9, 0.06], [0, zM + 3.15, 1.9, 0.06], [-0.95, zM + 2.35, 0.06, 1.66], [0.95, zM + 2.35, 0.06, 1.66]];
-    sq.forEach(([x, z, w, d]) => { const l = new THREE.Mesh(new THREE.BoxGeometry(w, 0.012, d), paintM); l.position.set(x, 0.03, z); g.add(l); });
-  })();
-
-  // queue slots on the pallet square (2 layers of 4) — arriving boxes park here
+  // queue slots beside the opening (2 layers of 4) — arriving boxes park here
   const waitSlots = [];
   for (let layer = 0; layer < 2; layer++) for (const [sx, sz] of [[-0.5, zM + 1.95], [0.5, zM + 1.95], [-0.5, zM + 2.8], [0.5, zM + 2.8]])
     waitSlots.push([sx, layer * 0.48, sz]);
@@ -1034,8 +1003,7 @@ function aGate(g, w) {                                       // 6' slide gate (w
 // ---- area-kind registry: label + builder (drawn at the group origin) ----
 const AREA_KINDS = {   // pads sized to fit the ~12.5' strips between the decks and the 35x21 yd floor edge
   forklift:    g => {
-    aPad(g, 3.6, 3.6, AC.fork);
-    // the deck OPENING the forks travel through: dark recess + yellow edging (same as the @ openings)
+    // just the deck OPENING the forks travel through: dark recess + yellow edging (same as the @ openings)
     const hole = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.5, 2.0), new THREE.MeshStandardMaterial({ color: 0x10141a, roughness: 0.96 }));
     hole.position.y = -0.2; g.add(hole);
     for (const [w, d, hx, hz] of [[2.9, 0.16, 0, -1.08], [2.9, 0.16, 0, 1.08], [0.16, 2.0, -1.38, 0], [0.16, 2.0, 1.38, 0]]) {
