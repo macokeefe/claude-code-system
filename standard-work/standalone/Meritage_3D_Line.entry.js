@@ -708,7 +708,7 @@ function parkWaiters(rec) {
    the access point, where they queue on the pallet square until a forklift
    takes them down. Wall-clock speed, so the slide reads naturally at any sim
    speed. ---- */
-const OUT_SPEED = 2.0;                                       // m/s along the lane
+const OUT_SPEED = 12;                                        // metres per SIM-MINUTE along the lane (scales with the speed slider)
 const outBoxes = [];                                         // traveler pool
 let spawnedM = 0, spawnedSola = 0, spawnedCanyon = 0;        // ship events already spawned
 let gShipSola = 0, gShipCanyon = 0;                          // per-line ship counts (set by solaUpdate)
@@ -3450,8 +3450,10 @@ ro.observe(mount);
 let last = performance.now();
 function loop(now){
   const dt = (now - last) / 1000; last = now;
+  let simDt = 0;                                   // sim-minutes advanced this frame — boxes + forklifts pace on THIS, so material handling scales with the sim speed
   if (playing) {
     const spd = dt * parseFloat(speed.value);
+    simDt = spd;
     if (playScope !== 'sola' && T < horizon) T = Math.min(horizon, T + spd);          // Meritage clock
     if (playScope !== 'meritage' && Ts < solaHorizon) Ts = Math.min(solaHorizon, Ts + spd);  // Sola clock
     const merDone = playScope === 'sola' || T >= horizon;
@@ -3477,7 +3479,7 @@ function loop(now){
   while (spawnedM < gShippedM) { spawnedM++; spawnOutBox(0); }
   while (spawnedSola < gShipSola) { spawnedSola++; spawnOutBox(1); }
   while (spawnedCanyon < gShipCanyon) { spawnedCanyon++; spawnOutBox(2); }
-  advanceOutBoxes(dt);
+  advanceOutBoxes(simDt);
   // dispatcher: a rig with boxes queued on its pallet square and free forks
   // takes the oldest one down — every rig in parallel, each at its real pace
   for (const fl of forkLifts) {
@@ -3485,9 +3487,9 @@ function loop(now){
     releaseOutMesh(fl.waitMeshes.shift()); parkWaiters(fl);
     fl.busy = true; fl.t = 0;
   }
-  for (const fl of forkLifts) {                    // trip: rise empty, take the box at the deck, carry it down
+  for (const fl of forkLifts) {                    // trip: rise empty, take the box at the deck, carry it down (~1.5 sim-min round trip)
     if (fl.busy) {
-      fl.t += dt; const p = fl.t / 6;
+      fl.t += simDt; const p = fl.t / 1.5;
       if (p >= 1) {
         fl.busy = false; fl.lift.position.y = -(FLOOR2 - 0.3); fl.pkg.visible = false;
         if (fl.gnd) {                              // delivered: stage the box on the ground pad; a semi hauls the pad clear after 6
