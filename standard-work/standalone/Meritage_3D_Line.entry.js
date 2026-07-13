@@ -385,7 +385,7 @@ function effNet(id) { return Math.max(0.1, eff(id) - helpInto(id)); }   // a hel
 function lineCyc() { return sch ? Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 1; }
 function availIdleOp(id, idx) { return Math.max(0, lineCyc() - effNet(id) - helpFromOp(id, idx)); }   // spare min/chair a specific operator can give
 // side-aware versions so help paths work on the Sola (added-station) side too
-function solaCyc() { let m = 0.1; extraStations.filter(id => sideOf(nodes[id].x) === 'other').forEach(id => { const e = effNet(id); if (e > m) m = e; }); return m; }
+function solaCyc() { let m = 0.1; extraStations.filter(id => sideOf(nodes[id].x, nodes[id].z) === 'other').forEach(id => { const e = effNet(id); if (e > m) m = e; }); return m; }
 function cycOf(id) { return (typeof isExtra === 'function' && isExtra(id)) ? solaCyc() : lineCyc(); }
 function availIdleAny(id, idx) { return Math.max(0, cycOf(id) - effNet(id) - helpFromOp(id, idx)); }
 function schedule() {
@@ -955,22 +955,39 @@ SECTION_LINES.forEach(pl => {
   g.position.set(pl[0][0], 0, pl[0][1]);
   sectionGroup.add(g);
 });
-// ---- PROMINENT line zones: each line's slice gets a soft tint in its accent
-// color, and the two LINE boundaries (middle line + section line 4) get low
-// "light-curtain" walls — so which line a table belongs to is unmistakable.
+// ---- PROMINENT line zones, taken 1:1 from the CAD: the tints and boundary
+// walls follow the DRAWN section lines exactly — CAD line 2 (Meritage/Sola)
+// and CAD line 4 (Sola/Canyon), jogs included — so the zones on screen match
+// the blue lines on the drawing, and a table's zone is its line.
 (function lineZones() {
-  const B1 = 7.09, B2 = 17.6;                                // line boundaries (= DIVIDER_X / CANYON_X)
-  const zones = [[FLOOR_X0, B1, 0x1d3a66, 0.05], [B1, B2, 0x236043, 0.05], [B2, FLOOR_X1, 0x9a5b1f, 0.07]];
-  zones.forEach(([x0, x1, col, op]) => {
-    const p = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, FLOOR_D - 0.1),
+  const L2 = SECTION_LINES[1], L4 = SECTION_LINES[3];
+  const jogZ = pl => { for (let i = 0; i < pl.length - 1; i++) if (pl[i][0] !== pl[i + 1][0]) return pl[i][1]; return 0; };
+  const z2 = jogZ(L2), z4 = jogZ(L4);                         // where each CAD line steps sideways
+  const rect = (x0, x1, za, zb, col, op) => {
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(Math.max(0.01, x1 - x0), Math.max(0.01, zb - za)),
       new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: op, depthWrite: false }));
-    p.rotation.x = -Math.PI / 2; p.position.set((x0 + x1) / 2, 0.021, 0); sectionGroup.add(p);
+    p.rotation.x = -Math.PI / 2; p.position.set((x0 + x1) / 2, 0.021, (za + zb) / 2); sectionGroup.add(p);
+  };
+  const NAVY = 0x1d3a66, GREEN = 0x236043, BROWN = 0x9a5b1f;
+  // Meritage — west of CAD line 2 (jog at z2)
+  rect(FLOOR_X0, plX(L2, z2 - 1), FLOOR_Z0, z2, NAVY, 0.05);
+  rect(FLOOR_X0, plX(L2, z2 + 1), z2, FLOOR_Z1, NAVY, 0.05);
+  // Sola — between CAD lines 2 and 4 (both jogs honoured)
+  rect(plX(L2, z4 - 1), plX(L4, z4 - 1), FLOOR_Z0, z4, GREEN, 0.05);
+  rect(plX(L2, z4 + 1), plX(L4, z4 + 1), z4, z2, GREEN, 0.05);
+  rect(plX(L2, z2 + 1), plX(L4, z2 + 1), z2, FLOOR_Z1, GREEN, 0.05);
+  // Canyon Crew — east of CAD line 4 (jog at z4)
+  rect(plX(L4, z4 - 1), FLOOR_X1, FLOOR_Z0, z4, BROWN, 0.07);
+  rect(plX(L4, z4 + 1), FLOOR_X1, z4, FLOOR_Z1, BROWN, 0.07);
+  // low glowing walls laid EXACTLY along the two drawn boundary polylines
+  const wallMat = new THREE.MeshBasicMaterial({ color: 0x00b7d4, transparent: true, opacity: 0.28, depthWrite: false });
+  [L2, L4].forEach(pl => {
+    for (let i = 0; i < pl.length - 1; i++) {
+      const a = pl[i], b = pl[i + 1], dx = Math.abs(b[0] - a[0]), dz = Math.abs(b[1] - a[1]);
+      const w = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.06, dx), 0.5, Math.max(0.06, dz)), wallMat);
+      w.position.set((a[0] + b[0]) / 2, 0.25, (a[1] + b[1]) / 2); sectionGroup.add(w);
+    }
   });
-  for (const bx2 of [B1, B2]) {                              // low glowing boundary walls
-    const w = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.5, FLOOR_D - 0.1),
-      new THREE.MeshBasicMaterial({ color: 0x00b7d4, transparent: true, opacity: 0.28, depthWrite: false }));
-    w.position.set(bx2, 0.25, 0); sectionGroup.add(w);
-  }
 })();
 // ---- object builders: each adds meshes to a group `g`, relative to the group origin ----
 function aPad(g, w, d, color) {   // neutral marked-off zone (no colors) — a light-grey pad with a slightly darker outline
@@ -1388,7 +1405,7 @@ let prodStart = [null, null, null];   // per-line SHIP-POINT override (station i
 function lineEndNode(i) {                                    // where each line's finished furniture leaves from
   if (i === 0) return nodes.pak || null;
   const ov = prodStart[i];                                   // pinned ship point wins (if the station still exists on this line's slice)
-  if (ov && nodes[ov] && sectionOf(nodes[ov].x) === (i === 1 ? 'sola' : 'canyon')) return nodes[ov];
+  if (ov && nodes[ov] && sectionOf(nodes[ov].x, nodes[ov].z) === (i === 1 ? 'sola' : 'canyon')) return nodes[ov];
   const ids = (typeof orderedLine === 'function') ? orderedLine(i === 1 ? 'sola' : 'canyon') : [];
   return ids.length ? nodes[ids[ids.length - 1]] : null;     // auto: the last station in flow order
 }
@@ -1617,7 +1634,7 @@ applyLabels();
 function renderSolaData() {
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   const fill = (sec, pfx) => {   // Sola and Canyon Crew are separate lines — each its own KPI card
-    const ids = extraStations.filter(id => sectionOf(nodes[id].x) === sec);
+    const ids = extraStations.filter(id => sectionOf(nodes[id].x, nodes[id].z) === sec);
     let labor = 0, cyc = 0, bot = '—';
     ids.forEach(id => {
       const s = nodes[id].s, per = effNet(id);   // per-unit time AFTER any help arrows into this station
@@ -1639,7 +1656,7 @@ function renderSolaData() {
 // stations in FLOW-ARROW order (topological); falls back to left-to-right only
 // if no flow lines are drawn. Each station = its per-operator time.
 function orderedSola() {
-  const ids = extraStations.filter(id => sideOf(nodes[id].x) === 'other');
+  const ids = extraStations.filter(id => sideOf(nodes[id].x, nodes[id].z) === 'other');
   const byX = arr => arr.slice().sort((a, b) => nodes[a].x - nodes[b].x);
   const set = new Set(ids);
   const edges = flowArrows.filter(a => set.has(a.from) && set.has(a.to) && a.from !== a.to);
@@ -1663,7 +1680,7 @@ function orderedSola() {
 // station, so Sola comes before Canyon. Stale flow entries pointing at deleted
 // stations (e.g. old c1..c4) are simply ignored — no layout mutation needed.
 function solaComponents() {
-  const ids = extraStations.filter(id => nodes[id] && sideOf(nodes[id].x) === 'other');
+  const ids = extraStations.filter(id => nodes[id] && sideOf(nodes[id].x, nodes[id].z) === 'other');
   if (!ids.length) return [];
   const set = new Set(ids);
   const byX = arr => arr.slice().sort((a, b) => nodes[a].x - nodes[b].x);
@@ -1768,7 +1785,7 @@ function solaUpdate() {
   let shipped = 0; const shipSec = { sola: 0, canyon: 0 };
   solaScheds.forEach((sc, ci) => {                 // each independent added line (Sola, Canyon Crew, …) on the shared Ts clock
     const { ids, time, finish, N: sn } = sc; if (!ids.length) return;
-    const sec = sectionOf(nodes[ids[0]].x);
+    const sec = sectionOf(nodes[ids[0]].x, nodes[ids[0]].z);
     let done = 0; for (let u = 0; u < sn; u++) if (Ts >= finish[ids.length - 1][u]) done++;
     shipped += done; if (shipSec[sec] != null) shipSec[sec] += done;
     // each station: LED + WIP part growing while it works; operators bob while active
@@ -1786,7 +1803,7 @@ function solaUpdate() {
         let tx = c.homeX, tz = c.homeZ;
         // parts-fetch walk goes to that line's OWN materials cart: Sola → cart2,
         // Canyon Crew → cart3. Operators never trek across to another line's cart.
-        const sec = sectionOf(nd.x);
+        const sec = sectionOf(nd.x, nd.z);
         const cartNode = sec === 'sola' ? nodes.cart2 : sec === 'canyon' ? nodes.cart3 : null;
         const fetching = active && frac < 0.14 && cartNode;
         if (fetching) { tx = cartNode.x + (c.idx - 0.5) * 1.1; tz = cartNode.z + 1.35; }
@@ -1860,10 +1877,23 @@ const stepsHost2 = { innerHTML: '', querySelectorAll: () => [] };   // legacy sh
    you want. They are independent — NOT part of the Meritage line, so they never
    affect its schedule/labor/bottleneck (kept out of ST). Which table a station
    shows up in depends on which side of the middle line it sits on. ---- */
-const DIVIDER_X = DECK.x1;                                   // the painted middle line
-const sideOf = x => (x < DIVIDER_X ? 'meritage' : 'other');
-const CANYON_X = 17.6;                                       // section line 4 — everything east of it is the Canyon Crew slice
-const sectionOf = x => (x < DIVIDER_X ? 'meritage' : x < CANYON_X ? 'sola' : 'canyon');
+const DIVIDER_X = DECK.x1;                                   // the painted middle line (legacy reference)
+// ---- line membership follows the DRAWN CAD section lines exactly. The CAD
+// polylines jog (e.g. line 4 runs at x=17.87 below z=−2.59, then 17.60 above),
+// so the boundary x depends on z. plX() reads the boundary straight from the
+// measured SECTION_LINES data — the same 1:1 CAD geometry that's painted on
+// the floor. Meritage/Sola boundary = CAD line 2; Sola/Canyon = CAD line 4. ----
+function plX(pl, z) {
+  const vs = [];
+  for (let i = 0; i < pl.length - 1; i++) { const a = pl[i], b = pl[i + 1]; if (a[0] === b[0]) vs.push([a[0], Math.min(a[1], b[1]), Math.max(a[1], b[1])]); }
+  for (const [x, z0, z1] of vs) if (z >= z0 && z <= z1) return x;
+  return z < vs[0][1] ? vs[0][0] : vs[vs.length - 1][0];   // beyond the drawn extent → nearest end continues straight
+}
+const SOLA_BX = z => plX(SECTION_LINES[1], z);               // CAD section line 2 (x≈4.91 below z=0.99, 5.18 above)
+const CANYON_BX = z => plX(SECTION_LINES[3], z);             // CAD section line 4 (x≈17.87 below z=−2.59, 17.60 above)
+const sideOf = (x, z = 0) => (x < SOLA_BX(z) ? 'meritage' : 'other');
+const CANYON_X = 17.6;                                       // legacy constant (kept for default placements)
+const sectionOf = (x, z = 0) => (x < SOLA_BX(z) ? 'meritage' : x < CANYON_BX(z) ? 'sola' : 'canyon');
 const STA_COLORS = ['#1d3a66','#9a3b1f','#236043','#8f5390','#a8923a','#3f8f8f','#9c4f45','#c0552c','#2f6df6','#7a5b1f'];
 function addStation(name, x, z, id, t) {
   id = id || ('x' + (++extraSeq));
@@ -1903,7 +1933,7 @@ const isExtra = id => !!(nodes[id] && nodes[id].extra);
 const SEC_LABEL_COL = { meritage: '#1d3a66', sola: '#236043', canyon: '#9a5b1f' };
 function applyLineAccent(id) {
   const nd = nodes[id]; if (!nd || !nd.extra) return;
-  const c = SEC_LABEL_COL[sectionOf(nd.x)] || '#1d3a66';
+  const c = SEC_LABEL_COL[sectionOf(nd.x, nd.z)] || '#1d3a66';
   if (nd.s.accent !== c) { nd.s.accent = c; setStationTitle(id, nd.s.title); }   // full label rebuild so the pill recolors
 }
 function recalcAny(id) {
@@ -2029,7 +2059,7 @@ function wireRows(host) {
 // where a new station lands for each section (open floor in that slice, staggered)
 function addStationInSection(sec) {
   const name = (prompt('New station name:', 'New station') || '').trim(); if (!name) return;
-  const n = extraStations.filter(id => sectionOf(nodes[id].x) === sec).length;
+  const n = extraStations.filter(id => sectionOf(nodes[id].x, nodes[id].z) === sec).length;
   const x = sec === 'meritage' ? 1.5 : sec === 'sola' ? 12 : 20.4;
   const z = Math.min(8.5, -7 + n * 2.5);
   addStation(name, x, z);
@@ -2038,9 +2068,9 @@ function addStationInSection(sec) {
 }
 function renderTimes() {
   const SECTIONS = [
-    { key: 'meritage', label: 'MERITAGE',    color: '#1d3a66', list: [...ST, ...extraStations.filter(id => sectionOf(nodes[id].x) === 'meritage').map(id => nodes[id].s)] },
-    { key: 'sola',     label: 'SOLA',        color: '#236043', list: extraStations.filter(id => sectionOf(nodes[id].x) === 'sola').map(id => nodes[id].s) },
-    { key: 'canyon',   label: 'CANYON CREW', color: '#9a5b1f', list: extraStations.filter(id => sectionOf(nodes[id].x) === 'canyon').map(id => nodes[id].s) },
+    { key: 'meritage', label: 'MERITAGE',    color: '#1d3a66', list: [...ST, ...extraStations.filter(id => sectionOf(nodes[id].x, nodes[id].z) === 'meritage').map(id => nodes[id].s)] },
+    { key: 'sola',     label: 'SOLA',        color: '#236043', list: extraStations.filter(id => sectionOf(nodes[id].x, nodes[id].z) === 'sola').map(id => nodes[id].s) },
+    { key: 'canyon',   label: 'CANYON CREW', color: '#9a5b1f', list: extraStations.filter(id => sectionOf(nodes[id].x, nodes[id].z) === 'canyon').map(id => nodes[id].s) },
   ];
   let html = '';
   SECTIONS.forEach(sec => {
@@ -2080,7 +2110,7 @@ const FEEDNAME = { con:'Connectors', arm:'Arms', bak:'Back frame', tre:'Trellis'
 // ordered station ids for ONE added line, by floor section ('sola' | 'canyon'),
 // in true flow order (reuses the sim's independent-line ordering).
 function orderedLine(sec) {
-  return solaComponents().flat().filter(id => nodes[id] && sectionOf(nodes[id].x) === sec);
+  return solaComponents().flat().filter(id => nodes[id] && sectionOf(nodes[id].x, nodes[id].z) === sec);
 }
 function operatorsList(line) {
   const list = [];
@@ -2589,9 +2619,8 @@ renderer.domElement.addEventListener('pointerdown', e => {
   if (id) {
     dragId = id; selectedStation = id; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId); refreshMeasure();
     // fence the drag inside the table's OWN line slice — a table can't drift
-    // across a boundary by accident. Hold SHIFT while dragging to cross on purpose.
-    const s0 = sectionOf(nodes[id].x);
-    dragFenceR = s0 === 'meritage' ? [FLOOR_X0 + 0.6, DIVIDER_X - 0.35] : s0 === 'sola' ? [DIVIDER_X + 0.35, CANYON_X - 0.35] : [CANYON_X + 0.35, FLOOR_X1 - 0.6];
+    // across a CAD boundary by accident. Hold SHIFT while dragging to cross on purpose.
+    dragFenceR = sectionOf(nodes[id].x, nodes[id].z);
   }
   // else: clicked empty floor -> OrbitControls pans the camera
 });
@@ -2634,9 +2663,13 @@ renderer.domElement.addEventListener('pointermove', e => {
   }
   if (!dragId) return;
   let x = Math.max(FLOOR_X0 + 1.4, Math.min(FLOOR_X1 - 1.4, cx));        // stations can sit ANYWHERE on the floor — side strips included
-  if (dragFenceR && !e.shiftKey) x = Math.max(dragFenceR[0], Math.min(dragFenceR[1], x));   // fenced inside its line (Shift-drag crosses)
-  else if (e.shiftKey) dragFenceR = null;                                 // once you cross with Shift, the fence re-arms on the next grab
   const z = Math.max(FLOOR_Z0 + 1.4, Math.min(FLOOR_Z1 - 1.4, cz));
+  if (dragFenceR && !e.shiftKey) {                                        // fenced inside its line at the CAD boundary for THIS z (the lines jog)
+    const bS = SOLA_BX(z), bC = CANYON_BX(z);
+    if (dragFenceR === 'meritage') x = Math.min(x, bS - 0.35);
+    else if (dragFenceR === 'sola') x = Math.max(bS + 0.35, Math.min(bC - 0.35, x));
+    else x = Math.max(bC + 0.35, x);
+  } else if (e.shiftKey) dragFenceR = null;                               // once you cross with Shift, the fence re-arms on the next grab
   setStationPos(dragId, x, z);
   refreshMeasure(); refreshPath(); if (dragId === 'cart2') refreshCart2Feed(); if (dragId === 'cart3') refreshCart3Feed(); refreshProdFlow();
   if (cadOn) rebuildMyMarks();   // keep the teal "mine" markers on the bench as it moves
@@ -2772,7 +2805,7 @@ document.getElementById('addwp').onclick = () => {
   document.body.appendChild(shipPanel);
   function renderShipPanel() {
     const opts = (sec, idx) => {
-      const ids = extraStations.filter(id => nodes[id] && sectionOf(nodes[id].x) === sec);
+      const ids = extraStations.filter(id => nodes[id] && sectionOf(nodes[id].x, nodes[id].z) === sec);
       const cur = prodStart[idx];
       return `<select data-i="${idx}" style="width:100%;padding:5px;border:1px solid #c9d2dd;border-radius:6px;margin:2px 0 10px;font-size:12px">
         <option value="">Auto — last table in flow order</option>` +
