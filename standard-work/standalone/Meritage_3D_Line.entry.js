@@ -1405,6 +1405,7 @@ const prodAisles = PROD_COLS.map(() => { const m = new THREE.Mesh(new THREE.Buff
 const prodLines = PROD_COLS.map(c => { const l = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: c, dashSize: 0.6, gapSize: 0.3, transparent: true, opacity: 0.95 })); l.visible = false; level2.add(l); return l; });
 const prodWpGroup = new THREE.Group(); prodWpGroup.visible = false; level2.add(prodWpGroup);
 const PROD_WP_MATS = PROD_COLS.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.5 }));
+var prodLanesOn = true;                                      // 📦 Flow lanes toggle — hides the green lanes (boxes keep traveling)
 let prodStart = [null, null, null];   // per-line SHIP-POINT override (station id, null = auto/flow order) — set via the ⇊ Ship point button
 function lineEndNode(i) {                                    // where each line's finished furniture leaves from
   if (i === 0) return nodes.pak || null;
@@ -1434,12 +1435,12 @@ function refreshProdFlow() {
     const pts = prodPts(i), has = !!(pts && pts.length >= 2);
     // furniture-flow lanes are ALWAYS shown (they document the floor's product
     // flow); in Edit Layout the Lanes toggle can hide them with the cart lanes
-    prodAisles[i].visible = has && (ed ? aisleOn : true) && focusShows(LINE_KEYS[i]);
-    prodLines[i].visible = has && focusShows(LINE_KEYS[i]);
+    prodAisles[i].visible = has && prodLanesOn && (ed ? aisleOn : true) && focusShows(LINE_KEYS[i]);
+    prodLines[i].visible = has && prodLanesOn && focusShows(LINE_KEYS[i]);
     if (!has) continue;
     setLinePts(prodLines[i], pts, 0.14);
     updateAisle(prodAisles[i], pts);
-    prodWps[i].forEach((w, k) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.7, 16), PROD_WP_MATS[i]); m.position.set(w.x, 0.35, w.z); m.userData = { cart: 'pf' + i, wp: k }; prodWpGroup.add(m); });
+    if (prodLanesOn) prodWps[i].forEach((w, k) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.7, 16), PROD_WP_MATS[i]); m.position.set(w.x, 0.35, w.z); m.userData = { cart: 'pf' + i, wp: k }; prodWpGroup.add(m); });
   }
 }
 // shipped boxes pool near packing/ship dock
@@ -2861,6 +2862,17 @@ document.getElementById('addwp').onclick = () => {
     shipPanel.querySelectorAll('select').forEach(s => s.onchange = e => { prodStart[+e.target.dataset.i] = e.target.value || null; refreshProdFlow(); saveLayout(); });
     const c = shipPanel.querySelector('#shipClose'); if (c) c.onclick = () => { shipPanel.style.display = 'none'; };
   }
+  // 📦 Flow lanes: show/hide the green furniture lanes (the boxes still travel)
+  const flB = document.createElement('button');
+  flB.id = 'flowLanesBtn'; flB.className = shipB.className || '';
+  flB.textContent = '📦 Flow lanes: on';
+  shipB.parentNode.insertBefore(flB, shipB.nextSibling);
+  flB.onclick = () => {
+    prodLanesOn = !prodLanesOn;
+    flB.textContent = '📦 Flow lanes: ' + (prodLanesOn ? 'on' : 'off');
+    flB.classList.toggle('on', !prodLanesOn);
+    refreshProdFlow();
+  };
   shipB.onclick = () => {
     if (shipPanel.style.display === 'block') { shipPanel.style.display = 'none'; return; }
     renderShipPanel();
@@ -3520,6 +3532,7 @@ function loop(now){
     rotbtn: 'Rotate the selected table 90°',
     accesspt: 'Add a forklift access point — the green furniture lanes run to the nearest one',
     addForklift: 'Add a Forklift Access pad with its own animated forklift — drag it into place, right-click to remove. Lanes route to the nearest forklift.',
+    flowLanesBtn: 'Show / hide the green furniture-flow lanes — the boxes keep traveling either way',
     lineFocusSel: 'Look at one line by itself — every other line\u2019s tables, crew, carts, lanes and boxes disappear',
     rackbtn: 'Add a finished-goods rack',
     labels: 'Cycle the station labels: names / times / hidden',
