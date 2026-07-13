@@ -3026,7 +3026,10 @@ function update(){
     // ---- traveling finished parts: feeder -> FA staging -> consumed at faStart ----
     const t2 = t; const pool = travelParts[id]; const off = SLOT[id];
     const sx0 = nd.x, sz0 = nd.z;
-    const tx = fa.x + off[0], tz = fa.z + off[1];
+    // rotate the staging offset with the FA table so parts stage ON the tabletop
+    // whichever way it's turned (same convention as crew placement)
+    const far2 = fa.rot || 0, fcs = Math.cos(far2), fsn = Math.sin(far2);
+    const tx = fa.x + (off[0] * fcs + off[1] * fsn), tz = fa.z + (off[1] * fcs - off[0] * fsn);
     for (let u = 0; u < N; u++) {
       const part = pool[u]; if (!part) continue;
       const depart = t2 * (u + 1);
