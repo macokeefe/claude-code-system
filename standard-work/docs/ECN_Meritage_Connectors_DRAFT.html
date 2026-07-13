@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>ECN — Meritage Connector System &amp; Leg Pre-Assembly (DRAFT)</title>
+<style>
+  :root { --navy:#1d3a66; --mut:#5a6672; --line:#d8dee6; --warn:#c0552c; }
+  * { box-sizing: border-box; }
+  body { font: 13px/1.55 Arial, Helvetica, sans-serif; color:#15263a; margin: 0; background:#f2f4f7; }
+  .page { max-width: 900px; margin: 18px auto; background:#fff; padding: 34px 42px; box-shadow: 0 4px 24px rgba(20,30,45,.12); }
+  h1 { font-size: 21px; color: var(--navy); margin: 0 0 2px; }
+  h2 { font-size: 14px; color: var(--navy); border-bottom: 2px solid var(--navy); padding-bottom: 3px; margin: 26px 0 10px; text-transform: uppercase; letter-spacing: .04em; }
+  h3 { font-size: 13px; margin: 16px 0 6px; }
+  .draft { display:inline-block; border: 2px solid var(--warn); color: var(--warn); font-weight: 800; padding: 2px 10px; border-radius: 6px; letter-spacing: .12em; margin-left: 10px; vertical-align: middle; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0 14px; }
+  th, td { border: 1px solid var(--line); padding: 6px 9px; text-align: left; vertical-align: top; font-size: 12.5px; }
+  th { background: #eef2f7; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); }
+  .hdr td { border: 1px solid var(--line); }
+  .hdr .k { background:#eef2f7; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--mut); width: 130px; }
+  .blank { color:#9aa4ae; }
+  .note { background: #fdf6ef; border: 1px solid #ecd9c4; border-radius: 8px; padding: 9px 12px; font-size: 12.5px; margin: 10px 0; }
+  .sig td { height: 52px; }
+  ul { margin: 6px 0 10px 20px; padding: 0; }
+  li { margin: 3px 0; }
+  .small { font-size: 11.5px; color: var(--mut); }
+  @media print { body { background:#fff; } .page { box-shadow:none; margin:0; max-width:none; padding: 24px 30px; } .noprint { display:none; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>ENGINEERING CHANGE NOTICE <span class="draft">DRAFT — FOR REVIEW</span></h1>
+<div class="small">TUUCI — Meritage product family · Prepared from the Meritage 3-Seater Engineering Improvement Plan (06/18/2026)</div>
+
+<table class="hdr">
+  <tr><td class="k">ECN No.</td><td class="blank">ECN-2026-____ (assigned on release)</td>
+      <td class="k">Date</td><td>07/13/2026</td></tr>
+  <tr><td class="k">Originator</td><td>Douglas O'Keefe — Continuous Improvement</td>
+      <td class="k">Change class</td><td>Major — BOM, drawings, supplier process</td></tr>
+  <tr><td class="k">Product(s)</td><td colspan="3">Meritage 3-Seater Sofa (primary). The connector system is shared across Meritage lines — all Meritage SKUs using flat horizontal connectors are affected.</td></tr>
+  <tr><td class="k">Priority</td><td>High — recovers ~24 min labor/unit; two items relieve the seat-frame bottleneck</td>
+      <td class="k">Requested effectivity</td><td class="blank">First supplier PO after approval (date: ____)</td></tr>
+</table>
+
+<h2>1 &nbsp;Reason for change</h2>
+<p>Meritage flat connectors arrive from the Vietnam supplier as <b>one generic configuration</b> and are hand-reworked on the line before use (screw swaps, orientation flips, hole drilling), and the high-volume leg piece is assembled in-house. This adds <b>~24 minutes of non-value-added labor per unit</b>, part of it directly on the seat-frame bottleneck, so every minute recovered there raises line throughput — not just labor. Root cause is a BOM/documentation gap: <b>three real connector configurations exist but the BOM lists only two</b>, and the connector CAD drawings carry an incorrect part number, so the supplier cannot ship parts pre-configured.</p>
+
+<h2>2 &nbsp;Current condition → Requested change</h2>
+
+<h3>Item A — Correct the connector BOM (3 configurations, unique part numbers) — prerequisite for B–D</h3>
+<table>
+  <tr><th style="width:50%">Current condition</th><th>Requested change</th></tr>
+  <tr><td>BOM lists <b>2</b> connector types; all arrive as one generic design. Connector CAD drawings show P/N <b>1012553</b>, which matches neither the BOM nor the floor. Two configurations share a part number.</td>
+      <td>BOM and connector CAD drawings list <b>3</b> unique configurations with their own P/Ns:<br/>
+      · Front (same both sides): <b>1015301</b> — qty 2<br/>
+      · Back-left: <b>1015302</b> — qty 1<br/>
+      · Back-right: <b>1016592</b> — qty 1<br/>
+      Update connector drawings to the correct P/Ns and configurations (left/right defined).</td></tr>
+</table>
+<p class="small">Reference: the seat-frame assembly drawing already shows all three P/Ns correctly (1015301 ×2 front, 1015302 + 1016592 back); drawing TU-530 Rev A likewise BOMs the three connector assemblies separately (Config 1/2/3). Only the BOM and the connector-level drawings lag.</p>
+
+<h3>Item B — Eliminate screw swaps &amp; reorientation (ship pre-configured)</h3>
+<table>
+  <tr><th style="width:50%">Current condition</th><th>Requested change</th></tr>
+  <tr><td>Type 1 (front) arrives with screw <b>40200</b>; operator removes it and installs <b>1012919</b> on every connector. Type 2 (back) arrives with <b>1012934</b>; operator swaps to <b>40204</b>. Half of Type 2 also need the screw-entry side flipped by hand. Rework ≈ <b>11 min 40 s per unit</b>, zero value added.</td>
+      <td>Each configuration ships from the supplier <b>already fitted with the correct screw and orientation</b>:<br/>
+      · 1015301 with 1012919<br/>
+      · 1015302 / 1016592 with 40204, left/right orientation per drawing<br/>
+      Screw specs to be validated by Engineering before release (see §6).</td></tr>
+</table>
+
+<h3>Item C — Pre-drill connector holes for leg insertion (bottleneck relief)</h3>
+<table>
+  <tr><th style="width:50%">Current condition</th><th>Requested change</th></tr>
+  <tr><td>Operators manually drill <b>4 holes</b> into the flat connectors for leg-piece insertion during seat-frame assembly — the line's top bottleneck. ≥ <b>5 min per frame</b>.</td>
+      <td>Connectors arrive with leg-insertion holes <b>pre-drilled</b> per drawing (hole size/position to be added to the updated connector drawings in Item A).</td></tr>
+</table>
+
+<h3>Item D — Receive the high-volume leg piece pre-assembled</h3>
+<table>
+  <tr><th style="width:50%">Current condition</th><th>Requested change</th></tr>
+  <tr><td>Connector operator assembles the leg piece in-house, ~<b>8 min per unit</b>. Two variants exist; the basic (non-wheeled) variant is ~90% of volume.</td>
+      <td>The <b>basic leg piece</b> arrives pre-assembled from the supplier under its own P/N <span class="blank">(assign: ____)</span>. The wheeled variant (~10%) remains assembled in-house. <b>Gate:</b> supplier finish must meet TUUCI paint spec (see §6).</td></tr>
+</table>
+
+<h2>3 &nbsp;Affected items</h2>
+<table>
+  <tr><th>Item</th><th>Type</th><th>Change</th></tr>
+  <tr><td>Meritage 3-Seater BOM (and shared-connector Meritage BOMs)</td><td>BOM</td><td>2 connector types → 3 unique P/Ns (1015301 / 1015302 / 1016592) with quantities 2/1/1; add pre-assembled leg P/N</td></tr>
+  <tr><td>Connector CAD drawing(s) currently P/N 1012553</td><td>Drawing</td><td>Correct P/Ns; define left/right configurations; add fitted-screw callouts; add pre-drilled leg-insertion holes (size, position, qty 4)</td></tr>
+  <tr><td>Screws 40200, 1012934</td><td>Component</td><td>Removed from connector configurations (superseded by 1012919 / 40204, pending validation)</td></tr>
+  <tr><td>Basic leg piece</td><td>Part / sourcing</td><td>New pre-assembled P/N; supplier assembly + paint-spec qualification</td></tr>
+  <tr><td>Supplier POs / work instructions (Vietnam)</td><td>Procurement</td><td>Order by configuration P/N; pre-fit screws; pre-drill holes; leg pre-assembly</td></tr>
+  <tr><td>Line SWI — connector prep &amp; seat-frame stations</td><td>Standard work</td><td>Remove screw-swap / reorientation / drilling / leg-assembly steps after cut-in; re-balance line with recovered labor</td></tr>
+</table>
+
+<h2>4 &nbsp;Labor impact (measured / estimated)</h2>
+<table>
+  <tr><th>Item</th><th>Recovery per unit</th><th>Where it lands</th></tr>
+  <tr><td>B — screw swaps + reorientation</td><td>~11 min 40 s</td><td>Connector operator (redeploy to bottleneck)</td></tr>
+  <tr><td>C — pre-drilled holes</td><td>≥ 5 min</td><td><b>Seat-frame bottleneck — direct throughput gain</b></td></tr>
+  <tr><td>D — pre-assembled leg (90% of units)</td><td>~8 min (≈7.2 blended)</td><td>Connector operator + manufacturing/paint upstream</td></tr>
+  <tr><td><b>Total</b></td><td><b>≈ 24 min/unit</b></td><td>Concentrated on/redeployable to the bottleneck</td></tr>
+</table>
+
+<h2>5 &nbsp;Disposition of existing material</h2>
+<table>
+  <tr><th>Material</th><th>Disposition</th></tr>
+  <tr><td>Generic connectors in house / in transit</td><td><b>Use as is</b> — continue current line rework until pre-configured stock cuts in (no scrap)</td></tr>
+  <tr><td>Screw stock 40200 / 1012934</td><td>Use for service/other products if applicable; excess to be dispositioned by Supply Chain</td></tr>
+  <tr><td>Leg-piece components in house</td><td>Consume through cut-in of pre-assembled part</td></tr>
+</table>
+
+<h2>6 &nbsp;Open items / risks (to close before release)</h2>
+<ul>
+  <li><b>Screw spec validation:</b> 1012919 and 40204 are what operators use today and are confirmed to work — they are a working baseline, not a validated spec. Engineering to confirm optimal spec before formalizing in the BOM.</li>
+  <li><b>Paint spec (Item D):</b> confirm the supplier can deliver the basic leg piece finished to TUUCI paint spec through the Vietnam supply chain. This is the gate on Item D.</li>
+  <li><b>Hole spec (Item C):</b> engineering to formalize drill size and positions on the updated connector drawings.</li>
+  <li><b>Effectivity plan:</b> define cut-in (PO number / lot) and dual-stock handling during transition.</li>
+</ul>
+
+<h2>7 &nbsp;Implementation sequence</h2>
+<ol>
+  <li>Approve BOM correction (Item A) — enables everything downstream</li>
+  <li>Release updated connector drawings (P/Ns, screws, orientation, holes)</li>
+  <li>Supplier changeover: pre-configured connectors + pre-drilled holes (Items B/C); qualify leg paint and cut in Item D</li>
+  <li>Re-balance the cell to takt with the recovered labor; update SWIs</li>
+</ol>
+
+<h2>8 &nbsp;Approvals</h2>
+<table class="sig">
+  <tr><th style="width:24%">Function</th><th style="width:30%">Name</th><th>Signature</th><th style="width:16%">Date</th></tr>
+  <tr><td>Originator — Continuous Improvement</td><td>Douglas O'Keefe</td><td></td><td></td></tr>
+  <tr><td>Engineering</td><td class="blank"></td><td></td><td></td></tr>
+  <tr><td>Supply Chain / Purchasing</td><td class="blank"></td><td></td><td></td></tr>
+  <tr><td>Quality</td><td class="blank"></td><td></td><td></td></tr>
+  <tr><td>Production</td><td class="blank"></td><td></td><td></td></tr>
+</table>
+
+<p class="small">References: Meritage 3-Seater Engineering Improvement Plan (O'Keefe, 06/18/2026) · Seat-frame assembly drawing (shows 1015301 ×2 / 1015302 / 1016592) · TU-530 Rev A "Seat, MER, Ottoman No Arms Subassy" (BOMs Config 1/2/3 connector assemblies separately) · Connector CAD drawings currently marked 1012553.</p>
+
+<div class="noprint" style="margin-top:18px;text-align:center"><button onclick="window.print()" style="padding:8px 22px;font-weight:700;border:1px solid #c9d2dd;border-radius:8px;background:#eef2f7;cursor:pointer">🖨 Print / Save as PDF</button></div>
+
+</div>
+</body>
+</html>
