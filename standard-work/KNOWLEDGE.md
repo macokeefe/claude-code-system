@@ -504,6 +504,23 @@ cart lanes: dblclick lane inserts (3 extra legs), drag dots, right-click
 deletes. Edit-mode only + Lanes toggle. Persisted `__fwps` (working) / `fwps`
 (named) = 3 arrays of [x,z].
 
+**CAD-exact line boundaries + line focus (2026-07):** membership no longer
+uses straight x cuts. `plX(pl, z)` reads the boundary x at any z from the
+measured `SECTION_LINES` polylines; `sectionOf(x, z)`/`sideOf(x, z)` are
+z-aware: Meritage/Sola boundary = CAD line 2 (4.91 below z=0.99, 5.18 above;
+NOTE: no longer the deck edge 7.09), Sola/Canyon = CAD line 4 (17.87 below
+z=−2.59, 17.60 above). Zone tints are jog-shaped rects from the same data,
+boundary walls lie on the drawn polylines, and the drag fence clamps at the
+CAD boundary for the table's current z (Shift-drag crosses; label recolors
+via `applyLineAccent` on release). **Line focus:** `lineFocus`
+('all'/'meritage'/'sola'/'canyon'), 👁 selector next to Run;
+`applyLineFocus()` hides other lines' benches/carts/lane systems + calls
+refreshProdFlow/refreshEnds/applyLabels (all focus-aware); per-frame gates
+handle animated things (crew figs + Meritage cart pool in the render loop,
+feeder parts/moving sofa in update(), added-line travel parts in solaUpdate,
+lane travelers + pallet-square waiters via `userData.lineIdx`). Sim/panels
+unaffected — focus is purely visual.
+
 **Container-reset recovery (2026-07):** the ephemeral container was reclaimed
 mid-session; local clone came back on the default branch with `standard-work/`
 absent and node_modules/scratchpad gone. Recovery: `git fetch origin` +

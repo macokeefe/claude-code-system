@@ -731,6 +731,7 @@ function parkWaiters(rec) {
   const rot = rec.g.rotation.y || 0, cs = Math.cos(rot), sn = Math.sin(rot);
   rec.waitMeshes.forEach((m, i) => {
     const s = rec.waitSlots[Math.min(i, rec.waitSlots.length - 1)];
+    m.visible = (typeof focusShows !== 'function') || focusShows(LINE_KEYS[m.userData.lineIdx ?? 0]);
     m.position.set(rec.g.position.x + s[0] * cs + s[2] * sn, rec.g.position.y + s[1], rec.g.position.z + s[2] * cs - s[0] * sn);
   });
 }
@@ -756,14 +757,15 @@ function spawnOutBox(lineIdx) {
   let o = outBoxes.find(b => !b.active && !b.queued);
   if (!o) {
     if (outBoxes.length >= 30) {                             // pool cap: arrive instantly rather than stall
-      const m = makeShipBox(); m.scale.set(0.8, 0.8, 0.8); level2.add(m); m.visible = true;
-      enqueueAtRig(rig, m); outBoxes.push({ mesh: m, active: false, queued: true, rig }); return;
+      const m = makeShipBox(); m.scale.set(0.8, 0.8, 0.8); level2.add(m); m.visible = focusShows(LINE_KEYS[lineIdx]); m.userData.lineIdx = lineIdx;
+      enqueueAtRig(rig, m); outBoxes.push({ mesh: m, active: false, queued: true, rig, line: lineIdx }); return;
     }
     o = { mesh: makeShipBox(), active: false, queued: false, rig: null };
     o.mesh.scale.set(0.8, 0.8, 0.8); level2.add(o.mesh); outBoxes.push(o);
   }
   o.active = true; o.queued = false; o.rig = rig; o.pts = pts; o.seg = 0; o.d = 0;
-  o.mesh.visible = true; o.mesh.position.set(pts[0][0], 0.05, pts[0][1]);
+  o.line = lineIdx; o.mesh.userData.lineIdx = lineIdx;
+  o.mesh.visible = focusShows(LINE_KEYS[lineIdx]); o.mesh.position.set(pts[0][0], 0.05, pts[0][1]);
 }
 function advanceOutBoxes(dt) {
   for (const o of outBoxes) {
@@ -782,6 +784,7 @@ function advanceOutBoxes(dt) {
     } else {
       const a = o.pts[o.seg], b = o.pts[o.seg + 1];
       const segLen = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1e-6, f = o.d / segLen;
+      o.mesh.visible = focusShows(LINE_KEYS[o.line ?? 0]);
       o.mesh.position.set(a[0] + (b[0] - a[0]) * f, 0.05, a[1] + (b[1] - a[1]) * f);
     }
   }
@@ -1144,6 +1147,7 @@ function refreshEnds() {
   [{ end: retEnd, col: 0xc0552c, tag: 'end', nm: 'Meritage cart' },
    { end: retEnd2, col: 0x236043, tag: 'end2', nm: 'Sola cart' },
    { end: retEnd3, col: 0x9a5b1f, tag: 'end3', nm: 'Canyon cart' }].forEach((d, i) => {
+    if (typeof focusShows === 'function' && !focusShows(LINE_KEYS[i])) return;   // focused on another line
     const at = d.end ? [d.end.x, d.end.z] : [EL[0] + foff[i][0], EL[1] + foff[i][1]];
     const m = makeEndMarker(d.nm + (d.end ? ' — END' : ' → elevator'), d.col);
     m.position.set(at[0], 0, at[1]); m.userData = { cart: d.tag };
@@ -1218,6 +1222,8 @@ function updateFlow() {
   const y = 0.4;
   flowArrows.forEach(a => {
     if (!a._line) return; const A = nodes[a.from], B = nodes[a.to]; if (!A || !B) return;
+    const fv = (typeof focusShows !== 'function') || (focusShows(stLineOf(a.from)) && focusShows(stLineOf(a.to)));
+    a._line.visible = fv; a._cone.visible = fv;
     a._line.geometry.setAttribute('position', new THREE.Float32BufferAttribute([A.x, y, A.z, B.x, y, B.z], 3));
     a._line.geometry.computeBoundingSphere();
     a._cone.position.set(B.x, y, B.z);
@@ -1249,6 +1255,8 @@ function updateHelp() {
   const y = 0.25;
   helpArrows.forEach(a => {
     if (!a._line) return; const B = nodes[a.to]; if (!nodes[a.from] || !B) return;
+    const fv = (typeof focusShows !== 'function') || (focusShows(stLineOf(a.from)) && focusShows(stLineOf(a.to)));
+    a._line.visible = fv; a._cone.visible = fv;
     const hc = (typeof crew !== 'undefined') ? crew.find(c => c.station === a.from && c.idx === (a.fromIdx || 0)) : null;
     const A = hc ? { x: hc.homeX, z: hc.homeZ } : nodes[a.from];   // start the arrow at the specific operator
     a._line.geometry.setAttribute('position', new THREE.Float32BufferAttribute([A.x, y, A.z, B.x, y, B.z], 3));
@@ -1430,8 +1438,8 @@ function refreshProdFlow() {
     const pts = prodPts(i), has = !!(pts && pts.length >= 2);
     // furniture-flow lanes are ALWAYS shown (they document the floor's product
     // flow); in Edit Layout the Lanes toggle can hide them with the cart lanes
-    prodAisles[i].visible = has && (ed ? aisleOn : true);
-    prodLines[i].visible = has;
+    prodAisles[i].visible = has && (ed ? aisleOn : true) && focusShows(LINE_KEYS[i]);
+    prodLines[i].visible = has && focusShows(LINE_KEYS[i]);
     if (!has) continue;
     setLinePts(prodLines[i], pts, 0.14);
     updateAisle(prodAisles[i], pts);
@@ -1490,6 +1498,16 @@ playBtn.onclick = () => { if (playScope !== 'sola' && T >= horizon) T = 0; if (p
 document.getElementById('reset').onclick = () => { T = 0; Ts = 0; setPlay(false); };
 const playScopeSel = document.getElementById('playScope');
 if (playScopeSel) playScopeSel.onchange = e => { playScope = e.target.value; T = 0; Ts = 0; setPlay(false); };
+// 👁 line focus selector — view one line by itself
+(() => {
+  const ps = document.getElementById('playScope'); if (!ps || !ps.parentNode) return;
+  const sel = document.createElement('select'); sel.id = 'lineFocusSel';
+  sel.innerHTML = '<option value="all">👁 All lines</option><option value="meritage">👁 Meritage only</option><option value="sola">👁 Sola only</option><option value="canyon">👁 Canyon Crew only</option>';
+  ps.parentNode.parentNode ? ps.parentNode.parentNode.insertBefore(sel.ownerDocument.createTextNode(''), null) : 0;
+  ps.parentNode.insertBefore(sel, ps.nextSibling);
+  sel.style.marginLeft = '6px';
+  sel.onchange = e => { lineFocus = e.target.value; applyLineFocus(); };
+})();
 const nInput = document.getElementById('n');
 nInput.value = N;
 nInput.onchange = e => { N = Math.max(1, Math.min(40, parseInt(e.target.value)||8)); schedule(); if (typeof buildSolaSched==='function') buildSolaSched(); T=0; Ts=0; setPlay(false); };
@@ -1620,10 +1638,34 @@ function setCadOverlay(on) {
 let labelMode = 1;
 const extraStations = [];   // added (Sola) stations — declared early so applyLabels can include them
 let extraSeq = 0;
+/* ---- LINE FOCUS: view one line by itself — pick Meritage / Sola / Canyon
+   Crew from the 👁 selector and every other line's tables, crew, carts, lanes,
+   arrows and boxes disappear. 'all' shows the whole floor. ---- */
+var lineFocus = 'all';
+const LINE_KEYS = ['meritage', 'sola', 'canyon'];
+function stLineOf(id) { const nd = nodes[id]; if (!nd) return 'meritage'; return nd.extra ? sectionOf(nd.x, nd.z) : 'meritage'; }
+function focusShows(sec) { return (typeof lineFocus === 'undefined' || !lineFocus || lineFocus === 'all' || lineFocus === sec); }
+function applyLineFocus() {
+  [...ST.map(s2 => s2.id), ...extraStations].forEach(id => {
+    const nd = nodes[id]; if (!nd) return;
+    const v = focusShows(stLineOf(id));
+    if (nd.st) nd.st.visible = v;
+    if (nd.visual && nd.visual.g) nd.visual.g.visible = v && !(id === 'fa' && nd.visual.g.visible === false);
+  });
+  const m = focusShows('meritage'), so = focusShows('sola'), ca = focusShows('canyon');
+  if (nodes.cart) nodes.cart.st.visible = m;
+  if (nodes.cart2) nodes.cart2.st.visible = so;
+  if (nodes.cart3) nodes.cart3.st.visible = ca;
+  const ed = (typeof editing !== 'undefined') && editing;
+  pathLine.visible = ed && m; wpGroup.visible = ed && m; returnLine.visible = ed && m; aisleMesh.visible = ed && aisleOn && m;
+  wpGroup2.visible = ed && so; returnLine2.visible = ed && so; aisleMesh2.visible = ed && aisleOn && so; cart2Feed.visible = so;
+  wpGroup3.visible = ed && ca; returnLine3.visible = ed && ca; aisleMesh3.visible = ed && aisleOn && ca; cart3Feed.visible = ca;
+  refreshProdFlow(); refreshEnds(); applyLabels();
+}
 function applyLabels() {
   const all = [...ST.map(s => s.id), ...extraStations];   // Meritage + Sola (added) stations
-  all.forEach(id => { const nd = nodes[id]; if (!nd) return; if (nd.label) nd.label.visible = labelMode === 2; if (nd.mini) nd.mini.visible = labelMode === 1; });
-  if (typeof cartSign !== 'undefined' && cartSign) cartSign.visible = labelMode !== 0;
+  all.forEach(id => { const nd = nodes[id]; if (!nd) return; const fv = focusShows(stLineOf(id)); if (nd.label) nd.label.visible = labelMode === 2 && fv; if (nd.mini) nd.mini.visible = labelMode === 1 && fv; });
+  if (typeof cartSign !== 'undefined' && cartSign) cartSign.visible = labelMode !== 0 && focusShows('meritage');
   const b = document.getElementById('labels'); if (b) b.textContent = 'Labels: ' + (labelMode === 0 ? 'Off' : labelMode === 1 ? 'Names' : 'Full');
 }
 document.getElementById('labels').onclick = () => { labelMode = (labelMode + 1) % 3; applyLabels(); };
@@ -1823,7 +1865,7 @@ function solaUpdate() {
         const depart = finish[k][u], cons = finish[k + 1][u] - time[k + 1];
         if (Ts <= 0 || depart >= cons || Ts < depart || Ts >= cons) { part.visible = false; continue; }
         const arrive = Math.min(depart + SOLA_TRAVEL, cons);
-        part.visible = true;
+        part.visible = focusShows(stLineOf(ids[k]));
         if (Ts < arrive) { const fr = (arrive > depart) ? (Ts - depart) / (arrive - depart) : 1; part.position.set(A.x + (B.x - A.x) * fr, 1.04 + Math.sin(fr * Math.PI) * 0.4, A.z + (B.z - A.z) * fr); }
         else part.position.set(B.x, 1.04, B.z);
       }
@@ -1912,6 +1954,7 @@ function addStation(name, x, z, id, t) {
   if (typeof applyLabels === 'function') applyLabels();       // follow the current Labels mode (Off / Names / Full)
   if (typeof cadOn !== 'undefined' && cadOn) rebuildMyMarks();   // include the new station in the teal markers
   applyLineAccent(id);                                        // label tinted with its line's color
+  if (typeof applyLineFocus === 'function') applyLineFocus(); // respect an active line focus
   return id;
 }
 function buildExtraCrew(id) {                                 // operator figures for an added station (mirrors Meritage)
@@ -2396,7 +2439,7 @@ window.addEventListener('keydown', e => {
   }
 });
 function applyWorkingLayout(o) {   // apply a working-layout object to the LIVE scene (shared by load + import)
-  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } if (Array.isArray(o.__ends)) { const e = o.__ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; } if (Array.isArray(o.__fwps)) prodWps = [0, 1, 2].map(i => (o.__fwps[i] || []).map(a => ({ x: a[0], z: a[1] }))); if (Array.isArray(o.__fstart)) prodStart = [0, 1, 2].map(i => o.__fstart[i] || null); refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } extraStations.forEach(applyLineAccent); if (typeof refreshProdFlow === 'function') refreshProdFlow();
+  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } if (Array.isArray(o.__ends)) { const e = o.__ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; } if (Array.isArray(o.__fwps)) prodWps = [0, 1, 2].map(i => (o.__fwps[i] || []).map(a => ({ x: a[0], z: a[1] }))); if (Array.isArray(o.__fstart)) prodStart = [0, 1, 2].map(i => o.__fstart[i] || null); refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } extraStations.forEach(applyLineAccent); if (typeof refreshProdFlow === 'function') refreshProdFlow(); if (typeof applyLineFocus === 'function') applyLineFocus();
 }
 let hadSavedLayout = false;   // true when ANY layout (localStorage or baked) was loaded — defaults must then keep their hands off
 function loadLayout() { try { let o = null; try { o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch (e) {} if (!o && window.__M3D_LAYOUT__) o = window.__M3D_LAYOUT__;   // baked-in working layout (travels with the file)
@@ -2502,6 +2545,7 @@ function setEditing(on) {
   if (boxZoneHandle) boxZoneHandle.visible = on;     // the box-storage resize handle only shows while editing
   if (on) { refreshPath(); refreshCart2Feed(); refreshCart3Feed(); }
   refreshProdFlow();                                 // green furniture-flow lanes show/hide with edit mode
+  if (typeof applyLineFocus === 'function') applyLineFocus();   // re-apply the line focus over the edit-mode visibilities
   if (!on) { helpArming = false; armSource = null; const hb = document.getElementById('helparrow'); if (hb) hb.classList.remove('on'); if (typeof setFlowArming === 'function') setFlowArming(false); }
   if (on) {
     // keep zoom + pan in edit mode, but disable rotate and free the left button for dragging stations
@@ -3058,7 +3102,7 @@ function applyLayout(L) {
   if (Array.isArray(L.help)) { helpArrows = L.help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); }
   if (L.rot) Object.keys(L.rot).forEach(id => { if (nodes[id]) setStationRot(id, L.rot[id]); });
   if (Array.isArray(L.access)) { clearAccess(); L.access.forEach(p => addAccess(p[0], p[1])); refreshProdFlow(); }
-  extraStations.forEach(applyLineAccent);
+  extraStations.forEach(applyLineAccent); if (typeof applyLineFocus === 'function') applyLineFocus();
   if (Array.isArray(L.elev)) moveElevator(L.elev[0], L.elev[1]);
   if (Array.isArray(L.racks)) { clearRacks(); L.racks.forEach(p => addRack(p[0], p[1], p[2])); }
   if (Array.isArray(L.extras)) { clearExtras(); restoreExtras(L.extras); restoreFlow(L.flow); }   // rebuild the Sola side from this layout
@@ -3317,7 +3361,7 @@ function update(){
       const cons = sch.faStart[u];
       if (depart >= cons || T < depart || T >= cons) { part.visible = false; continue; }
       const arrive = Math.min(depart + TRAVEL, cons);
-      part.visible = true;
+      part.visible = focusShows('meritage');
       if (T < arrive) {
         const f = (arrive > depart) ? (T - depart) / (arrive - depart) : 1;
         part.position.set(sx0 + (tx - sx0) * f, 1.04 + Math.sin(f * Math.PI) * 0.35, sz0 + (tz - sz0) * f);
@@ -3341,7 +3385,7 @@ function update(){
       const fr = (T - (sch.faStart[cur] + sch.ASM)) / sch.PACK;
       const sx = fa.x + (POS.pak[0] - fa.x) * Math.min(1, fr * 1.6);
       const sz = fa.z + (POS.pak[1] - fa.z) * Math.min(1, fr * 1.6);
-      movingSofa.g.visible = true; movingSofa.g.position.set(sx, 1.04, sz);
+      movingSofa.g.visible = focusShows('meritage'); movingSofa.g.position.set(sx, 1.04, sz);
       movingSofa.update(0.8 + Math.min(1, fr) * 0.2);           // cushions go on at the packing station
       setLed(fa.led, 'done', false);
     }
@@ -3413,6 +3457,8 @@ function loop(now){
     if (merDone && solDone) setPlay(false);
   }
   updateCarts();   // carts stay parked in a line along the path
+  if (!focusShows('meritage')) cartPool.forEach(c => { c.mesh.visible = false; });   // line focus hides the Meritage delivery carts
+  crew.forEach(c => { const v = focusShows(stLineOf(c.station)); if (c.fig.visible !== v) c.fig.visible = v; });
   updateHelp();    // help-movement arrows follow the stations
   updateFlow();    // part-flow arrows follow the stations
   solaUpdate();    // animate the Sola line on its own clock
@@ -3478,6 +3524,7 @@ function loop(now){
     rotbtn: 'Rotate the selected table 90°',
     accesspt: 'Add a forklift access point — the green furniture lanes run to the nearest one',
     addForklift: 'Add a Forklift Access pad with its own animated forklift — drag it into place, right-click to remove. Lanes route to the nearest forklift.',
+    lineFocusSel: 'Look at one line by itself — every other line\u2019s tables, crew, carts, lanes and boxes disappear',
     rackbtn: 'Add a finished-goods rack',
     labels: 'Cycle the station labels: names / times / hidden',
     timesbtn: 'Open the station-times panel — edit steps, minutes and people per station',
