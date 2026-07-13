@@ -678,7 +678,15 @@ function buildLiftRig(g, D){
     rod.position.y = groundY + H1*0.85 + (ext + 0.2)/2 - 0.1;
   };
   sync();
-  const rec = { lift, busy:false, t:0, pkg, sync }; forkLifts.push(rec);
+  // delivered boxes stage on the GROUND beside the truck (a semi hauls them off
+  // after 6 — the pad clears so the scene never silts up)
+  const gnd = [];
+  for (let i = 0; i < 6; i++) {
+    const bb = makeShipBox(); bb.scale.set(0.72, 0.72, 0.72); bb.visible = false;
+    bb.position.set(-2.1 + (i % 3) * 1.35, groundY, zM + 2.9 + Math.floor(i / 3) * 1.1);
+    g.add(bb); gnd.push(bb);
+  }
+  const rec = { lift, busy:false, t:0, pkg, sync, gnd, delivered: 0 }; forkLifts.push(rec);
   return rec;
 }
 function makeForkGap(){
@@ -719,6 +727,12 @@ function addRack(x,z,rot){ const r=makeRackUnit(); r.g.position.set(x,0,z); if(r
 function clearRacks(){ racks.forEach(r=>level2.remove(r.g)); racks.length=0; }
 [[DECK.x0+4, DECK.z0+1],[DECK.x0+8.5, DECK.z0+1]].forEach(p=>addRack(p[0],p[1]));   // seed 2 racks along the back
 let onRacks=0, lastShipped=0;                                   // packages currently stored / last ship count seen
+// ---- outbound flow-down: finished boxes on the mezzanine are a LIVE BUFFER,
+// not a pile. Forklifts continuously take the oldest box down (one per ~6s
+// trip, every rig in parallel); the mezzanine stack only grows when the lines
+// outrun the material handling — its height IS the outbound WIP. ----
+let gShippedM = 0, gShippedS = 0;                               // shipped so far (Meritage / added lines)
+let takenM = 0, takenS = 0;                                     // boxes already taken down by forklifts
 function triggerTakedown(){ const fl=forkLifts.find(f=>!f.busy); if(fl){ fl.busy=true; fl.t=0; fl.pkg.visible=true; } }
 function fillRacks(){ let n=onRacks; for(const r of racks) for(const s of r.slots){ s.visible = n>0; if(n>0) n--; } }
 
@@ -1633,7 +1647,6 @@ function refreshBoxZone() {
 }
 refreshBoxZone();
 const SOLA_TRAVEL = 3;            // sim-min a part spends moving to the next station
-let lastAddedShipped = 0;         // tracks Sola/Canyon ships so each 3rd sends a forklift down
 function solaUpdate() {
   if (!solaScheds.length) { solaShipBoxes.forEach(b => b.visible = false); const el0 = document.getElementById('solaShip'); if (el0) el0.textContent = 0; return; }
   let shipped = 0; const shipSec = { sola: 0, canyon: 0 };
@@ -1683,10 +1696,8 @@ function solaUpdate() {
       }
     }
   });
-  solaShipBoxes.forEach((b, i) => b.visible = Ts > 0 && i < shipped);   // finished boxes populate the storage stack
-  // every 3rd Sola/Canyon unit shipped sends a forklift down with furniture (same cadence as Meritage)
-  if (shipped < lastAddedShipped) lastAddedShipped = shipped;           // clock reset/seek
-  while (lastAddedShipped < shipped) { lastAddedShipped++; if (lastAddedShipped % 3 === 0) triggerTakedown(); }
+  solaShipBoxes.forEach((b, i) => b.visible = Ts > 0 && i < Math.max(0, shipped - takenS));   // outbound buffer: forklift trips drain this stack
+  gShippedS = shipped;                                                  // dispatcher (render loop) drains this into forklift trips
   const el = document.getElementById('solaShip'); if (el) el.textContent = shipSec.sola;
   const elc = document.getElementById('canyonShip'); if (elc) elc.textContent = shipSec.canyon;
 }
@@ -3163,12 +3174,13 @@ function update(){
   // packing led + crew
   const pak = nodes.pak;
   setLed(pak.led, (cur>=0 && phase==='pack') ? 'active' : (shipped>=N?'done':'idle'), cur>=0 && phase==='pack');
-  shipBoxes.forEach((b, i) => b.visible = T > 0 && i < shipped);   // finished boxes populate the storage stack (upper-left)
+  shipBoxes.forEach((b, i) => b.visible = T > 0 && i < Math.max(0, shipped - takenM));   // outbound buffer: only boxes NOT yet taken down show — the stack breathes with the forklifts
   ui.ship.textContent = shipped;
   // finished sofas populate the racks; the forklift takes one down every 3rd
+  gShippedM = shipped;                                                 // dispatcher (render loop) drains this into forklift trips
   if (shipped < lastShipped) { lastShipped = shipped; onRacks = 0; }   // clock reset/seek
   const rcap = racks.length * RACK_SLOTS;
-  while (lastShipped < shipped) { lastShipped++; onRacks = Math.min(rcap, onRacks + 1); if (lastShipped % 3 === 0) { onRacks = Math.max(0, onRacks - 1); triggerTakedown(); } }
+  while (lastShipped < shipped) { lastShipped++; onRacks = Math.min(rcap, onRacks + 1); if (lastShipped % 3 === 0) onRacks = Math.max(0, onRacks - 1); }   // forklift trips come from the dispatcher now
   fillRacks();
 
   // FA crew walk to packing during pack phase; help-arrow operators walk to help during their idle slack
@@ -3222,10 +3234,31 @@ function loop(now){
   updateHelp();    // help-movement arrows follow the stations
   updateFlow();    // part-flow arrows follow the stations
   solaUpdate();    // animate the Sola line on its own clock
-  for (const fl of forkLifts) {                    // forklift carries a package DOWN when triggered, else parks low
+  // clock reset / seek-back: the buffers can't have taken down more than shipped
+  if (takenM > gShippedM) takenM = gShippedM;
+  if (takenS > gShippedS) takenS = gShippedS;
+  if (T <= 0 && Ts <= 0) { takenM = takenS = 0; for (const fl of forkLifts) { fl.delivered = 0; if (fl.gnd) fl.gnd.forEach(b => b.visible = false); } }
+  // dispatcher: whenever boxes wait on the mezzanine, send the next idle
+  // forklift for the oldest one — every rig works in parallel, each trip at its
+  // real ~6s pace, so the drain looks like real material handling
+  {
+    let waitM = gShippedM - takenM, waitS = gShippedS - takenS;
+    for (const fl of forkLifts) {
+      if (fl.busy || (waitM <= 0 && waitS <= 0)) continue;
+      if (waitM >= waitS) { takenM++; waitM--; } else { takenS++; waitS--; }
+      fl.busy = true; fl.t = 0;
+    }
+  }
+  for (const fl of forkLifts) {                    // trip: rise empty, take the box at the deck, carry it down
     if (fl.busy) {
-      fl.t += dt; const p = fl.t / 6;               // ~6s: rise empty, take the package, carry it down
-      if (p >= 1) { fl.busy = false; fl.lift.position.y = -(FLOOR2 - 0.3); fl.pkg.visible = false; }
+      fl.t += dt; const p = fl.t / 6;
+      if (p >= 1) {
+        fl.busy = false; fl.lift.position.y = -(FLOOR2 - 0.3); fl.pkg.visible = false;
+        if (fl.gnd) {                              // delivered: stage the box on the ground pad; a semi hauls the pad clear after 6
+          if (fl.delivered >= fl.gnd.length) { fl.delivered = 0; fl.gnd.forEach(b => b.visible = false); }
+          fl.gnd[fl.delivered].visible = true; fl.delivered++;
+        }
+      }
       else if (p < 0.4) { fl.lift.position.y = -(1 - p / 0.4) * (FLOOR2 - 0.3); fl.pkg.visible = false; }        // up to the deck, forks empty
       else if (p < 0.5) { fl.lift.position.y = 0; fl.pkg.visible = true; }                                        // pick up the furniture
       else { fl.lift.position.y = -((p - 0.5) / 0.5) * (FLOOR2 - 0.3); fl.pkg.visible = p < 0.97; }               // carry it down
