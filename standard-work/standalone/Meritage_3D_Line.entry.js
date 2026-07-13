@@ -1033,7 +1033,7 @@ function aGate(g, w) {                                       // 6' slide gate (w
 }
 // ---- area-kind registry: label + builder (drawn at the group origin) ----
 const AREA_KINDS = {   // pads sized to fit the ~12.5' strips between the decks and the 35x21 yd floor edge
-  forklift:    g => { aPad(g, 3.6, 3.6, AC.fork); aLabel(g, 'Forklift Access', 3.3); g.userData.forkRec = buildLiftRig(g, 2.0); },   // a real forklift lives here: truck below, mast, forks that carry furniture down
+  forklift:    g => { aPad(g, 3.6, 3.6, AC.fork); const card = makeMiniLabel('Forklift Access', '#8a6d1f'); card.position.set(0, 2.3, 0); g.add(card); g.userData.forkRec = buildLiftRig(g, 2.0); },   // floating name card (like the stations) instead of paint on the pad; real forklift below
   pallets:     g => { aPad(g, 3.4, 3.4, AC.pallet); aLabel(g, 'Pallet Staging', 3.1); aPallet(g, 0, -0.9); aPallet(g, 0, 0.9); },
   solaPallets: g => { aPad(g, 3.4, 3.4, AC.pallet); aLabel(g, 'Sola Pallets', 3.1); aPallet(g, -0.85, 0.6); aPallet(g, 0.85, 0.6); },
   upholstery:  g => { aPad(g, 2.8, 3.4, AC.uph); aLabel(g, 'Upholstery Rack', 2.6); aRack(g, 0, -0.7, 6 * FT, 2 * FT, 0, 1.7); },   // 6' x 2' garment-height rack
