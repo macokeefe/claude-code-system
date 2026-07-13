@@ -963,28 +963,24 @@ SECTION_LINES.forEach(pl => {
 // and CAD line 4 (Sola/Canyon), jogs included — so the zones on screen match
 // the blue lines on the drawing, and a table's zone is its line.
 (function lineZones() {
-  const L2 = SECTION_LINES[1], L4 = SECTION_LINES[3];
-  const jogZ = pl => { for (let i = 0; i < pl.length - 1; i++) if (pl[i][0] !== pl[i + 1][0]) return pl[i][1]; return 0; };
-  const z2 = jogZ(L2), z4 = jogZ(L4);                         // where each CAD line steps sideways
+  const L1 = SECTION_LINES[0], L2 = SECTION_LINES[1], L3 = SECTION_LINES[2], L4 = SECTION_LINES[3];
   const rect = (x0, x1, za, zb, col, op) => {
-    const p = new THREE.Mesh(new THREE.PlaneGeometry(Math.max(0.01, x1 - x0), Math.max(0.01, zb - za)),
+    if (x1 - x0 < 0.02 || zb - za < 0.02) return;
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, zb - za),
       new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: op, depthWrite: false }));
     p.rotation.x = -Math.PI / 2; p.position.set((x0 + x1) / 2, 0.021, (za + zb) / 2); sectionGroup.add(p);
   };
-  const NAVY = 0x1d3a66, GREEN = 0x236043, BROWN = 0x9a5b1f;
-  // Meritage — west of CAD line 2 (jog at z2)
-  rect(FLOOR_X0, plX(L2, z2 - 1), FLOOR_Z0, z2, NAVY, 0.05);
-  rect(FLOOR_X0, plX(L2, z2 + 1), z2, FLOOR_Z1, NAVY, 0.05);
-  // Sola — between CAD lines 2 and 4 (both jogs honoured)
-  rect(plX(L2, z4 - 1), plX(L4, z4 - 1), FLOOR_Z0, z4, GREEN, 0.05);
-  rect(plX(L2, z4 + 1), plX(L4, z4 + 1), z4, z2, GREEN, 0.05);
-  rect(plX(L2, z2 + 1), plX(L4, z2 + 1), z2, FLOOR_Z1, GREEN, 0.05);
-  // Canyon Crew — east of CAD line 4 (jog at z4)
-  rect(plX(L4, z4 - 1), FLOOR_X1, FLOOR_Z0, z4, BROWN, 0.07);
-  rect(plX(L4, z4 + 1), FLOOR_X1, z4, FLOOR_Z1, BROWN, 0.07);
-  // low glowing walls laid EXACTLY along the two drawn boundary polylines
+  const jzs = pl => { const out = []; for (let i = 0; i < pl.length - 1; i++) if (pl[i][0] !== pl[i + 1][0]) out.push(pl[i][1]); return out; };
+  const zoneBetween = (A, B, col, op) => {   // shade the region between two jogging CAD polylines
+    const zs = [FLOOR_Z0 + 0.05, FLOOR_Z1 - 0.05, ...jzs(A), ...jzs(B)].sort((a, b) => a - b);
+    for (let i = 0; i < zs.length - 1; i++) { const za = zs[i], zb = zs[i + 1], zm = (za + zb) / 2; rect(plX(A, zm), plX(B, zm), za, zb, col, op); }
+  };
+  zoneBetween(L1, L2, 0x1d3a66, 0.05);      // MERITAGE — between CAD lines 1 and 2
+  zoneBetween(L2, L3, 0x236043, 0.05);      // SOLA — between CAD lines 2 and 3
+  zoneBetween(L3, L4, 0x9a5b1f, 0.07);      // CANYON CREW — between CAD lines 3 and 4
+  // (west of line 1 = storage, east of line 4 = staging — deliberately untinted)
   const wallMat = new THREE.MeshBasicMaterial({ color: 0x00b7d4, transparent: true, opacity: 0.28, depthWrite: false });
-  [L2, L4].forEach(pl => {
+  [L2, L3, L4].forEach(pl => {              // low glowing walls on the three LINE boundaries
     for (let i = 0; i < pl.length - 1; i++) {
       const a = pl[i], b = pl[i + 1], dx = Math.abs(b[0] - a[0]), dz = Math.abs(b[1] - a[1]);
       const w = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.06, dx), 0.5, Math.max(0.06, dz)), wallMat);
@@ -1932,7 +1928,7 @@ function plX(pl, z) {
   return z < vs[0][1] ? vs[0][0] : vs[vs.length - 1][0];   // beyond the drawn extent → nearest end continues straight
 }
 const SOLA_BX = z => plX(SECTION_LINES[1], z);               // CAD section line 2 (x≈4.91 below z=0.99, 5.18 above)
-const CANYON_BX = z => plX(SECTION_LINES[3], z);             // CAD section line 4 (x≈17.87 below z=−2.59, 17.60 above)
+const CANYON_BX = z => plX(SECTION_LINES[2], z);             // CAD section line 3 (jagged) — Canyon Crew's space is line 3 → line 4; the strip east of line 4 is staging but strays parked there still FILE as Canyon
 const sideOf = (x, z = 0) => (x < SOLA_BX(z) ? 'meritage' : 'other');
 const CANYON_X = 17.6;                                       // legacy constant (kept for default placements)
 const sectionOf = (x, z = 0) => (x < SOLA_BX(z) ? 'meritage' : x < CANYON_BX(z) ? 'sola' : 'canyon');
@@ -2103,7 +2099,7 @@ function wireRows(host) {
 function addStationInSection(sec) {
   const name = (prompt('New station name:', 'New station') || '').trim(); if (!name) return;
   const n = extraStations.filter(id => sectionOf(nodes[id].x, nodes[id].z) === sec).length;
-  const x = sec === 'meritage' ? 1.5 : sec === 'sola' ? 12 : 20.4;
+  const x = sec === 'meritage' ? 1.5 : sec === 'sola' ? 8.5 : 15.0;   // drop in the middle of each line's CAD space
   const z = Math.min(8.5, -7 + n * 2.5);
   addStation(name, x, z);
   if (!editing) setEditing(true);                             // straight into edit mode so it can be dragged into place
