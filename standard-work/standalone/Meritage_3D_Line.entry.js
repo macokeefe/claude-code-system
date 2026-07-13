@@ -678,29 +678,129 @@ function buildLiftRig(g, D){
     rod.position.y = groundY + H1*0.85 + (ext + 0.2)/2 - 0.1;
   };
   sync();
+
+  /* ---- deck-side access point, like the real thing: yellow/black striped
+     edge, an up-and-over pivot gate (open), side guardrails with kick plates,
+     and a painted pallet square where outbound boxes queue for pickup ---- */
+  (function deckAccess(){
+    // striped hazard band along the pick edge
+    const sc = document.createElement('canvas'); sc.width = 256; sc.height = 32; const sg = sc.getContext('2d');
+    sg.fillStyle = '#e8c53a'; sg.fillRect(0, 0, 256, 32); sg.fillStyle = '#1a1d21';
+    for (let x = -32; x < 256; x += 32) { sg.beginPath(); sg.moveTo(x,32); sg.lineTo(x+16,0); sg.lineTo(x+32,0); sg.lineTo(x+16,32); sg.fill(); }
+    const stex = new THREE.CanvasTexture(sc); stex.wrapS = THREE.RepeatWrapping; stex.repeat.set(2,1);
+    const band = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.035, 0.5), new THREE.MeshStandardMaterial({ map: stex, roughness: 0.8 }));
+    band.position.set(0, 0.035, zM + 0.5); g.add(band);
+    // up-and-over pivot gate, parked OPEN (arms up) at the edge
+    for (const px of [-1.15, 1.15]) {
+      const post = bx(0.08, 1.15, 0.08, FKM.body); post.position.set(px, 0.58, zM + 0.75); g.add(post);
+      const arm = bx(0.06, 0.06, 1.5, FKM.body); arm.position.set(px, 1.55, zM + 1.2); arm.rotation.x = -1.05; g.add(arm);
+    }
+    const gateBar = bx(2.3, 0.07, 0.07, FKM.body); gateBar.position.set(0, 2.15, zM + 1.85); g.add(gateBar);
+    const gateMid = bx(2.3, 0.05, 0.05, FKM.body); gateMid.position.set(0, 1.85, zM + 1.55); g.add(gateMid);
+    // side guardrails with mid-rail + yellow kick plates (edge side open for the gate)
+    for (const px of [-1.45, 1.45]) {
+      for (const rz of [zM + 1.0, zM + 2.2, zM + 3.3]) { const p = bx(0.06, 1.1, 0.06, MAT.steel); p.position.set(px, 0.55, rz); g.add(p); }
+      const top = bx(0.05, 0.05, 2.3, MAT.steel); top.position.set(px, 1.08, zM + 2.15); g.add(top);
+      const mid = bx(0.04, 0.04, 2.3, MAT.steel); mid.position.set(px, 0.62, zM + 2.15); g.add(mid);
+      const kick = bx(0.04, 0.16, 2.3, FKM.body); kick.position.set(px, 0.1, zM + 2.15); g.add(kick);
+    }
+    // painted pallet square (queue spot)
+    const paintM = new THREE.MeshBasicMaterial({ color: 0xe8c53a });
+    const sq = [[0, zM + 1.55, 1.9, 0.06], [0, zM + 3.15, 1.9, 0.06], [-0.95, zM + 2.35, 0.06, 1.66], [0.95, zM + 2.35, 0.06, 1.66]];
+    sq.forEach(([x, z, w, d]) => { const l = new THREE.Mesh(new THREE.BoxGeometry(w, 0.012, d), paintM); l.position.set(x, 0.03, z); g.add(l); });
+  })();
+
+  // queue slots on the pallet square (2 layers of 4) — arriving boxes park here
+  const waitSlots = [];
+  for (let layer = 0; layer < 2; layer++) for (const [sx, sz] of [[-0.5, zM + 1.95], [0.5, zM + 1.95], [-0.5, zM + 2.8], [0.5, zM + 2.8]])
+    waitSlots.push([sx, layer * 0.48, sz]);
+
   // delivered boxes stage on the GROUND beside the truck (a semi hauls them off
   // after 6 — the pad clears so the scene never silts up)
   const gnd = [];
   for (let i = 0; i < 6; i++) {
     const bb = makeShipBox(); bb.scale.set(0.72, 0.72, 0.72); bb.visible = false;
-    bb.position.set(-2.1 + (i % 3) * 1.35, groundY, zM + 2.9 + Math.floor(i / 3) * 1.1);
+    bb.position.set(-2.6 + (i % 3) * 1.35, groundY, zM + 2.9 + Math.floor(i / 3) * 1.1);
     g.add(bb); gnd.push(bb);
   }
-  const rec = { lift, busy:false, t:0, pkg, sync, gnd, delivered: 0 }; forkLifts.push(rec);
+  const rec = { lift, busy:false, t:0, pkg, sync, gnd, delivered: 0, g, waitSlots, waitMeshes: [] }; forkLifts.push(rec);
   return rec;
+}
+// park a rig's waiting boxes onto its pallet-square slots (world space, honouring the rig's rotation)
+function parkWaiters(rec) {
+  const rot = rec.g.rotation.y || 0, cs = Math.cos(rot), sn = Math.sin(rot);
+  rec.waitMeshes.forEach((m, i) => {
+    const s = rec.waitSlots[Math.min(i, rec.waitSlots.length - 1)];
+    m.position.set(rec.g.position.x + s[0] * cs + s[2] * sn, rec.g.position.y + s[1], rec.g.position.z + s[2] * cs - s[0] * sn);
+  });
+}
+/* ---- outbound boxes TRAVEL the green furniture lane: ship point → waypoints →
+   the access point, where they queue on the pallet square until a forklift
+   takes them down. Wall-clock speed, so the slide reads naturally at any sim
+   speed. ---- */
+const OUT_SPEED = 2.0;                                       // m/s along the lane
+const outBoxes = [];                                         // traveler pool
+let spawnedM = 0, spawnedSola = 0, spawnedCanyon = 0;        // ship events already spawned
+let gShipSola = 0, gShipCanyon = 0;                          // per-line ship counts (set by solaUpdate)
+function laneRigOf(i) {                                      // which forklift serves line i's lane
+  const s = (typeof lineEndNode === 'function') ? lineEndNode(i) : null; if (!s) return null;
+  const wps = prodWps[i], last = wps.length ? wps[wps.length - 1] : s;
+  const acc = nearestAccess(last.x, last.z); if (!acc) return null;
+  return acc.rec || (acc.g && acc.g.userData && acc.g.userData.forkRec) || null;
+}
+function enqueueAtRig(rec, mesh) { rec.waitMeshes.push(mesh); parkWaiters(rec); }
+function spawnOutBox(lineIdx) {
+  const pts = (typeof prodPts === 'function') ? prodPts(lineIdx) : null;
+  const rig = laneRigOf(lineIdx);
+  if (!pts || pts.length < 2 || !rig) return;                // no lane / no forklift → nothing to animate
+  let o = outBoxes.find(b => !b.active && !b.queued);
+  if (!o) {
+    if (outBoxes.length >= 30) {                             // pool cap: arrive instantly rather than stall
+      const m = makeShipBox(); m.scale.set(0.8, 0.8, 0.8); level2.add(m); m.visible = true;
+      enqueueAtRig(rig, m); outBoxes.push({ mesh: m, active: false, queued: true, rig }); return;
+    }
+    o = { mesh: makeShipBox(), active: false, queued: false, rig: null };
+    o.mesh.scale.set(0.8, 0.8, 0.8); level2.add(o.mesh); outBoxes.push(o);
+  }
+  o.active = true; o.queued = false; o.rig = rig; o.pts = pts; o.seg = 0; o.d = 0;
+  o.mesh.visible = true; o.mesh.position.set(pts[0][0], 0.05, pts[0][1]);
+}
+function advanceOutBoxes(dt) {
+  for (const o of outBoxes) {
+    if (!o.active) continue;
+    let move = OUT_SPEED * dt;
+    while (move > 0 && o.seg < o.pts.length - 1) {
+      const a = o.pts[o.seg], b = o.pts[o.seg + 1];
+      const segLen = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1e-6;
+      const left = segLen - o.d;
+      if (move < left) { o.d += move; move = 0; }
+      else { move -= left; o.seg++; o.d = 0; }
+    }
+    if (o.seg >= o.pts.length - 1) {                         // arrived at the access point → join the queue
+      o.active = false; o.queued = true;
+      enqueueAtRig(o.rig, o.mesh);
+    } else {
+      const a = o.pts[o.seg], b = o.pts[o.seg + 1];
+      const segLen = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1e-6, f = o.d / segLen;
+      o.mesh.position.set(a[0] + (b[0] - a[0]) * f, 0.05, a[1] + (b[1] - a[1]) * f);
+    }
+  }
+}
+function releaseOutMesh(mesh) {                              // a forklift took this box — free it back to the pool
+  const o = outBoxes.find(b => b.mesh === mesh);
+  if (o) { o.active = false; o.queued = false; o.rig = null; }
+  mesh.visible = false;
+}
+function resetOutbound() {
+  outBoxes.forEach(o => { o.active = false; o.queued = false; o.rig = null; o.mesh.visible = false; });
+  forkLifts.forEach(fl => { if (fl.waitMeshes) fl.waitMeshes.length = 0; });
+  spawnedM = spawnedSola = spawnedCanyon = 0;
 }
 function makeForkGap(){
   const g = new THREE.Group();
   const W = 2.6, D = 2.0;                                   // ~8.5' x 6.5' opening (fits a sofa)
   const hole = new THREE.Mesh(new THREE.BoxGeometry(W, 0.5, D), new THREE.MeshStandardMaterial({ color:0x10141a, roughness:0.96 }));
-  hole.position.y = -0.24; g.add(hole);                     // dark recess = the opening
-  for (const [w,d,x,z] of [[W+0.3,0.22,0,-D/2-0.1],[W+0.3,0.22,0,D/2+0.1],[0.22,D+0.5,-W/2-0.1,0],[0.22,D+0.5,W/2+0.1,0]]) {
-    const b = bx(w,0.04,d,MAT.matEdge); b.position.set(x,0.045,z); g.add(b);          // yellow hazard border
-  }
-  for (const [x0,z0,x1,z1] of [[-W/2,-D/2,W/2,-D/2],[-W/2,-D/2,-W/2,D/2],[W/2,-D/2,W/2,D/2]]) {
-    const dx=x1-x0,dz=z1-z0,len=Math.hypot(dx,dz),ang=Math.atan2(dz,dx);
-    const r=bx(len,0.05,0.05,MAT.steel); r.position.set((x0+x1)/2,1.0,(z0+z1)/2); r.rotation.y=-ang; g.add(r);   // 3-sided guard rail
-  }
+  hole.position.y = -0.24; g.add(hole);                     // dark recess = the opening (rails/gate/stripes come with the rig)
   const rec = buildLiftRig(g, D);
   return { g, rec };
 }
@@ -727,13 +827,12 @@ function addRack(x,z,rot){ const r=makeRackUnit(); r.g.position.set(x,0,z); if(r
 function clearRacks(){ racks.forEach(r=>level2.remove(r.g)); racks.length=0; }
 [[DECK.x0+4, DECK.z0+1],[DECK.x0+8.5, DECK.z0+1]].forEach(p=>addRack(p[0],p[1]));   // seed 2 racks along the back
 let onRacks=0, lastShipped=0;                                   // packages currently stored / last ship count seen
-// ---- outbound flow-down: finished boxes on the mezzanine are a LIVE BUFFER,
-// not a pile. Forklifts continuously take the oldest box down (one per ~6s
-// trip, every rig in parallel); the mezzanine stack only grows when the lines
-// outrun the material handling — its height IS the outbound WIP. ----
-let gShippedM = 0, gShippedS = 0;                               // shipped so far (Meritage / added lines)
-let takenM = 0, takenS = 0;                                     // boxes already taken down by forklifts
-function triggerTakedown(){ const fl=forkLifts.find(f=>!f.busy); if(fl){ fl.busy=true; fl.t=0; fl.pkg.visible=true; } }
+// ---- outbound flow-down: every finished box travels the green furniture lane
+// to a forklift access point, queues on its pallet square, and a forklift takes
+// it down (~6s trip, all rigs in parallel). The queue length IS the outbound
+// WIP — it only grows when the lines outrun the material handling. ----
+let gShippedM = 0;                                              // Meritage units shipped so far (spawner reads this)
+// (forklift trips are driven by the outbound dispatcher in the render loop)
 function fillRacks(){ let n=onRacks; for(const r of racks) for(const s of r.slots){ s.visible = n>0; if(n>0) n--; } }
 
 // the single materials cart (holds all parts) — draggable; feeders pull from this one spot
@@ -1696,8 +1795,8 @@ function solaUpdate() {
       }
     }
   });
-  solaShipBoxes.forEach((b, i) => b.visible = Ts > 0 && i < Math.max(0, shipped - takenS));   // outbound buffer: forklift trips drain this stack
-  gShippedS = shipped;                                                  // dispatcher (render loop) drains this into forklift trips
+  solaShipBoxes.forEach(b => { if (b.visible) b.visible = false; });    // finished boxes travel the lane now instead of piling here
+  gShipSola = shipSec.sola; gShipCanyon = shipSec.canyon;               // the spawner turns these into traveling boxes
   const el = document.getElementById('solaShip'); if (el) el.textContent = shipSec.sola;
   const elc = document.getElementById('canyonShip'); if (elc) elc.textContent = shipSec.canyon;
 }
@@ -3174,7 +3273,8 @@ function update(){
   // packing led + crew
   const pak = nodes.pak;
   setLed(pak.led, (cur>=0 && phase==='pack') ? 'active' : (shipped>=N?'done':'idle'), cur>=0 && phase==='pack');
-  shipBoxes.forEach((b, i) => b.visible = T > 0 && i < Math.max(0, shipped - takenM));   // outbound buffer: only boxes NOT yet taken down show — the stack breathes with the forklifts
+  // finished boxes no longer pile in the box zone — each one travels the green
+  // furniture lane to the access point and queues there (see spawnOutBox)
   ui.ship.textContent = shipped;
   // finished sofas populate the racks; the forklift takes one down every 3rd
   gShippedM = shipped;                                                 // dispatcher (render loop) drains this into forklift trips
@@ -3234,20 +3334,26 @@ function loop(now){
   updateHelp();    // help-movement arrows follow the stations
   updateFlow();    // part-flow arrows follow the stations
   solaUpdate();    // animate the Sola line on its own clock
-  // clock reset / seek-back: the buffers can't have taken down more than shipped
-  if (takenM > gShippedM) takenM = gShippedM;
-  if (takenS > gShippedS) takenS = gShippedS;
-  if (T <= 0 && Ts <= 0) { takenM = takenS = 0; for (const fl of forkLifts) { fl.delivered = 0; if (fl.gnd) fl.gnd.forEach(b => b.visible = false); } }
-  // dispatcher: whenever boxes wait on the mezzanine, send the next idle
-  // forklift for the oldest one — every rig works in parallel, each trip at its
-  // real ~6s pace, so the drain looks like real material handling
-  {
-    let waitM = gShippedM - takenM, waitS = gShippedS - takenS;
-    for (const fl of forkLifts) {
-      if (fl.busy || (waitM <= 0 && waitS <= 0)) continue;
-      if (waitM >= waitS) { takenM++; waitM--; } else { takenS++; waitS--; }
-      fl.busy = true; fl.t = 0;
-    }
+  // clock reset / seek-back: clear travelers, queues and ground pads
+  if (spawnedM > gShippedM) spawnedM = gShippedM;
+  if (spawnedSola > gShipSola) spawnedSola = gShipSola;
+  if (spawnedCanyon > gShipCanyon) spawnedCanyon = gShipCanyon;
+  if (T <= 0 && Ts <= 0) {
+    resetOutbound();
+    for (const fl of forkLifts) { fl.busy = false; fl.t = 0; fl.pkg.visible = false; fl.delivered = 0; if (fl.gnd) fl.gnd.forEach(b => b.visible = false); }
+  }
+  // spawn a traveling box for every newly finished unit — it slides down that
+  // line's green lane to the access point
+  while (spawnedM < gShippedM) { spawnedM++; spawnOutBox(0); }
+  while (spawnedSola < gShipSola) { spawnedSola++; spawnOutBox(1); }
+  while (spawnedCanyon < gShipCanyon) { spawnedCanyon++; spawnOutBox(2); }
+  advanceOutBoxes(dt);
+  // dispatcher: a rig with boxes queued on its pallet square and free forks
+  // takes the oldest one down — every rig in parallel, each at its real pace
+  for (const fl of forkLifts) {
+    if (fl.busy || !fl.waitMeshes || !fl.waitMeshes.length) continue;
+    releaseOutMesh(fl.waitMeshes.shift()); parkWaiters(fl);
+    fl.busy = true; fl.t = 0;
   }
   for (const fl of forkLifts) {                    // trip: rise empty, take the box at the deck, carry it down
     if (fl.busy) {
