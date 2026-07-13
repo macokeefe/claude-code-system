@@ -2803,6 +2803,20 @@ document.getElementById('accesspt').onclick = () => {
   addAccess(deckCx, DECK.z1);
   saveLayout();
 };
+// 🚜 Add forklift: drops a Forklift Access area (full animated rig) on the floor
+(() => {
+  const ap = document.getElementById('accesspt'); if (!ap) return;
+  const b = document.createElement('button');
+  b.id = 'addForklift'; b.className = ap.className || '';
+  b.textContent = '🚜 Add forklift';
+  ap.parentNode.insertBefore(b, ap.nextSibling);
+  b.onclick = () => {
+    if (!editing) setEditing(true);
+    const n = areas.filter(a => a.kind === 'forklift').length;
+    addArea('forklift', FLOOR_X + ((n % 2) ? 2.2 : -2.2) * Math.ceil(n / 2 + 0.5), FLOOR_Z1 - 2.2);   // stagger new pads along the south edge
+    refreshProdFlow(); saveLayout();
+  };
+})();
 // add a finished-goods rack along the back
 document.getElementById('rackbtn').onclick = () => {
   if (!editing) setEditing(true);
@@ -3395,6 +3409,7 @@ function loop(now){
     flowarrow: 'Draw a flow line between stations: click FROM, then TO — sets the build order',
     rotbtn: 'Rotate the selected table 90°',
     accesspt: 'Add a forklift access point — the green furniture lanes run to the nearest one',
+    addForklift: 'Add a Forklift Access pad with its own animated forklift — drag it into place, right-click to remove. Lanes route to the nearest forklift.',
     rackbtn: 'Add a finished-goods rack',
     labels: 'Cycle the station labels: names / times / hidden',
     timesbtn: 'Open the station-times panel — edit steps, minutes and people per station',
