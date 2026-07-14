@@ -2221,8 +2221,11 @@ document.getElementById('trips').onchange = e => { tripsPerUnit = Math.max(0, pa
 let dayMin = 420;   // AVAILABLE minutes per worker per day (drives takt + capacity everywhere)
 // each line can run different furniture: name + labor factor vs the base times
 let lineProducts = {
-  _v: 2,   // version stamp — bumping it makes these defaults replace older saved product lists
-  meritage: { active: 0, list: [{ name: 'Meritage 3-Seater', f: 1 }, { name: 'Meritage 2-Seater', f: 0.89 }] },   // 2-Seater = MEASURED ratio: 20:30 vs the 3-Seater's 23:00 (per the engineer) → 0.89
+  _v: 3,   // version stamp — bumping it makes these defaults replace older saved product lists
+  // 2-Seater = MEASURED ratio: 20:30 vs the 3-Seater's 23:00 (per the engineer) → 0.89.
+  // Chair + Swivel Chair = PLACEHOLDERS pending times: same build, but the swivel
+  // skips the early leg assembly + end leg attach and mounts a swivel instead.
+  meritage: { active: 0, list: [{ name: 'Meritage 3-Seater', f: 1 }, { name: 'Meritage 2-Seater', f: 0.89 }, { name: 'Meritage Chair', f: 0.5 }, { name: 'Meritage Swivel Chair', f: 0.47 }] },
   sola:     { active: 0, list: [{ name: 'Sola Lounge — no arms', f: 1 }, { name: 'Sola Lounge — 1 arm', f: 1.01 }, { name: 'Sola — middle leg', f: 1.05 }] },   // 1-arm = MEASURED: SWI total 170.13 min (header 206.13 double-counts the duplicated packing rows) ÷ 168.7 base
   canyon:   { active: 0, list: [{ name: 'Canyon Chair', f: 1 }, { name: 'Canyon Ottoman', f: 0.5 }] },
 };
