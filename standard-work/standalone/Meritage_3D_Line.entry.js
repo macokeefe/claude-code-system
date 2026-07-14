@@ -383,7 +383,9 @@ function walkOf(id) {
 function prodF(line) {
   if (typeof lineProducts === 'undefined' || !lineProducts) return 1;
   const lp = lineProducts[line]; if (!lp) return 1;
-  const p = lp.list[lp.active]; return p ? Math.max(0.05, +p.f || 1) : 1;
+  const p = lp.list[lp.active]; if (!p) return 1;
+  if (p.stations) return 1;                                  // steps-products carry ABSOLUTE times
+  return Math.max(0.05, +p.f || 1);
 }
 function dayMinSafe() { return (typeof dayMin === 'number' && dayMin > 0) ? dayMin : 420; }   // available minutes per worker per day
 function eff(id) { const s = getAny(id); if (!s) return 0; return ((s.t || 0) / Math.max(1, s.ppl || 1)) * prodF(stLineOf(id)) + walkOf(id); }   // step times are TOTAL; cycle = total / people, scaled by the line's active product
@@ -2201,7 +2203,8 @@ function renderTimes() {
   let html = '';
   SECTIONS.forEach(sec => {
     const tot = sec.list.reduce((a, s) => a + (s.t || 0), 0);
-    html += `<div class="secHdr" style="background:${sec.color}"><span>${sec.label}</span><span class="secTot">${sec.list.length} station${sec.list.length === 1 ? '' : 's'} · ${tot.toFixed(1).replace(/\.0$/, '')} min</span></div>`;
+    const apn = (typeof activeProduct === 'function' && activeProduct(sec.key)) ? activeProduct(sec.key).name : '';
+    html += `<div class="secHdr" style="background:${sec.color}"><span>${sec.label}</span><span class="secTot">${apn ? apn + ' · ' : ''}${sec.list.length} station${sec.list.length === 1 ? '' : 's'} · ${tot.toFixed(1).replace(/\.0$/, '')} min</span></div>`;
     html += sec.list.length ? rowsHtml(sec.list, sec.color)
       : `<div class="secempty">No ${sec.label.toLowerCase()} stations yet — add one below, or drag a table into this part of the floor.</div>`;
     html += `<button class="addInSec" data-sec="${sec.key}">＋ Add station to ${sec.label}</button>`;
@@ -2221,14 +2224,60 @@ document.getElementById('trips').onchange = e => { tripsPerUnit = Math.max(0, pa
 let dayMin = 420;   // AVAILABLE minutes per worker per day (drives takt + capacity everywhere)
 // each line can run different furniture: name + labor factor vs the base times
 let lineProducts = {
-  _v: 3,   // version stamp — bumping it makes these defaults replace older saved product lists
-  // 2-Seater = MEASURED ratio: 20:30 vs the 3-Seater's 23:00 (per the engineer) → 0.89.
-  // Chair + Swivel Chair = PLACEHOLDERS pending times: same build, but the swivel
-  // skips the early leg assembly + end leg attach and mounts a swivel instead.
-  meritage: { active: 0, list: [{ name: 'Meritage 3-Seater', f: 1 }, { name: 'Meritage 2-Seater', f: 0.89 }, { name: 'Meritage Chair', f: 0.5 }, { name: 'Meritage Swivel Chair', f: 0.47 }] },
+  _v: 4,   // version stamp — bumping it makes these defaults replace older saved product lists
+  // A product may carry its own per-station STEPS ("stations": {stationId: [[name, min], ...]}).
+  // Picking it swaps that line's Edit-times steps (the base steps are stashed and restored
+  // untouched). Products without steps fall back to a labor factor "f" on the base times.
+  meritage: { active: 0, list: [
+    { name: 'Meritage 3-Seater', f: 1 },                                   // BASE — the live Edit-times steps
+    { name: 'Meritage 2-Seater', f: 0.89 },                                // MEASURED ratio: 20:30 vs 23:00
+    { name: 'Meritage Chair', stations: {                                  // MEASURED: swivel SWI minus swivel work + leg assembly 8 + leg install 13 (5+8) = 198.46 min
+      con: [['Connector prep — 16 connectors', 11]],
+      tre: [['Trellis support assembly', 10]],
+      sea: [['Seat frame + connectors', 31]],
+      bak: [['Backrest and arms frame', 90]],
+      arm: [['Leg assembly', 8]],
+      fa:  [['Join arms + trellis support', 24], ['Leg installation (5+8)', 13]],
+      pak: [['Box bottom + strap', 4.66], ['Cushions, wrap, top box', 6.8]],
+    } },
+    { name: 'Meritage Swivel Chair', stations: {                           // MEASURED: swivel SWI 2026-07 — 215.46 min total (sheet header 204 excludes packing)
+      con: [['Connector prep — 16 connectors', 11]],
+      tre: [['Trellis support assembly', 10]],
+      sea: [['Seat frame + connectors', 31]],
+      bak: [['Backrest and arms frame', 90]],
+      arm: [['Wheel base: bearings + attach', 20], ['Loctite + floor pegs', 2], ['Swivel plate extrusion', 2], ['Drill + chamfered disc + plate', 3], ['Washers + spin check', 2.5]],
+      fa:  [['Join arms + trellis support', 24], ['Attach swivel assembly', 8.5]],
+      pak: [['Box bottom + strap', 4.66], ['Cushions, wrap, top box', 6.8]],
+    } },
+  ] },
   sola:     { active: 0, list: [{ name: 'Sola Lounge — no arms', f: 1 }, { name: 'Sola Lounge — 1 arm', f: 1.01 }, { name: 'Sola — middle leg', f: 1.05 }] },   // 1-arm = MEASURED: SWI total 170.13 min (header 206.13 double-counts the duplicated packing rows) ÷ 168.7 base
   canyon:   { active: 0, list: [{ name: 'Canyon Chair', f: 1 }, { name: 'Canyon Ottoman', f: 0.5 }] },
 };
+let baseSteps = {};   // lineKey -> {stationId: steps snapshot} while a steps-product is active (persisted as __baseSteps)
+function lineStationIds(line) { if (typeof ST === 'undefined' || typeof extraStations === 'undefined') return []; return line === 'meritage' ? ST.map(s2 => s2.id) : extraStations.filter(id => nodes[id] && sectionOf(nodes[id].x, nodes[id].z) === line); }
+function activeProduct(line) { if (typeof lineProducts === 'undefined' || !lineProducts) return null; const lp = lineProducts[line]; return lp ? lp.list[lp.active] : null; }
+// swap a line's live steps to the active product's step set (or restore the base)
+function activateProductSteps(line) {
+  const p = activeProduct(line), ids = lineStationIds(line);
+  if (p && p.stations) {
+    if (!baseSteps[line]) { baseSteps[line] = {}; ids.forEach(id => { const s2 = getAny(id); if (s2) baseSteps[line][id] = JSON.parse(JSON.stringify(s2.steps || [])); }); }
+    ids.forEach(id => { const s2 = getAny(id); if (!s2) return; s2.steps = (p.stations[id] || []).map(a => ({ name: a[0], t: +a[1] || 0 })); });
+  } else if (baseSteps[line]) {
+    ids.forEach(id => { const s2 = getAny(id); if (s2 && baseSteps[line][id]) s2.steps = baseSteps[line][id].map(x => ({ name: x.name, t: x.t })); });
+    delete baseSteps[line];
+  }
+  ids.forEach(id => { const s2 = getAny(id); if (!s2) return; s2.t = (s2.steps || []).reduce((a, st) => a + (+st.t || 0), 0); if (typeof recalcAny === 'function') recalcAny(id); });
+  renderTimes();
+}
+// while a steps-product is active, Edit-times edits belong to THAT product — sync them back on save
+function syncProductSteps() {
+  if (typeof lineProducts === 'undefined' || !lineProducts || typeof ST === 'undefined') return;
+  ['meritage', 'sola', 'canyon'].forEach(line => {
+    const p = activeProduct(line);
+    if (!p || !p.stations) return;
+    lineStationIds(line).forEach(id => { const s2 = getAny(id); if (s2) p.stations[id] = (s2.steps || []).map(st => [st.name, +st.t || 0]); });
+  });
+}
 function reflowAll() {   // one call after any product / available-time change
   schedule(); if (typeof buildSolaSched === 'function') buildSolaSched();
   if (typeof renderSolaData === 'function') renderSolaData();
@@ -2499,7 +2548,7 @@ function setStationRot(id, rot) {
 }
 // Build the working-layout object from the LIVE scene (not from storage).
 function buildWorkingLayout() {
-  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); o.__wps3 = cart3Waypoints.map(w => [w.x, w.z]); o.__rwps3 = returnWps3.map(w => [w.x, w.z]); o.__ends = [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null); o.__fwps = prodWps.map(l => l.map(w => [w.x, w.z])); o.__fstart = prodStart.slice(); o.__dayMin = dayMin; o.__products = JSON.parse(JSON.stringify(lineProducts)); o.__boxZone = [boxZone.x, boxZone.z, boxZone.w, boxZone.d]; o.__names = Object.fromEntries(ST.map(s2 => [s2.id, s2.title])); return o;
+  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); o.__wps3 = cart3Waypoints.map(w => [w.x, w.z]); o.__rwps3 = returnWps3.map(w => [w.x, w.z]); o.__ends = [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null); o.__fwps = prodWps.map(l => l.map(w => [w.x, w.z])); o.__fstart = prodStart.slice(); o.__dayMin = dayMin; o.__products = JSON.parse(JSON.stringify(lineProducts)); o.__baseSteps = JSON.parse(JSON.stringify(baseSteps)); o.__boxZone = [boxZone.x, boxZone.z, boxZone.w, boxZone.d]; o.__names = Object.fromEntries(ST.map(s2 => [s2.id, s2.title])); return o;
 }
 // In-memory mirror so the layout survives even when localStorage is blocked
 // (Safari / file:// often refuses to persist) — bake reads THIS, never storage.
@@ -2509,6 +2558,7 @@ let __workingLayout = {};
 var undoStack = [], undoApplying = false;
 function refreshUndoBtn() { const b = document.getElementById('undoBtn'); if (b) b.style.opacity = undoStack.length ? '1' : '0.45'; }
 function saveLayout() {
+  if (typeof syncProductSteps === 'function') syncProductSteps();   // Edit-times edits belong to the active product
   const next = buildWorkingLayout();
   try {
     if (!undoApplying && Object.keys(__workingLayout).length && JSON.stringify(next) !== JSON.stringify(__workingLayout)) {
@@ -2542,7 +2592,7 @@ window.addEventListener('keydown', e => {
   }
 });
 function applyWorkingLayout(o) {   // apply a working-layout object to the LIVE scene (shared by load + import)
-  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } if (Array.isArray(o.__ends)) { const e = o.__ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; } if (Array.isArray(o.__fwps)) prodWps = [0, 1, 2].map(i => (o.__fwps[i] || []).map(a => ({ x: a[0], z: a[1] }))); if (Array.isArray(o.__fstart)) prodStart = [0, 1, 2].map(i => o.__fstart[i] || null); if (typeof o.__dayMin === 'number' && o.__dayMin > 0) dayMin = o.__dayMin; if (o.__products && o.__products.meritage && o.__products._v === lineProducts._v) lineProducts = o.__products; refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } extraStations.forEach(applyLineAccent); if (typeof refreshProdFlow === 'function') refreshProdFlow(); if (typeof applyLineFocus === 'function') applyLineFocus();
+  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } if (Array.isArray(o.__ends)) { const e = o.__ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; } if (Array.isArray(o.__fwps)) prodWps = [0, 1, 2].map(i => (o.__fwps[i] || []).map(a => ({ x: a[0], z: a[1] }))); if (Array.isArray(o.__fstart)) prodStart = [0, 1, 2].map(i => o.__fstart[i] || null); if (typeof o.__dayMin === 'number' && o.__dayMin > 0) dayMin = o.__dayMin; if (o.__products && o.__products.meritage && o.__products._v === lineProducts._v) lineProducts = o.__products; if (o.__baseSteps) baseSteps = o.__baseSteps; refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } extraStations.forEach(applyLineAccent); if (typeof refreshProdFlow === 'function') refreshProdFlow(); if (typeof applyLineFocus === 'function') applyLineFocus();
 }
 let hadSavedLayout = false;   // true when ANY layout (localStorage or baked) was loaded — defaults must then keep their hands off
 function loadLayout() { try { let o = null; try { o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch (e) {} if (!o && window.__M3D_LAYOUT__) o = window.__M3D_LAYOUT__;   // baked-in working layout (travels with the file)
@@ -3007,7 +3057,7 @@ document.getElementById('addwp').onclick = () => {
           <select data-line="${key}" class="prSel" style="flex:1;padding:5px;border:1px solid #c9d2dd;border-radius:6px;font-size:12px">
             ${lp.list.map((q, i) => `<option value="${i}"${i === lp.active ? ' selected' : ''}>${(q.name || '').replace(/</g, '&lt;')}</option>`).join('')}
           </select>
-          <input data-line="${key}" class="prF" type="number" min="5" step="5" value="${Math.round((p ? p.f : 1) * 100)}" style="width:56px;padding:5px;border:1px solid #c9d2dd;border-radius:6px"/><span style="color:#5a6672">%</span>
+          ${p && p.stations ? '<span style="color:#2f7d52;font-weight:700;white-space:nowrap" title="This product has its own measured steps — edit them in Edit times">own steps</span>' : `<input data-line="${key}" class="prF" type="number" min="5" step="5" value="${Math.round((p ? p.f : 1) * 100)}" style="width:56px;padding:5px;border:1px solid #c9d2dd;border-radius:6px"/><span style="color:#5a6672">%</span>`}
           <button data-line="${key}" class="prAdd" title="Add a product to this line" style="border:1px dashed #9db4cf;background:#f2f6fb;border-radius:6px;padding:4px 8px;cursor:pointer">＋</button>
         </div>`;
     };
@@ -3020,7 +3070,7 @@ document.getElementById('addwp').onclick = () => {
       ${row('canyon', '#9a5b1f', 'CANYON CREW runs')}
       <div style="color:#8a93a0;font-size:11px;margin-top:6px">% = labor vs the base times (100% = the times in Edit times).</div>
       <button id="prClose" style="width:100%;margin-top:8px;padding:6px;border:1px solid #c9d2dd;border-radius:8px;background:#f2f6fb;cursor:pointer;font-weight:700">Done</button>`;
-    prPanel.querySelectorAll('.prSel').forEach(el => el.onchange = e => { lineProducts[e.target.dataset.line].active = +e.target.value; reflowAll(); renderProductsPanel(); });
+    prPanel.querySelectorAll('.prSel').forEach(el => el.onchange = e => { const ln = e.target.dataset.line; lineProducts[ln].active = +e.target.value; activateProductSteps(ln); reflowAll(); renderProductsPanel(); });
     prPanel.querySelectorAll('.prF').forEach(el => el.onchange = e => { const lp = lineProducts[e.target.dataset.line]; const p = lp.list[lp.active]; if (p) p.f = Math.max(0.05, (+e.target.value || 100) / 100); reflowAll(); });
     prPanel.querySelectorAll('.prAdd').forEach(el => el.onclick = e => {
       const key = e.target.dataset.line;

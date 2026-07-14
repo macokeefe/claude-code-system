@@ -107,6 +107,23 @@ for 'Sola Lounge — 1 arm' in lineProducts. NOTE: saved layouts persist
 __products, so layouts saved under the old 110% guess keep it until the %
 is edited in the Products panel.
 
+### Swivel chair SWI (2026-07, f4670ea7) + per-product steps engine
+Swivel steps (min): connector prep 11 (16 conn, screw swaps/flips); trellis
+support 10; seat frame + connectors 31; backrest+arms frame 90 (bars ~50);
+join arms + trellis 24; wheel base 20; loctite/pegs 2; swivel plate 2;
+drill/disc/plate 3; washers/spin 2.5; attach swivel to chair 8.5; packing
+4.66 + 6.8. TOTAL 215.46 (sheet header 204 EXCLUDES packing; process name
+says "SINGLE SUN LOUNGE w WHEEL" = copy noise). Meritage Chair (engineer
+rule): same minus swivel work (38.0) + Leg Assembly 8 + leg install 13
+("5+8") = 198.46. Both live as products with PER-STATION STEPS
+(product.stations: {stationId: [[name,min],...]}) on the Meritage line:
+con 11 / tre 10 / sea 31 / bak 90 / arm = leg-assembly 8 (chair) or swivel
+sub-assembly 29.5 (swivel) / fa 24+13 or 24+8.5 / pak 11.46. Bottleneck
+correctly MOVES to bak (90) on the chairs. Engine: activateProductSteps()
+stashes base steps in baseSteps (persisted __baseSteps) and swaps s.steps;
+Edit-times edits while active sync back into the product on saveLayout
+(syncProductSteps); prodF()=1 for steps-products; lineProducts._v=4.
+
 ## App/modeling conventions tied to these facts
 
 - SKU = one configuration (SOLA-BASE / SOLA-RA / SOLA-NA seeded; SOLA-BASE is
