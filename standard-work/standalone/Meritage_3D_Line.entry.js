@@ -2266,20 +2266,20 @@ document.getElementById('trips').onchange = e => { tripsPerUnit = Math.max(0, pa
 let dayMin = 420;   // AVAILABLE minutes per worker per day (drives takt + capacity everywhere)
 // each line can run different furniture: name + labor factor vs the base times
 let lineProducts = {
-  _v: 4,   // version stamp — bumping it makes these defaults replace older saved product lists
+  _v: 5,   // version stamp — bumping it makes these defaults replace older saved product lists
   // A product may carry its own per-station STEPS ("stations": {stationId: [[name, min], ...]}).
   // Picking it swaps that line's Edit-times steps (the base steps are stashed and restored
   // untouched). Products without steps fall back to a labor factor "f" on the base times.
   meritage: { active: 0, list: [
     { name: 'Meritage 3-Seater', f: 1 },                                   // BASE — the live Edit-times steps
     { name: 'Meritage 2-Seater', f: 0.89 },                                // MEASURED ratio: 20:30 vs 23:00
-    { name: 'Meritage Chair', stations: {                                  // MEASURED: swivel SWI minus swivel work + leg assembly 8 + leg install 13 (5+8) = 198.46 min
+    { name: 'Meritage Chair', stations: {                                  // MEASURED: swivel SWI minus swivel work + leg assembly 8 + leg install 18 (10 during frame assembly + 8 leg finishing) = 203.46 min
       con: [['Connector prep — 16 connectors', 11]],
       tre: [['Trellis support assembly', 10]],
       sea: [['Seat frame + connectors', 31]],
       bak: [['Backrest and arms frame', 90]],
       arm: [['Leg assembly', 8]],
-      fa:  [['Join arms + trellis support', 24], ['Leg installation (5+8)', 13]],
+      fa:  [['Join arms + trellis support', 24], ['Leg install — during frame assembly', 10], ['Leg finishing', 8]],
       pak: [['Box bottom + strap', 4.66], ['Cushions, wrap, top box', 6.8]],
     } },
     { name: 'Meritage Swivel Chair', stations: {                           // MEASURED: swivel SWI 2026-07 — 215.46 min total (sheet header 204 excludes packing)
