@@ -389,8 +389,15 @@ function prodF(line) {
 }
 function dayMinSafe() { return (typeof dayMin === 'number' && dayMin > 0) ? dayMin : 420; }   // available minutes per worker per day
 function eff(id) { const s = getAny(id); if (!s) return 0; return ((s.t || 0) / Math.max(1, s.ppl || 1)) * prodF(stLineOf(id)) + walkOf(id); }   // step times are TOTAL; cycle = total / people, scaled by the line's active product
-function helpInto(id) { return (typeof helpArrows === 'undefined') ? 0 : helpArrows.reduce((s, a) => s + (a.to === id ? (a.helpMin || 0) : 0), 0); }
-function helpFromOp(id, idx) { return (typeof helpArrows === 'undefined') ? 0 : helpArrows.reduce((s, a) => s + ((a.from === id && (a.fromIdx || 0) === idx) ? (a.helpMin || 0) : 0), 0); }
+// a help arrow only counts while its line is building the product it was drawn for (a.prod; untagged = every product)
+function arrowOn(a) {
+  if (!a || !a.prod) return true;
+  if (typeof activeProduct !== 'function' || typeof stLineOf !== 'function') return true;
+  const p = activeProduct(stLineOf(a.from));
+  return !p || p.name === a.prod;
+}
+function helpInto(id) { return (typeof helpArrows === 'undefined') ? 0 : helpArrows.reduce((s, a) => s + ((a.to === id && arrowOn(a)) ? (a.helpMin || 0) : 0), 0); }
+function helpFromOp(id, idx) { return (typeof helpArrows === 'undefined') ? 0 : helpArrows.reduce((s, a) => s + ((a.from === id && (a.fromIdx || 0) === idx && arrowOn(a)) ? (a.helpMin || 0) : 0), 0); }
 function effNet(id) { return Math.max(0.1, eff(id) - helpInto(id)); }   // a helped station's time drops by the help minutes
 function lineCyc() { return sch ? Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 1; }
 function availIdleOp(id, idx) { return Math.max(0, lineCyc() - effNet(id) - helpFromOp(id, idx)); }   // spare min/chair a specific operator can give
@@ -1302,6 +1309,7 @@ function assignHelpers() {
   if (typeof crew === 'undefined') return;
   crew.forEach(c => { c.helpTo = null; c.helpMin = 0; });
   helpArrows.forEach(a => {
+    if (!arrowOn(a)) return;                          // arrow belongs to a product this line isn't building right now
     const idx = a.fromIdx || 0;
     const cs = crew.filter(c => c.station === a.from);
     const c = cs.find(c => c.idx === idx) || cs[cs.length - 1];   // the specific operator on this path
@@ -1323,7 +1331,7 @@ function updateHelp() {
   const y = 0.25;
   helpArrows.forEach(a => {
     if (!a._line) return; const B = nodes[a.to]; if (!nodes[a.from] || !B) return;
-    const fv = (typeof focusShows !== 'function') || (focusShows(stLineOf(a.from)) && focusShows(stLineOf(a.to)));
+    const fv = arrowOn(a) && ((typeof focusShows !== 'function') || (focusShows(stLineOf(a.from)) && focusShows(stLineOf(a.to))));
     a._line.visible = fv; a._cone.visible = fv;
     const hc = (typeof crew !== 'undefined') ? crew.find(c => c.station === a.from && c.idx === (a.fromIdx || 0)) : null;
     const A = hc ? { x: hc.homeX, z: hc.homeZ } : nodes[a.from];   // start the arrow at the specific operator
@@ -2362,6 +2370,7 @@ function syncProductSteps() {
   });
 }
 function reflowAll() {   // one call after any product / available-time change
+  try { buildHelp(); } catch (e) {}   // help paths are product-specific — re-resolve which arrows apply
   schedule(); if (typeof buildSolaSched === 'function') buildSolaSched();
   if (typeof renderSolaData === 'function') renderSolaData();
   try { renderIdle(); renderHelpPanel(); renderTaskChart(); } catch (e) {}
@@ -2459,6 +2468,23 @@ document.getElementById('idlebtn').onclick = () => {
 // ---- help-paths dashboard ----
 const helpPanel = document.getElementById('helpPanel');
 const stName = id => { const s = getAny(id); return s ? s.title : id; };
+// "applies to" product picker for one help arrow — options come from the arrow's own line
+function prodTagSel(a, i) {
+  const line = stLineOf(a.from);
+  const lp = (typeof lineProducts !== 'undefined' && lineProducts) ? lineProducts[line] : null;
+  if (!lp) return '';
+  let opts = `<option value=""${!a.prod ? ' selected' : ''}>All products</option>` +
+    lp.list.map(p => `<option value="${(p.name || '').replace(/"/g, '&quot;')}"${a.prod === p.name ? ' selected' : ''}>${(p.name || '').replace(/</g, '&lt;')}</option>`).join('');
+  if (a.prod && !lp.list.some(p => p.name === a.prod)) opts += `<option value="${a.prod.replace(/"/g, '&quot;')}" selected>${a.prod.replace(/</g, '&lt;')} (missing)</option>`;
+  return `applies to <select class="hprod" data-i="${i}" title="This help path only counts while the line is building this product" style="font-size:10px;max-width:150px;padding:1px 2px">${opts}</select>`;
+}
+function wireProdTags() {
+  helpPanel.querySelectorAll('.hprod').forEach(sel => sel.onchange = e => {
+    const a = helpArrows[+e.target.dataset.i]; a.prod = e.target.value || null;
+    buildHelp(); schedule(); if (typeof buildSolaSched === 'function') buildSolaSched();
+    renderIdle(); if (typeof renderSolaData === 'function') renderSolaData(); saveLayout(); renderHelpPanel();
+  });
+}
 function bottleneckInfo() {
   const items = [['con', effNet('con')], ['arm', effNet('arm')], ['bak', effNet('bak')], ['tre', effNet('tre')], ['sea', effNet('sea')], ['fapak', effNet('fa') + effNet('pak')]];
   let bn = items[0]; items.forEach(it => { if (it[1] > bn[1]) bn = it; });
@@ -2478,16 +2504,17 @@ function renderHelpPanel() {
     if (!sHelp.length) { helpPanel.innerHTML = sHead + `<div class="ihint">No ${lname} help paths yet.</div>`; addPanelX(helpPanel, () => { helpPanel.style.display = 'none'; }); wireLineSel(helpPanel); return; }
     let sh = sHead;
     sHelp.forEach(({ a, i }) => {
-      const spare = availIdleAny(a.from, a.fromIdx || 0) + (a.helpMin || 0);
+      const on = arrowOn(a);
+      const spare = availIdleAny(a.from, a.fromIdx || 0) + (on ? (a.helpMin || 0) : 0);
       const before = eff(a.to), after = effNet(a.to);
       const fromPpl = (getAny(a.from) && getAny(a.from).ppl) || 1;
       const fromLabel = stName(a.from) + (fromPpl > 1 ? ' ' + ((a.fromIdx || 0) + 1) : '');
       const onBn = a.to === bnId;
-      sh += `<div class="hrow">
-        <div class="hnm">${fromLabel} → <b>${stName(a.to)}</b> ${onBn ? '<span style="color:#2f7d52">✓ slowest</span>' : '<span style="color:#c0552c">⚠ not slowest</span>'}</div>
+      sh += `<div class="hrow"${on ? '' : ' style="opacity:.55"'}>
+        <div class="hnm">${fromLabel} → <b>${stName(a.to)}</b> ${on ? (onBn ? '<span style="color:#2f7d52">✓ slowest</span>' : '<span style="color:#c0552c">⚠ not slowest</span>') : '<span style="color:#8a8f98">⏸ off — different product running</span>'}</div>
         <div class="hctl">takes <input type="number" class="hmin" data-i="${i}" min="0" max="${spare.toFixed(1)}" step="0.5" value="${(a.helpMin || 0)}"> min/unit off ${stName(a.to)}
           <button class="hdel" data-i="${i}">✕</button></div>
-        <div class="hsub">${stName(a.to)} step: ${before.toFixed(1)} → <b>${after.toFixed(1)} min</b> · helper has ${spare.toFixed(1)} min/unit spare</div>
+        <div class="hsub">${prodTagSel(a, i)}${on ? ` · ${stName(a.to)} step: ${before.toFixed(1)} → <b>${after.toFixed(1)} min</b> · helper has ${spare.toFixed(1)} min/unit spare` : ''}</div>
       </div>`;
     });
     helpPanel.innerHTML = sh;
@@ -2500,7 +2527,7 @@ function renderHelpPanel() {
     helpPanel.querySelectorAll('.hdel').forEach(b => b.onclick = e => {
       helpArrows.splice(+e.target.dataset.i, 1); buildHelp(); buildSolaSched(); renderIdle(); renderSolaData(); saveLayout(); renderHelpPanel();
     });
-    wireLineSel(helpPanel); return;
+    wireProdTags(); wireLineSel(helpPanel); return;
   }
   const bn = bottleneckInfo();
   const bnName = bn.key === 'fapak' ? 'Full assy + pack' : FEEDNAME[bn.key];
@@ -2508,16 +2535,17 @@ function renderHelpPanel() {
   if (!helpArrows.length) { helpPanel.innerHTML = head + '<div class="ihint">No paths — click “➤ Help arrow”, then a FROM station and the TO station.</div>'; addPanelX(helpPanel, () => { helpPanel.style.display = 'none'; }); wireLineSel(helpPanel); return; }
   let html = head;
   helpArrows.forEach((a, i) => {
-    const spare = availIdleOp(a.from, a.fromIdx || 0) + (a.helpMin || 0);
+    const on = arrowOn(a);
+    const spare = availIdleOp(a.from, a.fromIdx || 0) + (on ? (a.helpMin || 0) : 0);
     const before = eff(a.to), after = effNet(a.to);
     const onBn = isBottleneckTarget(a.to, bn.key);
     const fromPpl = (get(a.from) && get(a.from).ppl) || 1;
     const fromLabel = stName(a.from) + (fromPpl > 1 ? ' ' + ((a.fromIdx || 0) + 1) : '');
-    html += `<div class="hrow">
-      <div class="hnm">${fromLabel} → <b>${stName(a.to)}</b> ${onBn ? '<span style="color:#2f7d52">✓ bottleneck</span>' : '<span style="color:#c0552c">⚠ not bottleneck</span>'}</div>
+    html += `<div class="hrow"${on ? '' : ' style="opacity:.55"'}>
+      <div class="hnm">${fromLabel} → <b>${stName(a.to)}</b> ${on ? (onBn ? '<span style="color:#2f7d52">✓ bottleneck</span>' : '<span style="color:#c0552c">⚠ not bottleneck</span>') : '<span style="color:#8a8f98">⏸ off — different product running</span>'}</div>
       <div class="hctl">takes <input type="number" class="hmin" data-i="${i}" min="0" max="${spare.toFixed(1)}" step="0.5" value="${(a.helpMin||0)}"> min/chair off ${stName(a.to)}
         <button class="hdel" data-i="${i}">✕</button></div>
-      <div class="hsub">${stName(a.to)} step: ${before.toFixed(1)} → <b>${after.toFixed(1)} min</b> · helper has ${spare.toFixed(1)} min/chair spare${onBn ? '' : ' · won\'t raise output until the bottleneck is relieved'}</div>
+      <div class="hsub">${prodTagSel(a, i)}${on ? ` · ${stName(a.to)} step: ${before.toFixed(1)} → <b>${after.toFixed(1)} min</b> · helper has ${spare.toFixed(1)} min/chair spare${onBn ? '' : ' · won\'t raise output until the bottleneck is relieved'}` : ''}</div>
     </div>`;
   });
   helpPanel.innerHTML = html;
@@ -2530,7 +2558,7 @@ function renderHelpPanel() {
   helpPanel.querySelectorAll('.hdel').forEach(b => b.onclick = e => {
     helpArrows.splice(+e.target.dataset.i, 1); buildHelp(); schedule(); renderIdle(); saveLayout();
   });
-  wireLineSel(helpPanel);
+  wireProdTags(); wireLineSel(helpPanel);
 }
 document.getElementById('helppaths').onclick = () => {
   helpPanel.style.display = (helpPanel.style.display === 'none') ? 'block' : 'none';
@@ -2662,7 +2690,7 @@ function setStationRot(id, rot) {
 }
 // Build the working-layout object from the LIVE scene (not from storage).
 function buildWorkingLayout() {
-  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); o.__wps3 = cart3Waypoints.map(w => [w.x, w.z]); o.__rwps3 = returnWps3.map(w => [w.x, w.z]); o.__ends = [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null); o.__fwps = prodWps.map(l => l.map(w => [w.x, w.z])); o.__fstart = prodStart.slice(); o.__dayMin = dayMin; o.__products = JSON.parse(JSON.stringify(lineProducts)); o.__baseSteps = JSON.parse(JSON.stringify(baseSteps)); o.__boxZone = [boxZone.x, boxZone.z, boxZone.w, boxZone.d]; o.__names = Object.fromEntries(ST.map(s2 => [s2.id, s2.title])); return o;
+  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0, a.prod || '']); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); o.__wps3 = cart3Waypoints.map(w => [w.x, w.z]); o.__rwps3 = returnWps3.map(w => [w.x, w.z]); o.__ends = [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null); o.__fwps = prodWps.map(l => l.map(w => [w.x, w.z])); o.__fstart = prodStart.slice(); o.__dayMin = dayMin; o.__products = JSON.parse(JSON.stringify(lineProducts)); o.__baseSteps = JSON.parse(JSON.stringify(baseSteps)); o.__boxZone = [boxZone.x, boxZone.z, boxZone.w, boxZone.d]; o.__names = Object.fromEntries(ST.map(s2 => [s2.id, s2.title])); return o;
 }
 // In-memory mirror so the layout survives even when localStorage is blocked
 // (Safari / file:// often refuses to persist) — bake reads THIS, never storage.
@@ -2706,7 +2734,7 @@ window.addEventListener('keydown', e => {
   }
 });
 function applyWorkingLayout(o) {   // apply a working-layout object to the LIVE scene (shared by load + import)
-  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } if (Array.isArray(o.__ends)) { const e = o.__ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; } if (Array.isArray(o.__fwps)) prodWps = [0, 1, 2].map(i => (o.__fwps[i] || []).map(a => ({ x: a[0], z: a[1] }))); if (Array.isArray(o.__fstart)) prodStart = [0, 1, 2].map(i => o.__fstart[i] || null); if (typeof o.__dayMin === 'number' && o.__dayMin > 0) dayMin = o.__dayMin; if (o.__products && o.__products.meritage) mergeProducts(o.__products); if (o.__baseSteps) baseSteps = o.__baseSteps; refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } extraStations.forEach(applyLineAccent); if (typeof refreshProdFlow === 'function') refreshProdFlow(); if (typeof applyLineFocus === 'function') applyLineFocus();
+  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } if (Array.isArray(o.__ends)) { const e = o.__ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; } if (Array.isArray(o.__fwps)) prodWps = [0, 1, 2].map(i => (o.__fwps[i] || []).map(a => ({ x: a[0], z: a[1] }))); if (Array.isArray(o.__fstart)) prodStart = [0, 1, 2].map(i => o.__fstart[i] || null); if (typeof o.__dayMin === 'number' && o.__dayMin > 0) dayMin = o.__dayMin; if (o.__products && o.__products.meritage) mergeProducts(o.__products); if (o.__baseSteps) baseSteps = o.__baseSteps; refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0, prod: a[4] || null })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } extraStations.forEach(applyLineAccent); if (typeof refreshProdFlow === 'function') refreshProdFlow(); if (typeof applyLineFocus === 'function') applyLineFocus();
 }
 let hadSavedLayout = false;   // true when ANY layout (localStorage or baked) was loaded — defaults must then keep their hands off
 function loadLayout() { try { let o = null; try { o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch (e) {} if (!o && window.__M3D_LAYOUT__) o = window.__M3D_LAYOUT__;   // baked-in working layout (travels with the file)
@@ -2916,9 +2944,10 @@ renderer.domElement.addEventListener('pointerdown', e => {
     if (!armSource) { armSource = sid; }
     else { if (sid !== armSource) {
         const fs = getAny(armSource); const ppl = (fs && fs.ppl) || 1;
-        const used = new Set(helpArrows.filter(a => a.from === armSource).map(a => a.fromIdx || 0));
-        let fromIdx = ppl - 1; for (let i = 0; i < ppl; i++) { if (!used.has(i)) { fromIdx = i; break; } }   // next free operator at this station
-        helpArrows.push({ from: armSource, fromIdx, to: sid, helpMin: Math.min(5, +availIdleAny(armSource, fromIdx).toFixed(1)) });
+        const used = new Set(helpArrows.filter(a => a.from === armSource && arrowOn(a)).map(a => a.fromIdx || 0));
+        let fromIdx = ppl - 1; for (let i = 0; i < ppl; i++) { if (!used.has(i)) { fromIdx = i; break; } }   // next free operator at this station (per product)
+        const hp = activeProduct(stLineOf(armSource));   // new arrows belong to whatever this line is building right now
+        helpArrows.push({ from: armSource, fromIdx, to: sid, helpMin: Math.min(5, +availIdleAny(armSource, fromIdx).toFixed(1)), prod: hp ? hp.name : null });
         buildHelp(); schedule(); buildSolaSched(); renderIdle(); renderSolaData(); renderHelpPanel(); saveLayout();   // re-pace both lines (a Sola help arrow affects the Sola flow-shop)
       } armSource = null; }
     return;
@@ -3390,7 +3419,7 @@ function snapshot() {
   ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
   if (nodes.cart) pos.cart = [nodes.cart.x, nodes.cart.z];
   const cap = sch ? dayMinSafe() / Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 0;
-  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), ppl: Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), extras: extraSnap(), flow: flowArrows.map(a => [a.from, a.to]), areas: areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]), rwps: returnWps.map(w => [w.x, w.z]), rwps2: returnWps2.map(w => [w.x, w.z]), wps3: cart3Waypoints.map(w => [w.x, w.z]), rwps3: returnWps3.map(w => [w.x, w.z]), ends: [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null), fwps: prodWps.map(l => l.map(w => [w.x, w.z])), fstart: prodStart.slice(), dayMin, products: JSON.parse(JSON.stringify(lineProducts)), boxZone: [boxZone.x, boxZone.z, boxZone.w, boxZone.d], names: Object.fromEntries(ST.map(s2 => [s2.id, s2.title])), cap: +cap.toFixed(1) };
+  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0, a.prod || '']), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), ppl: Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), extras: extraSnap(), flow: flowArrows.map(a => [a.from, a.to]), areas: areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]), rwps: returnWps.map(w => [w.x, w.z]), rwps2: returnWps2.map(w => [w.x, w.z]), wps3: cart3Waypoints.map(w => [w.x, w.z]), rwps3: returnWps3.map(w => [w.x, w.z]), ends: [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null), fwps: prodWps.map(l => l.map(w => [w.x, w.z])), fstart: prodStart.slice(), dayMin, products: JSON.parse(JSON.stringify(lineProducts)), boxZone: [boxZone.x, boxZone.z, boxZone.w, boxZone.d], names: Object.fromEntries(ST.map(s2 => [s2.id, s2.title])), cap: +cap.toFixed(1) };
 }
 function applyLayout(L) {
   if (L.steps) { ST.forEach(s => { if (L.steps[s.id]) { s.steps = L.steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); }
@@ -3412,7 +3441,7 @@ function applyLayout(L) {
   if (L.products && L.products.meritage) mergeProducts(JSON.parse(JSON.stringify(L.products)));
   refreshCart3Feed();
   if (Array.isArray(L.wps)) { cartWaypoints = L.wps.map(a => ({ x: a[0], z: a[1] })); refreshPath(); }
-  if (Array.isArray(L.help)) { helpArrows = L.help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); }
+  if (Array.isArray(L.help)) { helpArrows = L.help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0, prod: a[4] || null })); buildHelp(); }
   if (L.rot) Object.keys(L.rot).forEach(id => { if (nodes[id]) setStationRot(id, L.rot[id]); });
   if (Array.isArray(L.access)) { clearAccess(); L.access.forEach(p => addAccess(p[0], p[1])); refreshProdFlow(); }
   extraStations.forEach(applyLineAccent); if (typeof applyLineFocus === 'function') applyLineFocus();
