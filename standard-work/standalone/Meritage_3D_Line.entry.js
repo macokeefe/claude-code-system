@@ -378,7 +378,15 @@ function walkOf(id) {
   for (const t of [...f.in, ...f.out]) { const p = linkPoint(t, nd); yd += dist2(nd.x, nd.z, p[0], p[1]) / YARD; }
   return yd / Math.max(1, walkSpeed) * tripsPerUnit;   // sum of linked-table distances (yd) / speed * trips
 }
-function eff(id) { const s = getAny(id); if (!s) return 0; return (s.t || 0) / Math.max(1, s.ppl || 1) + walkOf(id); }   // step times are TOTAL; cycle = total / people (works for Meritage ST + added Sola stations)
+// per-line PRODUCT factor: each line can run a different piece of furniture;
+// its labor content scales all of that line's station times (walk unaffected)
+function prodF(line) {
+  if (typeof lineProducts === 'undefined' || !lineProducts) return 1;
+  const lp = lineProducts[line]; if (!lp) return 1;
+  const p = lp.list[lp.active]; return p ? Math.max(0.05, +p.f || 1) : 1;
+}
+function dayMinSafe() { return (typeof dayMin === 'number' && dayMin > 0) ? dayMin : 420; }   // available minutes per worker per day
+function eff(id) { const s = getAny(id); if (!s) return 0; return ((s.t || 0) / Math.max(1, s.ppl || 1)) * prodF(stLineOf(id)) + walkOf(id); }   // step times are TOTAL; cycle = total / people, scaled by the line's active product
 function helpInto(id) { return (typeof helpArrows === 'undefined') ? 0 : helpArrows.reduce((s, a) => s + (a.to === id ? (a.helpMin || 0) : 0), 0); }
 function helpFromOp(id, idx) { return (typeof helpArrows === 'undefined') ? 0 : helpArrows.reduce((s, a) => s + ((a.from === id && (a.fromIdx || 0) === idx) ? (a.helpMin || 0) : 0), 0); }
 function effNet(id) { return Math.max(0.1, eff(id) - helpInto(id)); }   // a helped station's time drops by the help minutes
@@ -402,7 +410,7 @@ function schedule() {
   sch={seaT,armT,bakT,treT,conT,ASM,PACK,seatEnd,armEnd,bakEnd,kit,faStart,faEnd};
   horizon=(faEnd[N-1]||0)+6;
   const cyc=Math.max(conT,armT,bakT,treT,seaT,ASM+PACK);
-  const cap=420/cyc;
+  const cap=dayMinSafe()/cyc;
   let bot='Seat frame', bv=seaT;
   [['Connectors',conT],['Arms',armT],['Back frame',bakT],['Trellis',treT],['Seat frame',seaT],['Full assy + pack',ASM+PACK]]
     .forEach(([nm,v])=>{ if(v>bv){bv=v;bot=nm;} });
@@ -410,7 +418,7 @@ function schedule() {
   ui.cap.textContent=cap.toFixed(1);
   ui.bot.textContent=`${bot} (${bv.toFixed(1).replace(/\.0$/,'')})`;
   ui.nOut.textContent=N;
-  if (ui.labor) ui.labor.textContent = ST.reduce((a,s)=>a+(s.t||0),0).toFixed(0);   // total one-person labor content/unit
+  if (ui.labor) ui.labor.textContent = (ST.reduce((a,s)=>a+(s.t||0),0) * prodF('meritage')).toFixed(0);   // total one-person labor content/unit (active product)
   // reflect walk time on labels + times panel
   ST.forEach(s => {
     const w = walkOf(s.id), base = get(s.id).t || 0;
@@ -881,9 +889,11 @@ function concreteTex(rx, ry) {
 const FLOOR_W = 105 * FT, FLOOR_D = 64 * FT, FLOOR_X = 7.09;
 const FLOOR_X0 = FLOOR_X - FLOOR_W / 2, FLOOR_X1 = FLOOR_X + FLOOR_W / 2;   // ≈ −8.91 .. 23.09
 const FLOOR_Z0 = -FLOOR_D / 2, FLOOR_Z1 = FLOOR_D / 2;                       // ≈ −9.60 .. 9.60
+var floorSlab = null;
 (function buildFloor() {
   const slab = new THREE.Mesh(new THREE.BoxGeometry(FLOOR_W, 0.5, FLOOR_D), deckMat);   // same space-gray as the decks — one uniform floor colour
   slab.position.set(FLOOR_X, -0.29, 0); slab.receiveShadow = true; surroundings.add(slab);
+  floorSlab = slab;                                          // lineZones bakes the zone tints into this slab's texture (no z-fighting)
   // painted yellow aisle safety lines around the working area
   const paint = AM(0xe8c53a, { roughness: 0.65 });
   const line = (x, z, w, d) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.02, d), paint); m.position.set(x, AY + 0.02, z); surroundings.add(m); };
@@ -958,21 +968,40 @@ SECTION_LINES.forEach(pl => {
 // the blue lines on the drawing, and a table's zone is its line.
 (function lineZones() {
   const L1 = SECTION_LINES[0], L2 = SECTION_LINES[1], L3 = SECTION_LINES[2], L4 = SECTION_LINES[3];
-  const rect = (x0, x1, za, zb, col, op) => {
-    if (x1 - x0 < 0.02 || zb - za < 0.02) return;
-    const p = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, zb - za),
-      new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: op, depthWrite: false }));
-    p.rotation.x = -Math.PI / 2; p.position.set((x0 + x1) / 2, 0.021, (za + zb) / 2); sectionGroup.add(p);
-  };
   const jzs = pl => { const out = []; for (let i = 0; i < pl.length - 1; i++) if (pl[i][0] !== pl[i + 1][0]) out.push(pl[i][1]); return out; };
-  const zoneBetween = (A, B, col, op) => {   // shade the region between two jogging CAD polylines
-    const zs = [FLOOR_Z0 + 0.05, FLOOR_Z1 - 0.05, ...jzs(A), ...jzs(B)].sort((a, b) => a - b);
-    for (let i = 0; i < zs.length - 1; i++) { const za = zs[i], zb = zs[i + 1], zm = (za + zb) / 2; rect(plX(A, zm), plX(B, zm), za, zb, col, op); }
+  // the tints are BAKED into the floor slab's texture — part of the surface
+  // itself, so there is nothing floating above the floor to z-fight with
+  const c = document.createElement('canvas'); c.width = 1050; c.height = 640; const g2 = c.getContext('2d');
+  g2.fillStyle = '#b7bcc2'; g2.fillRect(0, 0, 1050, 640);    // the space-gray base
+  const PX = x => (x - FLOOR_X0) / FLOOR_W * 1050, PZ = z => (z - FLOOR_Z0) / FLOOR_D * 640;
+  const zoneBetween = (A, B, rgba) => {
+    const zs = [FLOOR_Z0, FLOOR_Z1, ...jzs(A), ...jzs(B)].sort((a, b) => a - b);
+    g2.fillStyle = rgba;
+    for (let i = 0; i < zs.length - 1; i++) {
+      const za = zs[i], zb = zs[i + 1], zm = (za + zb) / 2;
+      if (zb - za < 0.02) continue;
+      g2.fillRect(PX(plX(A, zm)), PZ(za), PX(plX(B, zm)) - PX(plX(A, zm)), PZ(zb) - PZ(za));
+    }
   };
-  zoneBetween(L1, L2, 0x1d3a66, 0.05);      // MERITAGE — between CAD lines 1 and 2
-  zoneBetween(L2, L3, 0x236043, 0.05);      // SOLA — between CAD lines 2 and 3
-  zoneBetween(L3, L4, 0x9a5b1f, 0.07);      // CANYON CREW — between CAD lines 3 and 4
+  zoneBetween(L1, L2, 'rgba(29,58,102,0.10)');   // MERITAGE — between CAD lines 1 and 2
+  zoneBetween(L2, L3, 'rgba(35,96,67,0.10)');    // SOLA — between CAD lines 2 and 3
+  zoneBetween(L3, L4, 'rgba(154,91,31,0.13)');   // CANYON CREW — between CAD lines 3 and 4
   // (west of line 1 = storage, east of line 4 = staging — deliberately untinted)
+  const tex = new THREE.CanvasTexture(c); tex.anisotropy = 8; tex.colorSpace = THREE.SRGBColorSpace;
+  // apply the baked shading to EVERY floor surface (slab + both deck meshes),
+  // world-aligned via per-mesh repeat/offset — the tint IS the floor surface,
+  // so there are no floating planes left to z-fight or shimmer
+  const applyZoneTex = mesh => {
+    if (!mesh || !mesh.geometry || !mesh.geometry.parameters) return;
+    const p = mesh.geometry.parameters, w = p.width, d = p.depth;
+    const t2 = tex.clone(); t2.needsUpdate = true;
+    t2.repeat.set(w / FLOOR_W, d / FLOOR_D);
+    t2.offset.set((mesh.position.x - w / 2 - FLOOR_X0) / FLOOR_W, 1 - (mesh.position.z + d / 2 - FLOOR_Z0) / FLOOR_D);
+    mesh.material = new THREE.MeshStandardMaterial({ map: t2, roughness: 0.7, metalness: 0.3 });
+  };
+  applyZoneTex(floorSlab);
+  if (typeof deck !== 'undefined') applyZoneTex(deck);
+  if (typeof mdeck !== 'undefined') applyZoneTex(mdeck);
   const wallMat = new THREE.MeshBasicMaterial({ color: 0x00b7d4, transparent: true, opacity: 0.28, depthWrite: false });
   [L2, L3, L4].forEach(pl => {              // low glowing walls on the three LINE boundaries
     for (let i = 0; i < pl.length - 1; i++) {
@@ -1680,10 +1709,10 @@ function renderSolaData() {
     let labor = 0, cyc = 0, bot = '—';
     ids.forEach(id => {
       const s = nodes[id].s, per = effNet(id);   // per-unit time AFTER any help arrows into this station
-      labor += (s.t || 0);
+      labor += (s.t || 0) * prodF(sec);
       if (per > cyc) { cyc = per; bot = s.title; }
     });
-    const cap = cyc > 0 ? 420 / cyc : 0;
+    const cap = cyc > 0 ? dayMinSafe() / cyc : 0;
     set(pfx + 'Labor', labor.toFixed(1));
     set(pfx + 'Cyc', cyc > 0 ? cyc.toFixed(1).replace(/\.0$/, '') : '—');
     set(pfx + 'Cap', cap > 0 ? cap.toFixed(1) : '—');
@@ -2151,7 +2180,19 @@ document.getElementById('walkSpeed').onchange = e => { walkSpeed = Math.max(10, 
 document.getElementById('trips').onchange = e => { tripsPerUnit = Math.max(0, parseFloat(e.target.value) || 0); schedule(); T = 0; setPlay(false); };
 
 // ---- idle-time-per-operator chart (full day) ----
-let dayMin = 420;   // 7-hr working day
+let dayMin = 420;   // AVAILABLE minutes per worker per day (drives takt + capacity everywhere)
+// each line can run different furniture: name + labor factor vs the base times
+let lineProducts = {
+  meritage: { active: 0, list: [{ name: 'Meritage 3-Seater', f: 1 }, { name: 'Meritage 2-Seater', f: 0.75 }, { name: 'Meritage Ottoman', f: 0.4 }] },
+  sola:     { active: 0, list: [{ name: 'Sola Lounge — no arms', f: 1 }, { name: 'Sola Lounge — 1 arm', f: 1.1 }, { name: 'Sola — middle leg', f: 1.05 }] },
+  canyon:   { active: 0, list: [{ name: 'Canyon Chair', f: 1 }, { name: 'Canyon Ottoman', f: 0.5 }] },
+};
+function reflowAll() {   // one call after any product / available-time change
+  schedule(); if (typeof buildSolaSched === 'function') buildSolaSched();
+  if (typeof renderSolaData === 'function') renderSolaData();
+  try { renderIdle(); renderHelpPanel(); renderTaskChart(); } catch (e) {}
+  saveLayout();
+}
 let taktDemand = 10;   // units/day target for the takt line
 let chartLine = 'meritage';   // which line the Idle / Task / Help panels show
 function lineSel() {
@@ -2205,9 +2246,10 @@ function renderIdle() {
          +  `<span class="iv"><b>${Math.round(idle)} min</b> idle (${Math.round(100-util)}%)</span></div>`;
   });
   idlePanel.innerHTML = html;
+  addPanelX(idlePanel, () => { idlePanel.style.display = 'none'; });
   wireLineSel(idlePanel);
   const dh = document.getElementById('dayHrs');
-  if (dh) dh.onchange = e => { dayMin = Math.max(60, (parseFloat(e.target.value) || 7) * 60); renderIdle(); };
+  if (dh) dh.onchange = e => { dayMin = Math.max(60, (parseFloat(e.target.value) || 7) * 60); reflowAll(); };
 }
 document.getElementById('idlebtn').onclick = () => {
   idlePanel.style.display = (idlePanel.style.display === 'none') ? 'block' : 'none';
@@ -2220,7 +2262,7 @@ const stName = id => { const s = getAny(id); return s ? s.title : id; };
 function bottleneckInfo() {
   const items = [['con', effNet('con')], ['arm', effNet('arm')], ['bak', effNet('bak')], ['tre', effNet('tre')], ['sea', effNet('sea')], ['fapak', effNet('fa') + effNet('pak')]];
   let bn = items[0]; items.forEach(it => { if (it[1] > bn[1]) bn = it; });
-  return { key: bn[0], time: bn[1], cap: 420 / bn[1] };
+  return { key: bn[0], time: bn[1], cap: dayMinSafe() / bn[1] };
 }
 function isBottleneckTarget(to, bnKey) { return bnKey === 'fapak' ? (to === 'fa' || to === 'pak') : (to === bnKey); }
 function renderHelpPanel() {
@@ -2231,9 +2273,9 @@ function renderHelpPanel() {
     const cyc = ids.length ? Math.max(0.1, ...ids.map(id => effNet(id))) : 0.1;
     const bnId = ids.slice().sort((a, b) => effNet(b) - effNet(a))[0];
     const secSet = new Set(ids);
-    const sHead = `<h3>Help paths</h3>` + lineSel() + `<div class="ihint"><b>${lname}: ${ids.length ? (420 / Math.max(0.1, cyc)).toFixed(1) : '—'} units/day</b>${bnId ? ' · slowest: ' + stName(bnId) + ' (' + effNet(bnId).toFixed(1) + ' min)' : ''}. Click “➤ Help arrow”, then a FROM then a TO station on this line.</div>`;
+    const sHead = `<h3>Help paths</h3>` + lineSel() + `<div class="ihint"><b>${lname}: ${ids.length ? (dayMinSafe() / Math.max(0.1, cyc)).toFixed(1) : '—'} units/day</b>${bnId ? ' · slowest: ' + stName(bnId) + ' (' + effNet(bnId).toFixed(1) + ' min)' : ''}. Click “➤ Help arrow”, then a FROM then a TO station on this line.</div>`;
     const sHelp = helpArrows.map((a, i) => ({ a, i })).filter(({ a }) => secSet.has(a.to) || secSet.has(a.from));
-    if (!sHelp.length) { helpPanel.innerHTML = sHead + `<div class="ihint">No ${lname} help paths yet.</div>`; wireLineSel(helpPanel); return; }
+    if (!sHelp.length) { helpPanel.innerHTML = sHead + `<div class="ihint">No ${lname} help paths yet.</div>`; addPanelX(helpPanel, () => { helpPanel.style.display = 'none'; }); wireLineSel(helpPanel); return; }
     let sh = sHead;
     sHelp.forEach(({ a, i }) => {
       const spare = availIdleAny(a.from, a.fromIdx || 0) + (a.helpMin || 0);
@@ -2249,6 +2291,7 @@ function renderHelpPanel() {
       </div>`;
     });
     helpPanel.innerHTML = sh;
+    addPanelX(helpPanel, () => { helpPanel.style.display = 'none'; });
     helpPanel.querySelectorAll('.hmin').forEach(inp => inp.onchange = e => {
       const a = helpArrows[+e.target.dataset.i]; const spare = availIdleAny(a.from, a.fromIdx || 0) + (a.helpMin || 0);
       a.helpMin = Math.max(0, Math.min(spare, parseFloat(e.target.value) || 0));
@@ -2262,7 +2305,7 @@ function renderHelpPanel() {
   const bn = bottleneckInfo();
   const bnName = bn.key === 'fapak' ? 'Full assy + pack' : FEEDNAME[bn.key];
   const head = `<h3>Help paths</h3>` + lineSel() + `<div class="ihint"><b>Line now: ${bn.cap.toFixed(1)} chairs/day</b> · bottleneck: ${bnName} (${bn.time.toFixed(1)} min). Output only rises when the bottleneck drops.</div>`;
-  if (!helpArrows.length) { helpPanel.innerHTML = head + '<div class="ihint">No paths — click “➤ Help arrow”, then a FROM station and the TO station.</div>'; wireLineSel(helpPanel); return; }
+  if (!helpArrows.length) { helpPanel.innerHTML = head + '<div class="ihint">No paths — click “➤ Help arrow”, then a FROM station and the TO station.</div>'; addPanelX(helpPanel, () => { helpPanel.style.display = 'none'; }); wireLineSel(helpPanel); return; }
   let html = head;
   helpArrows.forEach((a, i) => {
     const spare = availIdleOp(a.from, a.fromIdx || 0) + (a.helpMin || 0);
@@ -2278,6 +2321,7 @@ function renderHelpPanel() {
     </div>`;
   });
   helpPanel.innerHTML = html;
+  addPanelX(helpPanel, () => { helpPanel.style.display = 'none'; });
   helpPanel.querySelectorAll('.hmin').forEach(inp => inp.onchange = e => {
     const a = helpArrows[+e.target.dataset.i]; const spare = availIdleOp(a.from, a.fromIdx || 0) + (a.helpMin || 0);
     a.helpMin = Math.max(0, Math.min(spare, parseFloat(e.target.value) || 0));
@@ -2331,6 +2375,7 @@ function renderTaskChart() {
     html += `<div class="trow2"><span class="tn2">${row.title}${onBn?' ◄':''}</span><span class="bar2">${seg}<span class="takt2" style="left:${taktPct}%"></span></span><span class="v2">${tt.toFixed(1)}m</span></div>`;
   });
   taskPanel.innerHTML = html;
+  addPanelX(taskPanel, () => { taskPanel.style.display = 'none'; });
   wireLineSel(taskPanel);
   const td = document.getElementById('taktDemand');
   if (td) td.oninput = e => {                               // live: takt line + minutes move as you type/spin
@@ -2352,7 +2397,7 @@ function renderTaskChart() {
     };
   };
   dblEdit('taktVal', () => (dayMin / Math.max(0.1, taktDemand)).toFixed(1), v => { taktDemand = dayMin / v; });
-  dblEdit('dayHrsVal', () => (dayMin / 60).toFixed(1), v => { dayMin = Math.max(60, Math.min(16 * 60, v * 60)); });
+  dblEdit('dayHrsVal', () => (dayMin / 60).toFixed(1), v => { dayMin = Math.max(60, Math.min(16 * 60, v * 60)); reflowAll(); });
 }
 document.getElementById('taskbtn').onclick = () => {
   taskPanel.style.display = (taskPanel.style.display === 'none') ? 'block' : 'none';
@@ -2412,7 +2457,7 @@ function setStationRot(id, rot) {
 }
 // Build the working-layout object from the LIVE scene (not from storage).
 function buildWorkingLayout() {
-  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); o.__wps3 = cart3Waypoints.map(w => [w.x, w.z]); o.__rwps3 = returnWps3.map(w => [w.x, w.z]); o.__ends = [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null); o.__fwps = prodWps.map(l => l.map(w => [w.x, w.z])); o.__fstart = prodStart.slice(); o.__boxZone = [boxZone.x, boxZone.z, boxZone.w, boxZone.d]; o.__names = Object.fromEntries(ST.map(s2 => [s2.id, s2.title])); return o;
+  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); o.__wps3 = cart3Waypoints.map(w => [w.x, w.z]); o.__rwps3 = returnWps3.map(w => [w.x, w.z]); o.__ends = [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null); o.__fwps = prodWps.map(l => l.map(w => [w.x, w.z])); o.__fstart = prodStart.slice(); o.__dayMin = dayMin; o.__products = JSON.parse(JSON.stringify(lineProducts)); o.__boxZone = [boxZone.x, boxZone.z, boxZone.w, boxZone.d]; o.__names = Object.fromEntries(ST.map(s2 => [s2.id, s2.title])); return o;
 }
 // In-memory mirror so the layout survives even when localStorage is blocked
 // (Safari / file:// often refuses to persist) — bake reads THIS, never storage.
@@ -2455,7 +2500,7 @@ window.addEventListener('keydown', e => {
   }
 });
 function applyWorkingLayout(o) {   // apply a working-layout object to the LIVE scene (shared by load + import)
-  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } if (Array.isArray(o.__ends)) { const e = o.__ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; } if (Array.isArray(o.__fwps)) prodWps = [0, 1, 2].map(i => (o.__fwps[i] || []).map(a => ({ x: a[0], z: a[1] }))); if (Array.isArray(o.__fstart)) prodStart = [0, 1, 2].map(i => o.__fstart[i] || null); refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } extraStations.forEach(applyLineAccent); if (typeof refreshProdFlow === 'function') refreshProdFlow(); if (typeof applyLineFocus === 'function') applyLineFocus();
+  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } if (Array.isArray(o.__ends)) { const e = o.__ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; } if (Array.isArray(o.__fwps)) prodWps = [0, 1, 2].map(i => (o.__fwps[i] || []).map(a => ({ x: a[0], z: a[1] }))); if (Array.isArray(o.__fstart)) prodStart = [0, 1, 2].map(i => o.__fstart[i] || null); if (typeof o.__dayMin === 'number' && o.__dayMin > 0) dayMin = o.__dayMin; if (o.__products && o.__products.meritage) lineProducts = o.__products; refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } extraStations.forEach(applyLineAccent); if (typeof refreshProdFlow === 'function') refreshProdFlow(); if (typeof applyLineFocus === 'function') applyLineFocus();
 }
 let hadSavedLayout = false;   // true when ANY layout (localStorage or baked) was loaded — defaults must then keep their hands off
 function loadLayout() { try { let o = null; try { o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch (e) {} if (!o && window.__M3D_LAYOUT__) o = window.__M3D_LAYOUT__;   // baked-in working layout (travels with the file)
@@ -2892,6 +2937,57 @@ document.getElementById('addwp').onclick = () => {
     flB.classList.toggle('on', !prodLanesOn);
     refreshProdFlow();
   };
+  // 🛋 Products: choose what furniture each line runs + the available time per worker
+  const prB = document.createElement('button');
+  prB.id = 'productsBtn'; prB.className = shipB.className || '';
+  prB.textContent = '🛋 Products';
+  flB.parentNode.insertBefore(prB, flB.nextSibling);
+  const prPanel = document.createElement('div');
+  prPanel.id = 'productsPanel';
+  prPanel.style.cssText = 'position:fixed;display:none;z-index:60;background:#fff;border:1px solid #d8dee6;border-radius:12px;box-shadow:0 12px 30px rgba(20,30,45,.18);padding:12px 14px;font:12px/1.5 Arial,sans-serif;color:#15263a;min-width:290px;max-width:340px';
+  document.body.appendChild(prPanel);
+  function renderProductsPanel() {
+    const row = (key, colr, label) => {
+      const lp = lineProducts[key], p = lp.list[lp.active];
+      return `<div style="color:${colr};font-weight:700;margin-top:8px">${label}</div>
+        <div style="display:flex;gap:6px;align-items:center;margin:2px 0 2px">
+          <select data-line="${key}" class="prSel" style="flex:1;padding:5px;border:1px solid #c9d2dd;border-radius:6px;font-size:12px">
+            ${lp.list.map((q, i) => `<option value="${i}"${i === lp.active ? ' selected' : ''}>${(q.name || '').replace(/</g, '&lt;')}</option>`).join('')}
+          </select>
+          <input data-line="${key}" class="prF" type="number" min="5" step="5" value="${Math.round((p ? p.f : 1) * 100)}" style="width:56px;padding:5px;border:1px solid #c9d2dd;border-radius:6px"/><span style="color:#5a6672">%</span>
+          <button data-line="${key}" class="prAdd" title="Add a product to this line" style="border:1px dashed #9db4cf;background:#f2f6fb;border-radius:6px;padding:4px 8px;cursor:pointer">＋</button>
+        </div>`;
+    };
+    prPanel.innerHTML = `<b style="font-size:13px">🛋 Products & available time</b>
+      <div style="margin:8px 0 2px;color:#5a6672">AVAILABLE TIME PER WORKER</div>
+      <div style="display:flex;gap:6px;align-items:center"><input id="prDayMin" type="number" min="60" max="960" step="15" value="${dayMin}" style="width:80px;padding:5px;border:1px solid #c9d2dd;border-radius:6px"/><span>min / day → takt = time ÷ demand</span></div>
+      <div style="color:#8a93a0;font-size:11px;margin:2px 0 6px">e.g. 480 shift − breaks = 420. Changes takt, capacity and units/day everywhere.</div>
+      ${row('meritage', '#1d3a66', 'MERITAGE runs')}
+      ${row('sola', '#236043', 'SOLA runs')}
+      ${row('canyon', '#9a5b1f', 'CANYON CREW runs')}
+      <div style="color:#8a93a0;font-size:11px;margin-top:6px">% = labor vs the base times (100% = the times in Edit times).</div>
+      <button id="prClose" style="width:100%;margin-top:8px;padding:6px;border:1px solid #c9d2dd;border-radius:8px;background:#f2f6fb;cursor:pointer;font-weight:700">Done</button>`;
+    prPanel.querySelectorAll('.prSel').forEach(el => el.onchange = e => { lineProducts[e.target.dataset.line].active = +e.target.value; reflowAll(); renderProductsPanel(); });
+    prPanel.querySelectorAll('.prF').forEach(el => el.onchange = e => { const lp = lineProducts[e.target.dataset.line]; const p = lp.list[lp.active]; if (p) p.f = Math.max(0.05, (+e.target.value || 100) / 100); reflowAll(); });
+    prPanel.querySelectorAll('.prAdd').forEach(el => el.onclick = e => {
+      const key = e.target.dataset.line;
+      const nm = prompt('Product name for this line:'); if (!nm) return;
+      const pc = parseFloat(prompt('Labor vs base times, in % (100 = same as Edit times):', '100')) || 100;
+      lineProducts[key].list.push({ name: nm.trim(), f: Math.max(0.05, pc / 100) });
+      lineProducts[key].active = lineProducts[key].list.length - 1;
+      reflowAll(); renderProductsPanel();
+    });
+    const dm = prPanel.querySelector('#prDayMin'); if (dm) dm.onchange = e => { dayMin = Math.max(60, Math.min(960, +e.target.value || 420)); reflowAll(); };
+    const c = prPanel.querySelector('#prClose'); if (c) c.onclick = () => { prPanel.style.display = 'none'; };
+  }
+  prB.onclick = () => {
+    if (prPanel.style.display === 'block') { prPanel.style.display = 'none'; return; }
+    renderProductsPanel();
+    const r = prB.getBoundingClientRect();
+    prPanel.style.left = Math.max(8, Math.min(window.innerWidth - 350, r.left)) + 'px';
+    prPanel.style.top = (r.bottom + 8) + 'px';
+    prPanel.style.display = 'block';
+  };
   shipB.onclick = () => {
     if (shipPanel.style.display === 'block') { shipPanel.style.display = 'none'; return; }
     renderShipPanel();
@@ -3105,8 +3201,8 @@ function snapshot() {
   const pos = {}, times = {};
   ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
   if (nodes.cart) pos.cart = [nodes.cart.x, nodes.cart.z];
-  const cap = sch ? 420 / Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 0;
-  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), ppl: Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), extras: extraSnap(), flow: flowArrows.map(a => [a.from, a.to]), areas: areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]), rwps: returnWps.map(w => [w.x, w.z]), rwps2: returnWps2.map(w => [w.x, w.z]), wps3: cart3Waypoints.map(w => [w.x, w.z]), rwps3: returnWps3.map(w => [w.x, w.z]), ends: [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null), fwps: prodWps.map(l => l.map(w => [w.x, w.z])), fstart: prodStart.slice(), boxZone: [boxZone.x, boxZone.z, boxZone.w, boxZone.d], names: Object.fromEntries(ST.map(s2 => [s2.id, s2.title])), cap: +cap.toFixed(1) };
+  const cap = sch ? dayMinSafe() / Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 0;
+  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0]), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), ppl: Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), extras: extraSnap(), flow: flowArrows.map(a => [a.from, a.to]), areas: areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]), rwps: returnWps.map(w => [w.x, w.z]), rwps2: returnWps2.map(w => [w.x, w.z]), wps3: cart3Waypoints.map(w => [w.x, w.z]), rwps3: returnWps3.map(w => [w.x, w.z]), ends: [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null), fwps: prodWps.map(l => l.map(w => [w.x, w.z])), fstart: prodStart.slice(), dayMin, products: JSON.parse(JSON.stringify(lineProducts)), boxZone: [boxZone.x, boxZone.z, boxZone.w, boxZone.d], names: Object.fromEntries(ST.map(s2 => [s2.id, s2.title])), cap: +cap.toFixed(1) };
 }
 function applyLayout(L) {
   if (L.steps) { ST.forEach(s => { if (L.steps[s.id]) { s.steps = L.steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); }
@@ -3124,6 +3220,8 @@ function applyLayout(L) {
   if (Array.isArray(L.ends)) { const e = L.ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; }
   if (Array.isArray(L.fwps)) prodWps = [0, 1, 2].map(i => (L.fwps[i] || []).map(a => ({ x: a[0], z: a[1] })));
   if (Array.isArray(L.fstart)) prodStart = [0, 1, 2].map(i => L.fstart[i] || null);
+  if (typeof L.dayMin === 'number' && L.dayMin > 0) dayMin = L.dayMin;
+  if (L.products && L.products.meritage) lineProducts = JSON.parse(JSON.stringify(L.products));
   refreshCart3Feed();
   if (Array.isArray(L.wps)) { cartWaypoints = L.wps.map(a => ({ x: a[0], z: a[1] })); refreshPath(); }
   if (Array.isArray(L.help)) { helpArrows = L.help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0 })); buildHelp(); }
@@ -3276,7 +3374,7 @@ function buildReportHTML() {
     const sLabor = sIds.reduce((a, id) => a + (nodes[id].s.t || 0), 0);
     const sPpl = sIds.reduce((a, id) => a + (nodes[id].s.ppl || 1), 0);
     let sCyc = 0.1, sBot = '—'; sIds.forEach(id => { const e = effNet(id); if (e > sCyc) { sCyc = e; sBot = nodes[id].s.title; } });
-    const sCap = sCyc > 0 ? 420 / sCyc : 0;
+    const sCap = sCyc > 0 ? dayMinSafe() / sCyc : 0;
     const sHelp = helpArrows.filter(a => isExtra(a.to));
     sola = `<section><h2>Sola + Canyon Crew (right side)</h2>
       <div class="kpis">${kpi('Operators', sPpl)}${kpi('Total labor', num(sLabor) + ' min/unit')}${kpi('Line cycle', num(sCyc) + ' min')}${kpi('Capacity', num(sCap) + ' /day')}${kpi('Stations', sIds.length)}${kpi('Bottleneck', esc(sBot))}</div>
@@ -3533,6 +3631,23 @@ function loop(now){
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
 }
+/* ---- every floating panel gets an ✕ so it's obvious how to close it ---- */
+(() => {
+  const st = document.createElement('style');
+  st.textContent = '.panelX{position:absolute;top:6px;right:6px;width:22px;height:22px;line-height:20px;text-align:center;border:1px solid #d8dee6;border-radius:6px;background:#fff;color:#5a6672;font-size:12px;font-weight:700;cursor:pointer;padding:0;z-index:5}.panelX:hover{background:#c0552c;border-color:#c0552c;color:#fff}';
+  document.head.appendChild(st);
+})();
+function addPanelX(panel, onClose) {
+  if (!panel) return;
+  const old = panel.querySelector(':scope > .panelX'); if (old) old.remove();
+  const x = document.createElement('button'); x.className = 'panelX'; x.title = 'Close'; x.textContent = '✕';
+  x.onclick = ev => { ev.stopPropagation(); onClose(); };
+  panel.appendChild(x);
+}
+(() => {   // Edit-times panel keeps its ✕ (only stepsHost re-renders inside it)
+  const tb = document.getElementById('timesbtn');
+  addPanelX(timeBox, () => { timeBox.style.display = 'none'; if (tb) tb.classList.remove('on'); });
+})();
 /* ---- hover tooltips: every toolbar control shows a short plain-English
    description of what it does. One styled bubble (instant, consistent);
    existing title attributes are absorbed so nothing double-shows. ---- */
@@ -3554,6 +3669,7 @@ function loop(now){
     accesspt: 'Add a forklift access point — the green furniture lanes run to the nearest one',
     addForklift: 'Add a Forklift Access pad with its own animated forklift — drag it into place, right-click to remove. Lanes route to the nearest forklift.',
     flowLanesBtn: 'Show / hide the green furniture-flow lanes — the boxes keep traveling either way',
+    productsBtn: 'Choose what furniture each line runs (labor % vs base times) and set the available minutes per worker — drives takt and capacity',
     lineFocusSel: 'Look at one line by itself — every other line\u2019s tables, crew, carts, lanes and boxes disappear',
     rackbtn: 'Add a finished-goods rack',
     labels: 'Cycle the station labels: names / times / hidden',
