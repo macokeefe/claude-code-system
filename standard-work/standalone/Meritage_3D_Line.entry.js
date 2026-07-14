@@ -2228,9 +2228,10 @@ function renderTimes() {
     if (lp) {
       // pick which PRODUCT's steps you're looking at / editing
       html += `<div class="secProdRow"><span>Editing:</span><select class="secProd" data-line="${sec.key}">` +
-        lp.list.map((q, i) => `<option value="${i}"${i === lp.active ? ' selected' : ''}>${(q.name || '').replace(/</g, '&lt;')}</option>`).join('') + `</select></div>`;
+        lp.list.map((q, i) => `<option value="${i}"${i === lp.active ? ' selected' : ''}>${(q.name || '').replace(/</g, '&lt;')}</option>`).join('') +
+        `<option value="__add">＋ Add product…</option></select></div>`;
       if (ap && !ap.stations && lp.active > 0) {   // the base product IS the base steps — no note needed
-        html += `<div class="secProdNote">Scales the base steps ×${Math.round((ap.f || 1) * 100)}% — the steps below are the BASE product's. <button class="mkSteps" data-line="${sec.key}">✎ give it its own steps</button></div>`;
+        html += `<div class="secProdNote">Scales the base steps ×<input class="prFac" data-line="${sec.key}" type="number" min="5" step="1" value="${Math.round((ap.f || 1) * 100)}" style="width:46px;padding:1px 3px;border:1px solid #c9a25f;border-radius:4px"/>% — the steps below are the BASE product's. <button class="mkSteps" data-line="${sec.key}">✎ give it its own steps</button></div>`;
       }
     }
     html += sec.list.length ? rowsHtml(sec.list, sec.color)
@@ -2243,8 +2244,20 @@ function renderTimes() {
   stepsHost.querySelectorAll('.addInSec').forEach(b => b.onclick = () => addStationInSection(b.dataset.sec));
   stepsHost.querySelectorAll('.secProd').forEach(el => el.onchange = e => {
     const ln = e.target.dataset.line;
-    lineProducts[ln].active = +e.target.value;
+    if (e.target.value === '__add') {                        // add a product to this line
+      const nm = prompt('Product name for this line:');
+      if (!nm) { e.target.value = String(lineProducts[ln].active); return; }
+      const pc = parseFloat(prompt('Labor vs the base times, in % (100 = same):', '100')) || 100;
+      lineProducts[ln].list.push({ name: nm.trim(), f: Math.max(0.05, pc / 100) });
+      lineProducts[ln].active = lineProducts[ln].list.length - 1;
+    } else {
+      lineProducts[ln].active = +e.target.value;
+    }
     activateProductSteps(ln); reflowAll();
+  });
+  stepsHost.querySelectorAll('.prFac').forEach(el => el.onchange = e => {
+    const p = activeProduct(e.target.dataset.line);
+    if (p && !p.stations) { p.f = Math.max(0.05, (+e.target.value || 100) / 100); reflowAll(); }
   });
   stepsHost.querySelectorAll('.mkSteps').forEach(el => el.onclick = e => {
     const ln = e.target.dataset.line, p = activeProduct(ln); if (!p || p.stations) return;
@@ -3112,56 +3125,27 @@ document.getElementById('addwp').onclick = () => {
     flB.classList.toggle('on', !prodLanesOn);
     refreshProdFlow();
   };
-  // 🛋 Products: choose what furniture each line runs + the available time per worker
-  const prB = document.createElement('button');
-  prB.id = 'productsBtn'; prB.className = shipB.className || '';
-  prB.textContent = '🛋 Products';
-  flB.parentNode.insertBefore(prB, flB.nextSibling);
-  const prPanel = document.createElement('div');
-  prPanel.id = 'productsPanel';
-  prPanel.style.cssText = 'position:fixed;display:none;z-index:60;background:#fff;border:1px solid #d8dee6;border-radius:12px;box-shadow:0 12px 30px rgba(20,30,45,.18);padding:12px 14px;font:12px/1.5 Arial,sans-serif;color:#15263a;min-width:290px;max-width:340px';
-  document.body.appendChild(prPanel);
-  function renderProductsPanel() {
-    const row = (key, colr, label) => {
-      const lp = lineProducts[key], p = lp.list[lp.active];
-      return `<div style="color:${colr};font-weight:700;margin-top:8px">${label}</div>
-        <div style="display:flex;gap:6px;align-items:center;margin:2px 0 2px">
-          <select data-line="${key}" class="prSel" style="flex:1;padding:5px;border:1px solid #c9d2dd;border-radius:6px;font-size:12px">
-            ${lp.list.map((q, i) => `<option value="${i}"${i === lp.active ? ' selected' : ''}>${(q.name || '').replace(/</g, '&lt;')}</option>`).join('')}
-          </select>
-          ${p && p.stations ? '<span style="color:#2f7d52;font-weight:700;white-space:nowrap" title="This product has its own measured steps — edit them in Edit times">own steps</span>' : `<input data-line="${key}" class="prF" type="number" min="5" step="5" value="${Math.round((p ? p.f : 1) * 100)}" style="width:56px;padding:5px;border:1px solid #c9d2dd;border-radius:6px"/><span style="color:#5a6672">%</span>`}
-          <button data-line="${key}" class="prAdd" title="Add a product to this line" style="border:1px dashed #9db4cf;background:#f2f6fb;border-radius:6px;padding:4px 8px;cursor:pointer">＋</button>
-        </div>`;
-    };
-    prPanel.innerHTML = `<b style="font-size:13px">🛋 Products & available time</b>
-      <div style="margin:8px 0 2px;color:#5a6672">AVAILABLE TIME PER WORKER</div>
-      <div style="display:flex;gap:6px;align-items:center"><input id="prDayMin" type="number" min="60" max="960" step="15" value="${dayMin}" style="width:80px;padding:5px;border:1px solid #c9d2dd;border-radius:6px"/><span>min / day → takt = time ÷ demand</span></div>
-      <div style="color:#8a93a0;font-size:11px;margin:2px 0 6px">e.g. 480 shift − breaks = 420. Changes takt, capacity and units/day everywhere.</div>
-      ${row('meritage', '#1d3a66', 'MERITAGE runs')}
-      ${row('sola', '#236043', 'SOLA runs')}
-      ${row('canyon', '#9a5b1f', 'CANYON CREW runs')}
-      <div style="color:#8a93a0;font-size:11px;margin-top:6px">% = labor vs the base times (100% = the times in Edit times).</div>
-      <button id="prClose" style="width:100%;margin-top:8px;padding:6px;border:1px solid #c9d2dd;border-radius:8px;background:#f2f6fb;cursor:pointer;font-weight:700">Done</button>`;
-    prPanel.querySelectorAll('.prSel').forEach(el => el.onchange = e => { const ln = e.target.dataset.line; lineProducts[ln].active = +e.target.value; activateProductSteps(ln); reflowAll(); renderProductsPanel(); });
-    prPanel.querySelectorAll('.prF').forEach(el => el.onchange = e => { const lp = lineProducts[e.target.dataset.line]; const p = lp.list[lp.active]; if (p) p.f = Math.max(0.05, (+e.target.value || 100) / 100); reflowAll(); });
-    prPanel.querySelectorAll('.prAdd').forEach(el => el.onclick = e => {
-      const key = e.target.dataset.line;
-      const nm = prompt('Product name for this line:'); if (!nm) return;
-      const pc = parseFloat(prompt('Labor vs base times, in % (100 = same as Edit times):', '100')) || 100;
-      lineProducts[key].list.push({ name: nm.trim(), f: Math.max(0.05, pc / 100) });
-      lineProducts[key].active = lineProducts[key].list.length - 1;
-      reflowAll(); renderProductsPanel();
-    });
-    const dm = prPanel.querySelector('#prDayMin'); if (dm) dm.onchange = e => { dayMin = Math.max(60, Math.min(960, +e.target.value || 420)); reflowAll(); };
-    const c = prPanel.querySelector('#prClose'); if (c) c.onclick = () => { prPanel.style.display = 'none'; };
-  }
-  prB.onclick = () => {
-    if (prPanel.style.display === 'block') { prPanel.style.display = 'none'; return; }
-    renderProductsPanel();
-    const r = prB.getBoundingClientRect();
-    prPanel.style.left = Math.max(8, Math.min(window.innerWidth - 350, r.left)) + 'px';
-    prPanel.style.top = (r.bottom + 8) + 'px';
-    prPanel.style.display = 'block';
+  // ⏱ Available time per worker — drives takt and capacity everywhere
+  const avB = document.createElement('button');
+  avB.id = 'availBtn'; avB.className = shipB.className || '';
+  avB.textContent = '⏱ Avail time';
+  flB.parentNode.insertBefore(avB, flB.nextSibling);
+  const avPanel = document.createElement('div');
+  avPanel.id = 'availPanel';
+  avPanel.style.cssText = 'position:fixed;display:none;z-index:60;background:#fff;border:1px solid #d8dee6;border-radius:12px;box-shadow:0 12px 30px rgba(20,30,45,.18);padding:12px 14px;font:12px/1.5 Arial,sans-serif;color:#15263a;min-width:250px';
+  document.body.appendChild(avPanel);
+  avB.onclick = () => {
+    if (avPanel.style.display === 'block') { avPanel.style.display = 'none'; return; }
+    avPanel.innerHTML = `<b style="font-size:13px">⏱ Available time per worker</b>
+      <div style="display:flex;gap:6px;align-items:center;margin:8px 0 2px"><input id="avMin" type="number" min="60" max="960" step="15" value="${dayMin}" style="width:84px;padding:5px;border:1px solid #c9d2dd;border-radius:6px"/><span>min / day</span></div>
+      <div style="color:#8a93a0;font-size:11px;margin:2px 0 8px">e.g. 480 shift − breaks = 420. Sets takt (= time ÷ demand), capacity and units/day everywhere.</div>
+      <button id="avClose" style="width:100%;padding:6px;border:1px solid #c9d2dd;border-radius:8px;background:#f2f6fb;cursor:pointer;font-weight:700">Done</button>`;
+    avPanel.querySelector('#avMin').onchange = e => { dayMin = Math.max(60, Math.min(960, +e.target.value || 420)); reflowAll(); };
+    avPanel.querySelector('#avClose').onclick = () => { avPanel.style.display = 'none'; };
+    const r = avB.getBoundingClientRect();
+    avPanel.style.left = Math.max(8, Math.min(window.innerWidth - 280, r.left)) + 'px';
+    avPanel.style.top = (r.bottom + 8) + 'px';
+    avPanel.style.display = 'block';
   };
   shipB.onclick = () => {
     if (shipPanel.style.display === 'block') { shipPanel.style.display = 'none'; return; }
@@ -3846,7 +3830,7 @@ function addPanelX(panel, onClose) {
     accesspt: 'Add a forklift access point — the green furniture lanes run to the nearest one',
     addForklift: 'Add a Forklift Access pad with its own animated forklift — drag it into place, right-click to remove. Lanes route to the nearest forklift.',
     flowLanesBtn: 'Show / hide the green furniture-flow lanes — the boxes keep traveling either way',
-    productsBtn: 'Choose what furniture each line runs (labor % vs base times) and set the available minutes per worker — drives takt and capacity',
+    availBtn: 'Set the available minutes per worker per day — drives takt (= time ÷ demand), capacity and units/day everywhere',
     lineFocusSel: 'Look at one line by itself — every other line\u2019s tables, crew, carts, lanes and boxes disappear',
     rackbtn: 'Add a finished-goods rack',
     labels: 'Cycle the station labels: names / times / hidden',
