@@ -1974,6 +1974,8 @@ const stepsHost2 = { innerHTML: '', querySelectorAll: () => [] };   // legacy sh
   #times .sttitle .sttot{margin-left:auto}
   #times .sdelsta{background:#fff;border:1px solid #dcae9f;color:#c0552c;border-radius:6px;padding:2px 7px;font-size:11px;cursor:pointer;flex:none}
   #times .sdelsta:hover{background:#c0552c;color:#fff}
+  #times .smv{flex:none;width:34px;border:1px solid #cfd6de;border-radius:6px;background:#fff;font-size:11px;color:#3c4a5a;padding:1px 0;cursor:pointer}
+  #times .smv:hover{border-color:#1d3a66}
   #times .addInSec{display:block;width:100%;margin:6px 0 2px;background:#f2f6fb;border:1.5px dashed #9db4cf;color:#1d3a66;border-radius:8px;padding:7px;font-size:12px;font-weight:700;cursor:pointer}
   #times .addInSec:hover{background:#e3edf8}
   #times .secempty{font-size:11px;color:#8a93a0;margin:4px 2px}
@@ -2088,10 +2090,19 @@ function recalcAny(id) {
   if (isExtra(id)) { nodes[id].t = s.t; const nd = nodes[id]; if (nd.label && nd.label.userData.redraw) nd.label.userData.redraw(s.t ? +s.t.toFixed(2) + ' min' : '—', s.accent); }
 }
 
+// every other station on the same line — the targets a step can move to
+function moveTargets(id) {
+  const line = stLineOf(id);
+  const ids = lineStationIds(line).slice();
+  if (line === 'meritage' && typeof extraStations !== 'undefined') extraStations.forEach(x => { if (nodes[x] && sectionOf(nodes[x].x, nodes[x].z) === 'meritage') ids.push(x); });
+  return ids.filter(x => x !== id).map(x => getAny(x)).filter(Boolean);
+}
 function rowsHtml(list, accent, fac) {
   fac = fac || 1;   // active product's factor (1 for base/own-steps; scales factor products)
   let html = '';
   list.forEach(s => {
+    const tgt = moveTargets(s.id);
+    const smv = tgt.length ? `<select class="smv" data-id="${s.id}" title="Move this step to another station on this line"><option value="">⇄</option>${tgt.map(t => `<option value="${t.id}">→ ${(t.title || t.id).replace(/</g, '&lt;')}</option>`).join('')}</select>` : '';
     const ppl = Math.max(1, s.ppl || 1), st_t = (s.t || 0) * fac, cyc = (st_t / ppl);
     const canRemove = nodes[s.id] && nodes[s.id].extra;
     html += `<div class="stblock" style="border-left-color:${accent || '#1d3a66'}">
@@ -2103,6 +2114,7 @@ function rowsHtml(list, accent, fac) {
         <input class="sname" data-id="${s.id}" data-si="${si}" value="${(st.name || '').replace(/"/g, '&quot;')}" title="Step name — click to edit"/>
         <input class="stime" type="number" step="0.25" min="0" data-id="${s.id}" data-si="${si}" value="${+((+st.t || 0) * fac).toFixed(2)}" title="Minutes for this step"/>
         <span class="su">min</span>
+        ${smv ? smv.replace('class="smv"', `class="smv" data-si="${si}"`) : ''}
         <button class="sdel" data-id="${s.id}" data-si="${si}" title="Delete this step">✕</button></div>`;
     });
     html += `<div class="stfoot">👤<input class="sppl" type="number" min="1" max="6" step="1" data-id="${s.id}" value="${ppl}" title="People working at this station"/>
@@ -2198,6 +2210,18 @@ function wireRows(host) {
   host.querySelectorAll('button.sdel').forEach(b => b.onclick = e => {
     const id = e.target.dataset.id, s = getAny(id); s.steps.splice(+e.target.dataset.si, 1); if (!s.steps.length) s.steps.push({ name: s.sub || 'Step', t: 0 });
     recalcAny(id); afterEdit(id);
+  });
+  host.querySelectorAll('select.smv').forEach(sel => sel.onchange = e => {
+    const src = e.target.dataset.id, si = +e.target.dataset.si, dst = e.target.value;
+    if (!dst) return;
+    const ss = getAny(src), ds = getAny(dst); if (!ss || !ds || !ss.steps || !ss.steps[si]) { renderTimes(); return; }
+    const st = ss.steps.splice(si, 1)[0];                       // move the step, minutes and all
+    if (!ss.steps.length) ss.steps.push({ name: ss.sub || 'Step', t: 0 });
+    (ds.steps = ds.steps || []).push(st);
+    recalcAny(src); recalcAny(dst);
+    if (isExtra(src) && isExtra(dst)) { renderTimes(); saveLayout(); }
+    else { renderTimes(); schedule(); T = 0; setPlay(false); saveLayout(); }   // a core Meritage station changed → re-pace
+    try { renderIdle(); renderHelpPanel(); renderTaskChart(); } catch (e2) {}
   });
   host.querySelectorAll('button.sdelsta').forEach(b => b.onclick = e => {
     const id = e.target.dataset.id, nd = nodes[id];
