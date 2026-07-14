@@ -2088,10 +2088,11 @@ function recalcAny(id) {
   if (isExtra(id)) { nodes[id].t = s.t; const nd = nodes[id]; if (nd.label && nd.label.userData.redraw) nd.label.userData.redraw(s.t ? +s.t.toFixed(2) + ' min' : '—', s.accent); }
 }
 
-function rowsHtml(list, accent) {
+function rowsHtml(list, accent, fac) {
+  fac = fac || 1;   // active product's factor (1 for base/own-steps; scales factor products)
   let html = '';
   list.forEach(s => {
-    const ppl = Math.max(1, s.ppl || 1), cyc = (s.t / ppl);
+    const ppl = Math.max(1, s.ppl || 1), st_t = (s.t || 0) * fac, cyc = (st_t / ppl);
     const canRemove = nodes[s.id] && nodes[s.id].extra;
     html += `<div class="stblock" style="border-left-color:${accent || '#1d3a66'}">
       <div class="sttitle"><input class="stnm" data-id="${s.id}" value="${(s.title || '').replace(/"/g, '&quot;')}" title="Station name — click to rename"/>${s.bot ? ' <b style="color:#c0552c">◄</b>' : ''}
@@ -2100,12 +2101,12 @@ function rowsHtml(list, accent) {
     (s.steps || []).forEach((st, si) => {
       html += `<div class="strow">
         <input class="sname" data-id="${s.id}" data-si="${si}" value="${(st.name || '').replace(/"/g, '&quot;')}" title="Step name — click to edit"/>
-        <input class="stime" type="number" step="0.25" min="0" data-id="${s.id}" data-si="${si}" value="${st.t}" title="Minutes for this step"/>
+        <input class="stime" type="number" step="0.25" min="0" data-id="${s.id}" data-si="${si}" value="${+((+st.t || 0) * fac).toFixed(2)}" title="Minutes for this step"/>
         <span class="su">min</span>
         <button class="sdel" data-id="${s.id}" data-si="${si}" title="Delete this step">✕</button></div>`;
     });
     html += `<div class="stfoot">👤<input class="sppl" type="number" min="1" max="6" step="1" data-id="${s.id}" value="${ppl}" title="People working at this station"/>
-        <span>people → ${s.t.toFixed(0)} ÷ ${ppl} = <b>${cyc.toFixed(1)} min/unit</b></span>
+        <span>people → ${st_t.toFixed(0)} ÷ ${ppl} = <b>${cyc.toFixed(1)} min/unit</b></span>
         <button class="sadd" data-id="${s.id}" title="Add a step to this station">+ step</button></div>`;
     html += `</div>`;
   });
@@ -2187,7 +2188,8 @@ function wireRows(host) {
     getAny(e.target.dataset.id).steps[+e.target.dataset.si].name = e.target.value; saveLayout();
   });
   host.querySelectorAll('input.stime').forEach(inp => inp.onchange = e => {
-    const id = e.target.dataset.id; getAny(id).steps[+e.target.dataset.si].t = parseFloat(e.target.value) || 0;
+    const id = e.target.dataset.id, fac = (typeof prodF === 'function') ? prodF(stLineOf(id)) : 1;
+    getAny(id).steps[+e.target.dataset.si].t = (parseFloat(e.target.value) || 0) / (fac || 1);   // store the BASE value; display was scaled by the product
     recalcAny(id); afterEdit(id);
   });
   host.querySelectorAll('button.sadd').forEach(b => b.onclick = e => {
@@ -2220,7 +2222,8 @@ function renderTimes() {
   ];
   let html = '';
   SECTIONS.forEach(sec => {
-    const tot = sec.list.reduce((a, s) => a + (s.t || 0), 0);
+    const secFac = (typeof prodF === 'function') ? prodF(sec.key) : 1;
+    const tot = sec.list.reduce((a, s) => a + (s.t || 0) * secFac, 0);
     const lp = (typeof lineProducts !== 'undefined' && lineProducts) ? lineProducts[sec.key] : null;
     const ap = lp ? lp.list[lp.active] : null;
     html += `<div class="secCol">`;
@@ -2234,7 +2237,7 @@ function renderTimes() {
         html += `<div class="secProdNote">Scales the base steps ×<input class="prFac" data-line="${sec.key}" type="number" min="5" step="1" value="${Math.round((ap.f || 1) * 100)}" style="width:46px;padding:1px 3px;border:1px solid #c9a25f;border-radius:4px"/>% — the steps below are the BASE product's. <button class="mkSteps" data-line="${sec.key}">✎ give it its own steps</button></div>`;
       }
     }
-    html += sec.list.length ? rowsHtml(sec.list, sec.color)
+    html += sec.list.length ? rowsHtml(sec.list, sec.color, secFac)
       : `<div class="secempty">No ${sec.label.toLowerCase()} stations yet — add one below, or drag a table into this part of the floor.</div>`;
     html += `<button class="addInSec" data-sec="${sec.key}">＋ Add station to ${sec.label}</button>`;
     html += `</div>`;
@@ -2538,13 +2541,14 @@ function renderTaskChart() {
   let rows, totalLabor;
   if (chartLine !== 'meritage') {   // Sola or Canyon Crew — each its own line
     const ids = orderedLine(chartLine);
-    rows = ids.map(id => { const s = nodes[id].s; return { title: s.title, tt: (s.t || 0) / Math.max(1, s.ppl || 1), steps: s.steps, bn: false }; });
-    totalLabor = ids.reduce((a, id) => a + (nodes[id].s.t || 0), 0);
+    const cf = prodF(chartLine);
+    rows = ids.map(id => { const s = nodes[id].s; return { title: s.title, tt: ((s.t || 0) / Math.max(1, s.ppl || 1)) * cf, steps: s.steps, bn: false }; });
+    totalLabor = ids.reduce((a, id) => a + (nodes[id].s.t || 0), 0) * cf;
   } else {
     // Full assembly + pack are done by the SAME 2 people back-to-back → one bar.
     rows = ['con','arm','bak','tre','sea'].map(id => ({ title: get(id).title, tt: effNet(id), steps: get(id).steps, bn: false }));
     rows.push({ title: 'FULL ASSEMBLY + PACK', tt: effNet('fa') + effNet('pak'), steps: [...(get('fa').steps || []), ...(get('pak').steps || [])], bn: false });
-    totalLabor = ['con','arm','bak','tre','sea','fa','pak'].reduce((a, id) => a + (get(id).t || 0), 0);
+    totalLabor = ['con','arm','bak','tre','sea','fa','pak'].reduce((a, id) => a + (get(id).t || 0), 0) * prodF('meritage');
   }
   let bnR = null; rows.forEach(r => { if (!bnR || r.tt > bnR.tt) bnR = r; }); if (bnR) bnR.bn = true;
   const cyc = Math.max(0.001, ...rows.map(r => r.tt));
