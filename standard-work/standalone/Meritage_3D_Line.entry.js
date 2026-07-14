@@ -2308,7 +2308,7 @@ let lineProducts = {
       pak: [['Box bottom + strap', 4.66], ['Cushions, wrap, top box', 6.8]],
     } },
   ] },
-  sola:     { active: 0, list: [{ name: 'Sola Lounge — no arms', f: 1 }, { name: 'Sola Lounge — 1 arm', f: 1.01 }, { name: 'Sola Lounge — both arms', f: 1.065 }, { name: 'Sola — middle leg', f: 1.05 }] },   // 1-arm & both-arms: each arm adds the SAME delta (+3.5 conn-plate station, +2.0 frame). both = base + 2x that = ~179.7/168.7 ≈ 106.5%
+  sola:     { active: 0, list: [{ name: 'Sola Lounge — no arms', f: 1 }, { name: 'Sola Lounge — 1 arm', f: 1.01 }, { name: 'Sola Lounge — both arms', f: 1.065 }, { name: 'Sola — middle leg', f: 1.02 }] },   // MEASURED (no-arms middle-leg SWI): middle leg adds only the 3:20 Middle Leg Sub-Assembly step → 172.0/168.7 ≈ 102%. 1-arm/both-arms: each arm adds +3.5 (conn-plate) +2.0 (frame); both = base + 2x = ~179.7 ≈ 106.5%
   canyon:   { active: 0, list: [{ name: 'Canyon Chair', f: 1 }] },
 };
 let baseSteps = {};   // lineKey -> {stationId: steps snapshot} while a steps-product is active (persisted as __baseSteps)

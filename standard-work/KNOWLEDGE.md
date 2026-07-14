@@ -125,6 +125,18 @@ stashes base steps in baseSteps (persisted __baseSteps) and swaps s.steps;
 Edit-times edits while active sync back into the product on saveLayout
 (syncProductSteps); prodF()=1 for steps-products; lineProducts._v=4.
 
+### Sola middle-leg (no-arms) SWI (2026-07, ab737632)
+Sheet is explicitly "Sola Lounge (No arms)" — a clean no-arm vs no-arm+middle-leg
+comparison. The middle leg adds exactly ONE timed step: Middle Leg Sub-Assembly
+= 3:20 (3.33 min) — assemble 2 short + 1 medium leg extrusions, bolt to frame
+underside. Connector pre-assembly still 14 (middle-leg connectors "pre-installed",
+NOT added here — contradicts the earlier +4-connector assumption), frame sub still
+2x8:30=17, all else standard. So delta = +3.33 min only → factor 172.0/168.7 ≈
+1.02 (was a 1.05 guess). For shape-accuracy the +3.33 belongs on the FRAME station
+(38.2 -> 41.53, worsening the Sola bottleneck) via give-it-its-own-steps; the
+flat 1.02 smears it. Sheet has untimed steps (PPE, seat support assembly) and no
+packing, so it can't yield a full standalone total — only the delta.
+
 ## App/modeling conventions tied to these facts
 
 - SKU = one configuration (SOLA-BASE / SOLA-RA / SOLA-NA seeded; SOLA-BASE is
