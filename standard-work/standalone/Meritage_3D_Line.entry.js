@@ -1980,7 +1980,21 @@ const stepsHost2 = { innerHTML: '', querySelectorAll: () => [] };   // legacy sh
   #times .stfoot{display:flex;align-items:center;gap:6px;font-size:11px;color:#33414f;margin-top:5px}
   #times .stfoot .sppl{width:38px}
   #times .strow .stime{width:52px}
-  #times .sadd{margin-left:auto}`;
+  #times .sadd{margin-left:auto}
+  /* ---- FULL-PAGE Edit-times: the panel becomes its own page, three line
+     columns side by side, bigger inputs — much easier to work in ---- */
+  #times.fullpage{position:fixed !important;left:0 !important;top:0 !important;right:0 !important;bottom:0 !important;width:auto !important;height:auto !important;max-width:none !important;max-height:none !important;transform:none !important;zoom:1 !important;z-index:80;overflow:auto;background:#eef1f5;border-radius:0;box-shadow:none;padding:16px 30px 40px}
+  #times.fullpage > h3{max-width:1440px;margin:2px auto 4px;font-size:19px}
+  #times.fullpage .movectl{max-width:1440px;margin:0 auto 12px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+  #times.fullpage #stepsHost{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:0 26px;align-items:start;max-width:1440px;margin:0 auto}
+  #times.fullpage .secCol{min-width:0}
+  #times.fullpage .secHdr{font-size:14px;padding:10px 12px}
+  #times.fullpage .stnm{font-size:14px}
+  #times.fullpage .strow .sname{font-size:13px;padding:4px 6px}
+  #times.fullpage .strow .stime{width:64px;font-size:13px;padding:4px}
+  #times.fullpage .stblock{padding:10px 12px}
+  #times.fullpage .stfoot{font-size:12.5px}
+  #times.fullpage .panelX{width:30px;height:30px;line-height:28px;font-size:15px;top:12px;right:16px;position:fixed}`;
   document.head.appendChild(st);
 })();
 
@@ -2204,10 +2218,12 @@ function renderTimes() {
   SECTIONS.forEach(sec => {
     const tot = sec.list.reduce((a, s) => a + (s.t || 0), 0);
     const apn = (typeof activeProduct === 'function' && activeProduct(sec.key)) ? activeProduct(sec.key).name : '';
+    html += `<div class="secCol">`;
     html += `<div class="secHdr" style="background:${sec.color}"><span>${sec.label}</span><span class="secTot">${apn ? apn + ' · ' : ''}${sec.list.length} station${sec.list.length === 1 ? '' : 's'} · ${tot.toFixed(1).replace(/\.0$/, '')} min</span></div>`;
     html += sec.list.length ? rowsHtml(sec.list, sec.color)
       : `<div class="secempty">No ${sec.label.toLowerCase()} stations yet — add one below, or drag a table into this part of the floor.</div>`;
     html += `<button class="addInSec" data-sec="${sec.key}">＋ Add station to ${sec.label}</button>`;
+    html += `</div>`;
   });
   stepsHost.innerHTML = html;
   wireRows(stepsHost);
@@ -2497,9 +2513,13 @@ document.getElementById('taskbtn').onclick = () => {
 // toggle the editable Station-times panel like the other panels
 { const tb = document.getElementById('timesbtn'); if (tb) tb.onclick = () => {
   const hidden = timeBox.style.display === 'none';
+  timeBox.classList.add('fullpage');                   // Edit times is its own page now
   timeBox.style.display = hidden ? 'block' : 'none';
   tb.classList.toggle('on', hidden);
 }; }
+timeBox.classList.add('fullpage');
+timeBox.style.display = 'none';                        // starts closed — the floor is the home screen
+{ const tb = document.getElementById('timesbtn'); if (tb) tb.classList.remove('on'); }
 
 /* =========================== EDIT LAYOUT =========================== */
 // (YARD is defined near the top, next to FT)
