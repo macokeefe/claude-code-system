@@ -2324,7 +2324,33 @@ function reflowAll() {   // one call after any product / available-time change
   schedule(); if (typeof buildSolaSched === 'function') buildSolaSched();
   if (typeof renderSolaData === 'function') renderSolaData();
   try { renderIdle(); renderHelpPanel(); renderTaskChart(); } catch (e) {}
+  if (typeof refreshRunSelectors === 'function') refreshRunSelectors();
   saveLayout();
+}
+/* ---- "Running:" product selector INSIDE each line's HUD card — pick what
+   each line builds right where you press Play. Stays in sync with the 🛋
+   Products panel and the Edit-times pickers (one active product per line). ---- */
+function refreshRunSelectors() {
+  if (typeof lineProducts === 'undefined' || !lineProducts || !document.querySelector('.readouts')) return;
+  if (!document.getElementById('runProdCss')) {
+    const st = document.createElement('style'); st.id = 'runProdCss';
+    st.textContent = '.runProdChip{background:rgba(255,255,255,.93);border:1px solid #dfe3e8;border-radius:10px;padding:3px 8px;display:flex;flex-direction:column;justify-content:center;box-shadow:0 1px 4px rgba(20,30,45,.08)}.runProdChip .k{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:#5a6672}.runProd{border:none;background:transparent;font-weight:800;font-size:12px;color:#15263a;max-width:180px;padding:0;cursor:pointer}.runProd:focus{outline:none}';
+    document.head.appendChild(st);
+  }
+  const map = { 'MERITAGE': 'meritage', 'SOLA': 'sola', 'CANYON CREW': 'canyon' };
+  document.querySelectorAll('.readouts .rdttl').forEach(t => {
+    const key = map[(t.textContent || '').trim()]; if (!key) return;
+    let chip = t.parentNode.querySelector('.runProdChip');
+    if (!chip) {
+      chip = document.createElement('div'); chip.className = 'rd runProdChip';
+      chip.innerHTML = '<div class="k">Running</div><select class="runProd" title="What this line builds when you press Play"></select>';
+      t.parentNode.insertBefore(chip, t.nextSibling);
+      chip.querySelector('.runProd').onchange = e => { lineProducts[key].active = +e.target.value; activateProductSteps(key); reflowAll(); };
+    }
+    const sel = chip.querySelector('.runProd'), lp = lineProducts[key];
+    const want = lp.list.map((p, i) => `<option value="${i}"${i === lp.active ? ' selected' : ''}>${(p.name || '').replace(/</g, '&lt;')}</option>`).join('');
+    if (sel.innerHTML !== want) sel.innerHTML = want; else sel.value = String(lp.active);
+  });
 }
 let taktDemand = 10;   // units/day target for the takt line
 let chartLine = 'meritage';   // which line the Idle / Task / Help panels show
@@ -3858,5 +3884,6 @@ function addPanelX(panel, onClose) {
     el.addEventListener('click', () => { tipEl.style.display = 'none'; });
   });
 })();
+try { refreshRunSelectors(); } catch (e) {}
 try { schedule(); update(); } catch (e) { console.error('init schedule/update failed', e); }
 requestAnimationFrame(loop);   // always start the render loop
