@@ -1981,6 +1981,10 @@ const stepsHost2 = { innerHTML: '', querySelectorAll: () => [] };   // legacy sh
   #times .stfoot .sppl{width:38px}
   #times .strow .stime{width:52px}
   #times .sadd{margin-left:auto}
+  #times .secProdRow{display:flex;gap:7px;align-items:center;margin:6px 0 2px;font-size:11.5px;color:#5a6672}
+  #times .secProdRow .secProd{flex:1;padding:4px 6px;border:1px solid #c9d2dd;border-radius:6px;font-size:12px;font-weight:700;color:#15263a}
+  #times .secProdNote{font-size:11px;color:#8a6d1f;background:#fdf6ef;border:1px solid #ecd9c4;border-radius:7px;padding:5px 8px;margin:4px 0}
+  #times .secProdNote .mkSteps{border:1px dashed #c9a25f;background:#fff;border-radius:6px;padding:2px 7px;cursor:pointer;font-size:11px;margin-left:4px}
   /* ---- FULL-PAGE Edit-times: the panel becomes its own page, three line
      columns side by side, bigger inputs — much easier to work in ---- */
   #times.fullpage{position:fixed !important;left:0 !important;top:0 !important;right:0 !important;bottom:0 !important;width:auto !important;height:auto !important;max-width:none !important;max-height:none !important;transform:none !important;zoom:1 !important;z-index:80;overflow:auto;background:#eef1f5;border-radius:0;box-shadow:none;padding:16px 30px 40px}
@@ -2217,9 +2221,18 @@ function renderTimes() {
   let html = '';
   SECTIONS.forEach(sec => {
     const tot = sec.list.reduce((a, s) => a + (s.t || 0), 0);
-    const apn = (typeof activeProduct === 'function' && activeProduct(sec.key)) ? activeProduct(sec.key).name : '';
+    const lp = (typeof lineProducts !== 'undefined' && lineProducts) ? lineProducts[sec.key] : null;
+    const ap = lp ? lp.list[lp.active] : null;
     html += `<div class="secCol">`;
-    html += `<div class="secHdr" style="background:${sec.color}"><span>${sec.label}</span><span class="secTot">${apn ? apn + ' · ' : ''}${sec.list.length} station${sec.list.length === 1 ? '' : 's'} · ${tot.toFixed(1).replace(/\.0$/, '')} min</span></div>`;
+    html += `<div class="secHdr" style="background:${sec.color}"><span>${sec.label}</span><span class="secTot">${sec.list.length} station${sec.list.length === 1 ? '' : 's'} · ${tot.toFixed(1).replace(/\.0$/, '')} min</span></div>`;
+    if (lp) {
+      // pick which PRODUCT's steps you're looking at / editing
+      html += `<div class="secProdRow"><span>Editing:</span><select class="secProd" data-line="${sec.key}">` +
+        lp.list.map((q, i) => `<option value="${i}"${i === lp.active ? ' selected' : ''}>${(q.name || '').replace(/</g, '&lt;')}</option>`).join('') + `</select></div>`;
+      if (ap && !ap.stations && lp.active > 0) {   // the base product IS the base steps — no note needed
+        html += `<div class="secProdNote">Scales the base steps ×${Math.round((ap.f || 1) * 100)}% — the steps below are the BASE product's. <button class="mkSteps" data-line="${sec.key}">✎ give it its own steps</button></div>`;
+      }
+    }
     html += sec.list.length ? rowsHtml(sec.list, sec.color)
       : `<div class="secempty">No ${sec.label.toLowerCase()} stations yet — add one below, or drag a table into this part of the floor.</div>`;
     html += `<button class="addInSec" data-sec="${sec.key}">＋ Add station to ${sec.label}</button>`;
@@ -2228,6 +2241,19 @@ function renderTimes() {
   stepsHost.innerHTML = html;
   wireRows(stepsHost);
   stepsHost.querySelectorAll('.addInSec').forEach(b => b.onclick = () => addStationInSection(b.dataset.sec));
+  stepsHost.querySelectorAll('.secProd').forEach(el => el.onchange = e => {
+    const ln = e.target.dataset.line;
+    lineProducts[ln].active = +e.target.value;
+    activateProductSteps(ln); reflowAll();
+  });
+  stepsHost.querySelectorAll('.mkSteps').forEach(el => el.onclick = e => {
+    const ln = e.target.dataset.line, p = activeProduct(ln); if (!p || p.stations) return;
+    const fct = Math.max(0.05, +p.f || 1);
+    p.stations = {};
+    lineStationIds(ln).forEach(id => { const s2 = getAny(id); if (s2) p.stations[id] = (s2.steps || []).map(st => [st.name, +((+st.t || 0) * fct).toFixed(2)]); });
+    delete p.f;                                              // it owns absolute steps now
+    activateProductSteps(ln); reflowAll();
+  });
   if (typeof renderSolaData === 'function') renderSolaData();
 }
 renderTimes();
