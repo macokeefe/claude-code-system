@@ -2309,7 +2309,7 @@ let lineProducts = {
     } },
   ] },
   sola:     { active: 0, list: [{ name: 'Sola Lounge — no arms', f: 1 }, { name: 'Sola Lounge — 1 arm', f: 1.01 }, { name: 'Sola Lounge — both arms', f: 1.065 }, { name: 'Sola — middle leg', f: 1.05 }] },   // 1-arm & both-arms: each arm adds the SAME delta (+3.5 conn-plate station, +2.0 frame). both = base + 2x that = ~179.7/168.7 ≈ 106.5%
-  canyon:   { active: 0, list: [{ name: 'Canyon Chair', f: 1 }, { name: 'Canyon Ottoman', f: 0.5 }] },
+  canyon:   { active: 0, list: [{ name: 'Canyon Chair', f: 1 }] },
 };
 let baseSteps = {};   // lineKey -> {stationId: steps snapshot} while a steps-product is active (persisted as __baseSteps)
 // merge a SAVED product list with the code defaults: keep everything the user
@@ -2328,6 +2328,9 @@ function mergeProducts(saved) {
       const dp = byName.get(p.name);
       if (dp && !p.stations && !dp.stations && typeof dp.f === 'number') p.f = dp.f;
     });
+    // retire the guessed Canyon Ottoman (kept only if the user gave it real steps)
+    saved[line].list = saved[line].list.filter(p => !(p.name === 'Canyon Ottoman' && !p.stations));
+    if (saved[line].active >= saved[line].list.length) saved[line].active = 0;
     const have = new Set(saved[line].list.map(p => p.name));
     DEFAULT_PRODUCTS[line].list.forEach(dp => { if (!have.has(dp.name)) saved[line].list.push(JSON.parse(JSON.stringify(dp))); });
   });
