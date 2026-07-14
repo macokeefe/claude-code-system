@@ -523,16 +523,8 @@ for (const cx2 of [MX0+3, MX1-3]) for (const cz2 of [-8,0,8]) {
   const base = bx(0.7,0.1,0.7,MAT.steel); base.position.set(cx2,0.05,cz2); scene.add(base);
 }
 // (mirror-deck railings removed too)
-// crossable divider line (painted, not a wall) with an open crossing at the connector station
-const dividerGroup = new THREE.Group(); level2.add(dividerGroup);
-function rebuildDivider(){
-  while (dividerGroup.children.length) dividerGroup.remove(dividerGroup.children[0]);
-  const dx = DECK.x1 + AISLE/2;
-  for (let z = DECK.z0; z < DECK.z1; z += 1.2) {              // plain continuous dashed line — no crossing marker (connector station is not shared between lines)
-    const seg = bx(0.12, 0.02, 0.7, MAT.tape); seg.position.set(dx, 0.06, z + 0.35); dividerGroup.add(seg);
-  }
-}
-rebuildDivider();
+// (yellow painted divider line down the middle of the deck removed — the baked zone tints mark the lines)
+function rebuildDivider(){}
 
 // proper enclosed freight elevator that docks the floor edge
 function makeElevator(x,z){
@@ -2588,7 +2580,7 @@ function renderTaskChart() {
   const taktPct = (takt / scaleMax) * 100;
   let html = `<h3>Task distribution — operator loading</h3>` + lineSel();
   if (!rows.length) { taskPanel.innerHTML = html + '<div class="ihint">No right-side stations yet.</div>'; wireLineSel(taskPanel); return; }
-  html += `<div class="ihint"><b>Total labor: ${totalLabor.toFixed(1)} min/unit</b> · cycle ${cyc.toFixed(1)} · <span id="taktVal" title="Double-click to type a takt time — the chart updates to show it" style="color:#d11;font-weight:700;cursor:pointer;border-bottom:1px dashed #d11">takt ${takt.toFixed(1)} min</span> (<input type="number" id="taktDemand" value="${+taktDemand.toFixed(1)}" min="1" style="width:44px"> units / <span id="dayHrsVal" title="Double-click to change the day length" style="cursor:pointer;border-bottom:1px dashed #9aa">${(dayMin/60).toFixed(1)}-hr</span> day). Red line = takt.</div>`;
+  html += `<div class="ihint"><b>Cycle: ${totalLabor.toFixed(1)} min/unit</b> · current pace ${cyc.toFixed(1)} · <span id="taktVal" title="Double-click to type a takt time — the chart updates to show it" style="color:#d11;font-weight:700;cursor:pointer;border-bottom:1px dashed #d11">takt ${takt.toFixed(1)} min</span> (<input type="number" id="taktDemand" value="${+taktDemand.toFixed(1)}" min="1" style="width:44px"> units / <span id="dayHrsVal" title="Double-click to change the day length" style="cursor:pointer;border-bottom:1px dashed #9aa">${(dayMin/60).toFixed(1)}-hr</span> day). Red line = takt.</div>`;
   rows.forEach(row => {
     const tt = row.tt;
     const onBn = row.bn;
@@ -3576,7 +3568,7 @@ function buildReportHTML() {
   const kpi = (l, v) => `<div class="kpi"><div class="kl">${l}</div><div class="kv">${v}</div></div>`;
   const walkNote = walkOn ? ` Station times include walking to linked tables at ${walkSpeed} yd/min (${tripsPerUnit} trip${tripsPerUnit > 1 ? 's' : ''}/unit).` : '';
   let mer = `<section><h2>Meritage 3-Seater</h2>
-    <div class="kpis">${kpi('Operators', merPpl)}${kpi('Total labor', num(merLabor) + ' min/unit')}${kpi('Line cycle', num(bn.time) + ' min')}${kpi('Capacity', num(bn.cap) + ' /day')}${kpi('Takt (' + taktDemand + '/day)', num(takt) + ' min')}${kpi('Bottleneck', esc(bnName))}</div>
+    <div class="kpis">${kpi('Operators', merPpl)}${kpi('Cycle', num(merLabor) + ' min/unit')}${kpi('Current pace', num(bn.time) + ' min')}${kpi('Capacity', num(bn.cap) + ' /day')}${kpi('Takt (' + taktDemand + '/day)', num(takt) + ' min')}${kpi('Bottleneck', esc(bnName))}</div>
     <h3>Build sequence</h3>
     <p class="lead">The five sub-assembly stations run <b>in parallel</b>; their parts feed <b>Full Assembly</b>, then the unit goes to <b>Cushions &amp; Pack</b>.${walkNote}</p>
     <div class="stage"><div class="sh">1 · Sub-assemblies (parallel)</div><div class="grid">${feeders.map(s => card(s)).join('')}</div></div>
@@ -3594,7 +3586,7 @@ function buildReportHTML() {
     const sCap = sCyc > 0 ? dayMinSafe() / sCyc : 0;
     const sHelp = helpArrows.filter(a => isExtra(a.to));
     sola = `<section><h2>Sola + Canyon Crew (right side)</h2>
-      <div class="kpis">${kpi('Operators', sPpl)}${kpi('Total labor', num(sLabor) + ' min/unit')}${kpi('Line cycle', num(sCyc) + ' min')}${kpi('Capacity', num(sCap) + ' /day')}${kpi('Stations', sIds.length)}${kpi('Bottleneck', esc(sBot))}</div>
+      <div class="kpis">${kpi('Operators', sPpl)}${kpi('Cycle', num(sLabor) + ' min/unit')}${kpi('Current pace', num(sCyc) + ' min')}${kpi('Capacity', num(sCap) + ' /day')}${kpi('Stations', sIds.length)}${kpi('Bottleneck', esc(sBot))}</div>
       <h3>Build sequence (in order of flow)</h3>
       <p class="lead">Single-piece flow — each unit moves through the stations below in this order.</p>
       <div class="grid">${sIds.map((id, i) => card(nodes[id].s, i + 1)).join('')}</div>
