@@ -2318,6 +2318,13 @@ function mergeProducts(saved) {
   if (!saved || !saved.meritage) return;
   ['meritage', 'sola', 'canyon'].forEach(line => {
     if (!saved[line]) { saved[line] = JSON.parse(JSON.stringify(DEFAULT_PRODUCTS[line])); return; }
+    const byName = new Map(DEFAULT_PRODUCTS[line].list.map(p => [p.name, p]));
+    saved[line].list.forEach(p => {
+      // keep your own-steps products untouched; refresh estimate FACTORS from the
+      // latest measured defaults so switching sizes actually changes the numbers
+      const dp = byName.get(p.name);
+      if (dp && !p.stations && !dp.stations && typeof dp.f === 'number') p.f = dp.f;
+    });
     const have = new Set(saved[line].list.map(p => p.name));
     DEFAULT_PRODUCTS[line].list.forEach(dp => { if (!have.has(dp.name)) saved[line].list.push(JSON.parse(JSON.stringify(dp))); });
   });
