@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WaterAware — Live Water Quality Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0B0E13;
+  --panel: #141922;
+  --panel-border: rgba(255,255,255,0.09);
+  --text: #EDF1F7;
+  --subtext: #9AA4B2;
+  --muted: #5C6672;
+  --accent: #2F80ED;
+  --excellent: #2ECC71;
+  --good: #A3D65C;
+  --moderate: #F1C40F;
+  --poor: #E67E22;
+  --verypoor: #E74C3C;
+  --nodata: #55606D;
+}
+
+html, body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100%;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app { display: flex; flex-direction: column; height: 100vh; }
+
+/* ─── HEADER ─────────────────────────────── */
+header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 18px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--panel-border);
+  z-index: 1200;
+}
+.logo {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 17px; font-weight: 700; letter-spacing: -0.02em;
+}
+.logo .drop {
+  width: 26px; height: 26px; border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  background: linear-gradient(135deg, #37A8FF, #2F80ED);
+  display: inline-block;
+}
+.logo em { font-style: normal; color: #4FA8FF; }
+.tagline { font-size: 12.5px; color: var(--subtext); }
+header .spacer { flex: 1; }
+.hdr-btn {
+  font-family: inherit; font-size: 12.5px; font-weight: 600;
+  color: var(--text); background: transparent;
+  border: 1px solid var(--panel-border); border-radius: 8px;
+  padding: 7px 14px; cursor: pointer;
+}
+.hdr-btn:hover { border-color: var(--accent); color: #7db6f5; }
+
+/* ─── MAIN ─────────────────────────────── */
+#main { position: relative; flex: 1; display: flex; }
+#map { flex: 1; background: #0B0E13; }
+.leaflet-container { font-family: 'Inter', sans-serif; }
+
+/* ─── STATUS BANNER ─────────────────────── */
+#status {
+  position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+  z-index: 1100;
+  background: rgba(20,25,34,0.92);
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  padding: 7px 18px;
+  font-size: 12.5px; color: var(--subtext);
+  display: none; align-items: center; gap: 8px;
+  max-width: 90%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#status.show { display: flex; }
+#status .pulse {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent); flex: none;
+  animation: pulse 1.1s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+#status.error .pulse { background: var(--verypoor); animation: none; }
+
+/* ─── RANKING PANEL ─────────────────────── */
+#panel {
+  position: absolute; top: 16px; right: 16px;
+  z-index: 1100;
+  width: 330px; max-height: calc(100% - 110px);
+  background: rgba(20,25,34,0.95);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  backdrop-filter: blur(6px);
+}
+#panel.collapsed .panel-body, #panel.collapsed .panel-foot { display: none; }
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px 10px;
+}
+.panel-head h2 { font-size: 14.5px; font-weight: 700; letter-spacing: -0.01em; }
+.panel-head .sub { font-size: 11.5px; color: var(--subtext); margin-top: 2px; }
+.panel-toggle {
+  background: none; border: none; color: var(--subtext);
+  font-size: 16px; cursor: pointer; padding: 4px 6px;
+}
+.sort-row { display: flex; gap: 6px; padding: 0 16px 10px; }
+.sort-row button {
+  flex: 1; font-family: inherit; font-size: 11.5px; font-weight: 600;
+  padding: 6px 0; border-radius: 7px; cursor: pointer;
+  background: transparent; color: var(--subtext);
+  border: 1px solid var(--panel-border);
+}
+.sort-row button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.panel-body { overflow-y: auto; padding: 0 8px 8px; }
+.panel-body::-webkit-scrollbar { width: 8px; }
+.panel-body::-webkit-scrollbar-thumb { background: #2a3240; border-radius: 4px; }
+.rank-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; border-radius: 9px; cursor: pointer;
+}
+.rank-row:hover { background: rgba(255,255,255,0.05); }
+.rank-num { width: 18px; text-align: right; font-size: 12px; color: var(--muted); flex: none; }
+.rank-name { flex: 1; min-width: 0; }
+.rank-name .nm {
+  display: block; font-size: 12.5px; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rank-name .st { display: block; font-size: 10.5px; color: var(--muted); margin-top: 1px; }
+.score-badge {
+  flex: none; min-width: 44px; text-align: center;
+  font-size: 13px; font-weight: 700; color: #10151c;
+  padding: 5px 8px; border-radius: 8px;
+}
+.panel-empty { padding: 22px 16px 26px; font-size: 12.5px; color: var(--subtext); text-align: center; line-height: 1.55; }
+.panel-foot {
+  padding: 9px 16px 12px;
+  border-top: 1px solid var(--panel-border);
+  font-size: 10.5px; color: var(--muted); line-height: 1.5;
+}
+.panel-foot a { color: var(--subtext); }
+
+/* ─── LEGEND ─────────────────────────────── */
+#legend {
+  position: absolute; left: 16px; bottom: 16px; z-index: 1100;
+  background: rgba(20,25,34,0.95);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 11px;
+  backdrop-filter: blur(6px);
+}
+#legend .lg-title { font-weight: 700; font-size: 11.5px; margin-bottom: 8px; }
+.lg-row { display: flex; align-items: center; gap: 8px; margin-top: 5px; color: var(--subtext); }
+.lg-chip { width: 22px; height: 13px; border-radius: 4px; flex: none; }
+
+/* ─── MARKERS ─────────────────────────────── */
+.wq-marker {
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 9px;
+  font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 700;
+  color: #10151c;
+  border: 2px solid rgba(255,255,255,0.85);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.55);
+}
+.wq-dot {
+  border-radius: 50%;
+  background: var(--nodata);
+  border: 1.5px solid rgba(255,255,255,0.5);
+  opacity: 0.85;
+}
+
+/* ─── POPUP ─────────────────────────────── */
+.leaflet-popup-content-wrapper {
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--panel-border); border-radius: 12px;
+}
+.leaflet-popup-tip { background: var(--panel); }
+.leaflet-popup-content { margin: 14px 16px; font-size: 12.5px; width: 268px !important; }
+.pp-name { font-weight: 700; font-size: 13px; line-height: 1.35; padding-right: 10px; }
+.pp-score {
+  display: flex; align-items: center; gap: 10px; margin: 10px 0 4px;
+}
+.pp-score .big {
+  font-size: 22px; font-weight: 700; color: #10151c;
+  padding: 5px 13px; border-radius: 9px;
+}
+.pp-score .cat { font-weight: 600; font-size: 13px; }
+.pp-score .cat small { display: block; font-weight: 400; font-size: 10.5px; color: var(--muted); }
+.pp-table { width: 100%; margin-top: 8px; border-collapse: collapse; }
+.pp-table td { padding: 4px 0; border-top: 1px solid var(--panel-border); color: var(--subtext); font-size: 11.5px; }
+.pp-table td:last-child { text-align: right; color: var(--text); font-weight: 600; }
+.pp-time { margin-top: 9px; font-size: 10.5px; color: var(--muted); }
+.pp-link { display: inline-block; margin-top: 7px; font-size: 11.5px; color: #7db6f5; }
+
+/* ─── ABOUT MODAL ─────────────────────────── */
+#about-overlay {
+  position: fixed; inset: 0; z-index: 2000;
+  background: rgba(5,8,12,0.7);
+  display: none; align-items: center; justify-content: center;
+  padding: 20px;
+}
+#about-overlay.show { display: flex; }
+#about {
+  width: 560px; max-width: 100%; max-height: 86vh; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--panel-border);
+  border-radius: 16px; padding: 26px 28px;
+  font-size: 13px; line-height: 1.65; color: var(--subtext);
+}
+#about h2 { color: var(--text); font-size: 18px; margin-bottom: 12px; }
+#about h3 { color: var(--text); font-size: 13.5px; margin: 18px 0 6px; }
+#about code { background: rgba(255,255,255,0.07); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+#about .close-row { text-align: right; margin-top: 18px; }
+#about a { color: #7db6f5; }
+.warn {
+  margin-top: 14px; padding: 10px 12px; border-radius: 9px;
+  background: rgba(230,126,34,0.12); border: 1px solid rgba(230,126,34,0.35);
+  color: #f0b27a; font-size: 12px;
+}
+
+@media (max-width: 720px) {
+  #panel { width: calc(100% - 32px); max-height: 46%; }
+  .tagline { display: none; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="logo"><span class="drop"></span>Water<em>Aware</em></div>
+    <div class="tagline">Live water quality from real-time monitoring stations — because awareness comes first.</div>
+    <div class="spacer"></div>
+    <button class="hdr-btn" id="btn-about">About &amp; methodology</button>
+  </header>
+
+  <div id="main">
+    <div id="map"></div>
+
+    <div id="status"><span class="pulse"></span><span id="status-text">Loading stations…</span></div>
+
+    <div id="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Live water quality ranking</h2>
+          <div class="sub" id="panel-sub">Stations in current view</div>
+        </div>
+        <button class="panel-toggle" id="panel-toggle" title="Collapse">▾</button>
+      </div>
+      <div class="sort-row">
+        <button id="sort-worst" class="active">Most concerning</button>
+        <button id="sort-best">Cleanest</button>
+      </div>
+      <div class="panel-body" id="rank-list">
+        <div class="panel-empty">Loading live data from USGS monitoring stations…</div>
+      </div>
+      <div class="panel-foot">
+        Data: <a href="https://waterservices.usgs.gov/" target="_blank" rel="noopener">USGS Instantaneous Values API</a> (US surface water).
+        Scores are a simplified awareness index — not a drinking-water safety rating.
+      </div>
+    </div>
+
+    <div id="legend">
+      <div class="lg-title">Water Quality Score</div>
+      <div class="lg-row"><span class="lg-chip" style="background:var(--excellent)"></span>90–100 · Excellent</div>
+      <div class="lg-row"><span class="lg-chip" style="background:var(--good)"></span>70–89 · Good</div>
+      <div class="lg-row"><span class="lg-chip" style="background:var(--moderate)"></span>50–69 · Moderate</div>
+      <div class="lg-row"><span class="lg-chip" style="background:var(--poor)"></span>30–49 · Poor</div>
+      <div class="lg-row"><span class="lg-chip" style="background:var(--verypoor)"></span>0–29 · Very poor</div>
+      <div class="lg-row"><span class="lg-chip" style="background:var(--nodata);border-radius:50%;width:13px;"></span>Sensor online, too few parameters to score</div>
+    </div>
+  </div>
+</div>
+
+<div id="about-overlay">
+  <div id="about">
+    <h2>About WaterAware</h2>
+    <p>Air quality has IQAir; water quality has… scattered agency portals. WaterAware is a prototype that pulls <strong>live sensor readings</strong> from thousands of USGS real-time monitoring stations on US rivers, lakes and streams, and turns them into one simple 0–100 score so anyone can see at a glance how the water near them is doing.</p>
+
+    <h3>Where the data comes from</h3>
+    <p>Every reading comes straight from the <a href="https://waterservices.usgs.gov/" target="_blank" rel="noopener">USGS Instantaneous Values API</a> in your browser — no server, no accounts, updated by USGS as often as every 15 minutes. Stations are loaded for whatever area you pan or zoom to.</p>
+
+    <h3>How the score works</h3>
+    <p>The score is a weighted blend of up to five live parameters, inspired by the NSF Water Quality Index. Each parameter is converted to a 0–100 subscore, then combined (weights renormalized to whichever parameters a station actually reports):</p>
+    <p style="margin-top:6px">
+      · Dissolved oxygen <code>00300</code> — weight 30%. Low oxygen suffocates aquatic life.<br>
+      · Turbidity <code>63680</code> — weight 25%. Cloudy water carries sediment, runoff and pathogens.<br>
+      · pH <code>00400</code> — weight 20%. Healthy rivers sit near 7–8.<br>
+      · Specific conductance <code>00095</code> — weight 15%. A proxy for dissolved salts and pollution.<br>
+      · Water temperature <code>00010</code> — weight 10%. Hot water holds less oxygen and stresses ecosystems.
+    </p>
+    <p style="margin-top:6px">A station needs at least two of these parameters reporting to receive a score; otherwise it appears as a small grey dot you can still click to see its raw readings.</p>
+
+    <div class="warn"><strong>This is an awareness tool, not a safety rating.</strong> These are ambient surface-water sensors — they say nothing about your tap water, and they don't measure bacteria, lead, PFAS or nitrates, which require lab testing. Never use this map to judge whether water is safe to drink or swim in.</div>
+
+    <h3>Why US-only (for now)</h3>
+    <p>The US is the only country with a free, dense, real-time public water-sensor network. A global version would layer in the UN's <a href="https://gemstat.org/" target="_blank" rel="noopener">GEMStat</a> archive, satellite-derived turbidity/algae from programs like GEO AquaWatch, and eventually crowdsourced test strips — the same path air quality took from government monitors to PurpleAir.</p>
+
+    <div class="close-row"><button class="hdr-btn" id="btn-close-about">Close</button></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+'use strict';
+
+/* ───────────────────────── Config ───────────────────────── */
+
+const USGS_IV = 'https://waterservices.usgs.gov/nwis/iv/';
+const PARAMS = '00010,00300,00400,63680,00095';
+const MAX_BBOX_AREA = 24;           // USGS caps bBox at 25 sq degrees
+const FETCH_DEBOUNCE_MS = 700;
+
+// Seed regions so the zoomed-out US view isn't empty (each ≤ 25 sq°).
+const SEED_REGIONS = [
+  { name: 'New York',      bbox: [-74.6, 40.3, -73.4, 41.2] },
+  { name: 'Los Angeles',   bbox: [-118.9, 33.5, -117.5, 34.5] },
+  { name: 'SF Bay Area',   bbox: [-122.8, 37.0, -121.6, 38.4] },
+  { name: 'Chicago',       bbox: [-88.5, 41.4, -87.3, 42.4] },
+  { name: 'Houston',       bbox: [-95.9, 29.2, -94.8, 30.3] },
+  { name: 'Miami',         bbox: [-80.9, 25.3, -80.0, 26.4] },
+  { name: 'Seattle',       bbox: [-122.7, 47.1, -121.7, 48.1] },
+  { name: 'Denver',        bbox: [-105.5, 39.3, -104.4, 40.2] },
+  { name: 'Atlanta',       bbox: [-84.9, 33.3, -83.9, 34.2] },
+  { name: 'Washington DC', bbox: [-77.6, 38.4, -76.4, 39.4] },
+  { name: 'Minneapolis',   bbox: [-93.8, 44.5, -92.7, 45.4] },
+  { name: 'St. Louis',     bbox: [-90.8, 38.2, -89.7, 39.1] },
+  { name: 'New Orleans',   bbox: [-90.7, 29.5, -89.6, 30.4] },
+  { name: 'Phoenix',       bbox: [-112.6, 33.0, -111.4, 33.9] },
+  { name: 'Boston',        bbox: [-71.7, 41.9, -70.6, 42.8] }
+];
+
+// Parameter definitions: label, unit label, weight, subscore fn (piecewise linear).
+const PARAM_DEFS = {
+  '00300': { label: 'Dissolved oxygen', unit: 'mg/L',  weight: 0.30,
+             curve: [[0,0],[2,15],[4,40],[6,70],[8,95],[9,100],[14,100],[18,80]] },
+  '63680': { label: 'Turbidity',        unit: 'FNU',   weight: 0.25,
+             curve: [[0,100],[1,100],[5,85],[25,60],[100,30],[400,5],[1000,0]] },
+  '00400': { label: 'pH',               unit: '',      weight: 0.20,
+             curve: [[3,0],[5.5,20],[6.5,60],[7,100],[8,100],[8.5,60],[9.5,20],[12,0]] },
+  '00095': { label: 'Specific conductance', unit: 'µS/cm', weight: 0.15,
+             curve: [[0,90],[50,100],[200,100],[500,85],[1000,65],[2000,40],[5000,10],[10000,0]] },
+  '00010': { label: 'Water temperature', unit: '°C',   weight: 0.10,
+             curve: [[0,90],[5,100],[20,100],[25,85],[30,60],[35,30],[40,0]] }
+};
+
+const CATEGORIES = [
+  { min: 90, label: 'Excellent', color: '#2ECC71', desc: 'Healthy conditions' },
+  { min: 70, label: 'Good',      color: '#A3D65C', desc: 'Minor deviations' },
+  { min: 50, label: 'Moderate',  color: '#F1C40F', desc: 'Noticeable stress' },
+  { min: 30, label: 'Poor',      color: '#E67E22', desc: 'Degraded conditions' },
+  { min: 0,  label: 'Very poor', color: '#E74C3C', desc: 'Severely degraded' }
+];
+
+/* ───────────────────────── State ───────────────────────── */
+
+const sites = new Map();       // siteId -> { id, name, lat, lon, params:{code:{value,time}}, score, marker }
+const fetchedBoxes = [];       // bboxes already fetched this session
+let map, markerLayer;
+let sortWorstFirst = true;
+let fetchTimer = null;
+let inFlight = 0;
+
+/* ───────────────────────── Scoring ───────────────────────── */
+
+function interp(curve, x) {
+  if (x <= curve[0][0]) return curve[0][1];
+  for (let i = 1; i < curve.length; i++) {
+    if (x <= curve[i][0]) {
+      const [x0, y0] = curve[i - 1], [x1, y1] = curve[i];
+      return y0 + (y1 - y0) * (x - x0) / (x1 - x0);
+    }
+  }
+  return curve[curve.length - 1][1];
+}
+
+function scoreSite(site) {
+  let total = 0, weightSum = 0, n = 0;
+  for (const [code, def] of Object.entries(PARAM_DEFS)) {
+    const p = site.params[code];
+    if (!p || !isFinite(p.value)) continue;
+    total += interp(def.curve, p.value) * def.weight;
+    weightSum += def.weight;
+    n++;
+  }
+  site.score = (n >= 2) ? Math.round(total / weightSum) : null;
+}
+
+function categoryFor(score) {
+  for (const c of CATEGORIES) if (score >= c.min) return c;
+  return CATEGORIES[CATEGORIES.length - 1];
+}
+
+/* ───────────────────────── USGS fetch ───────────────────────── */
+
+function bboxKey(b) { return b.map(v => v.toFixed(2)).join(','); }
+
+function boxCovered(b) {
+  // Skip refetch if this view is fully inside an already-fetched box.
+  return fetchedBoxes.some(f => b[0] >= f[0] && b[1] >= f[1] && b[2] <= f[2] && b[3] <= f[3]);
+}
+
+async function fetchBox(bbox, label) {
+  const key = bboxKey(bbox);
+  if (boxCovered(bbox)) return;
+  fetchedBoxes.push(bbox);
+
+  inFlight++;
+  setStatus(`Loading stations — ${label || 'current view'}…`);
+  const url = `${USGS_IV}?format=json&bBox=${key}&parameterCd=${PARAMS}&siteStatus=active`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`USGS responded ${res.status}`);
+    const data = await res.json();
+    ingest(data);
+  } catch (err) {
+    console.warn('USGS fetch failed', bbox, err);
+    // Allow retry on a later pan.
+    const i = fetchedBoxes.indexOf(bbox);
+    if (i !== -1) fetchedBoxes.splice(i, 1);
+    setStatus('Could not reach USGS — check your connection, then pan the map to retry.', true);
+    inFlight--;
+    return;
+  }
+  inFlight--;
+  if (inFlight <= 0) clearStatus();
+  refreshRanking();
+}
+
+function ingest(data) {
+  const series = (data && data.value && data.value.timeSeries) || [];
+  for (const ts of series) {
+    try {
+      const src = ts.sourceInfo || {};
+      const codeObj = (src.siteCode && src.siteCode[0]) || {};
+      const id = codeObj.value;
+      const geo = src.geoLocation && src.geoLocation.geogLocation;
+      if (!id || !geo) continue;
+
+      const varCode = ts.variable && ts.variable.variableCode && ts.variable.variableCode[0]
+                      ? ts.variable.variableCode[0].value : null;
+      if (!varCode || !PARAM_DEFS[varCode]) continue;
+      const noData = ts.variable.noDataValue;
+
+      // values[] can contain several methods; take the first non-empty series' latest point.
+      let latest = null;
+      for (const block of (ts.values || [])) {
+        const arr = block && block.value;
+        if (arr && arr.length) { latest = arr[arr.length - 1]; break; }
+      }
+      if (!latest) continue;
+      const val = parseFloat(latest.value);
+      if (!isFinite(val) || (noData !== undefined && val === noData) || val <= -99999) continue;
+
+      let site = sites.get(id);
+      if (!site) {
+        site = { id, name: src.siteName || `Station ${id}`,
+                 lat: geo.latitude, lon: geo.longitude, params: {}, score: null, marker: null };
+        sites.set(id, site);
+      }
+      site.params[varCode] = { value: val, time: latest.dateTime || null };
+    } catch (e) { /* skip malformed series */ }
+  }
+  for (const site of sites.values()) {
+    scoreSite(site);
+    renderMarker(site);
+  }
+}
+
+/* ───────────────────────── Markers & popups ───────────────────────── */
+
+function renderMarker(site) {
+  if (site.marker) markerLayer.removeLayer(site.marker);
+
+  if (site.score !== null) {
+    const cat = categoryFor(site.score);
+    const icon = L.divIcon({
+      className: '',
+      html: `<div class="wq-marker" style="width:40px;height:26px;background:${cat.color}">${site.score}</div>`,
+      iconSize: [40, 26], iconAnchor: [20, 13]
+    });
+    site.marker = L.marker([site.lat, site.lon], { icon, zIndexOffset: site.score * -1 + 100 });
+  } else {
+    const icon = L.divIcon({
+      className: '',
+      html: `<div class="wq-dot" style="width:10px;height:10px"></div>`,
+      iconSize: [10, 10], iconAnchor: [5, 5]
+    });
+    site.marker = L.marker([site.lat, site.lon], { icon, zIndexOffset: -1000 });
+  }
+  site.marker.bindPopup(() => popupHtml(site));
+  site.marker.addTo(markerLayer);
+}
+
+function popupHtml(site) {
+  const rows = Object.entries(PARAM_DEFS)
+    .filter(([code]) => site.params[code])
+    .map(([code, def]) => {
+      const p = site.params[code];
+      const sub = Math.round(interp(def.curve, p.value));
+      return `<tr><td>${def.label}</td><td>${p.value} ${def.unit} <span style="color:var(--muted)">· ${sub}</span></td></tr>`;
+    }).join('');
+
+  let scoreHtml;
+  if (site.score !== null) {
+    const cat = categoryFor(site.score);
+    scoreHtml = `<div class="pp-score">
+        <span class="big" style="background:${cat.color}">${site.score}</span>
+        <span class="cat" style="color:${cat.color}">${cat.label}<small>${cat.desc}</small></span>
+      </div>`;
+  } else {
+    scoreHtml = `<div class="pp-score"><span class="cat" style="color:var(--subtext)">Not enough parameters to score<small>Raw readings below</small></span></div>`;
+  }
+
+  const times = Object.values(site.params).map(p => p.time).filter(Boolean).sort();
+  const when = times.length ? new Date(times[times.length - 1]).toLocaleString() : 'unknown';
+
+  return `<div class="pp-name">${escapeHtml(site.name)}</div>
+    ${scoreHtml}
+    <table class="pp-table">${rows}</table>
+    <div class="pp-time">Latest reading: ${when}</div>
+    <a class="pp-link" href="https://waterdata.usgs.gov/monitoring-location/${site.id}" target="_blank" rel="noopener">Full station data on USGS →</a>`;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/* ───────────────────────── Ranking panel ───────────────────────── */
+
+function refreshRanking() {
+  const list = document.getElementById('rank-list');
+  const bounds = map.getBounds();
+  const visible = [...sites.values()].filter(s => s.score !== null && bounds.contains([s.lat, s.lon]));
+  const unscored = [...sites.values()].filter(s => s.score === null && bounds.contains([s.lat, s.lon])).length;
+
+  document.getElementById('panel-sub').textContent =
+    `${visible.length} scored station${visible.length === 1 ? '' : 's'} in view` +
+    (unscored ? ` · ${unscored} unscored` : '');
+
+  if (!visible.length) {
+    list.innerHTML = `<div class="panel-empty">No scored stations in this view yet.<br>Pan or zoom the map — stations load for wherever you look.</div>`;
+    return;
+  }
+
+  visible.sort((a, b) => sortWorstFirst ? a.score - b.score : b.score - a.score);
+  list.innerHTML = visible.slice(0, 25).map((s, i) => {
+    const cat = categoryFor(s.score);
+    return `<div class="rank-row" data-site="${s.id}">
+      <span class="rank-num">${i + 1}</span>
+      <span class="rank-name"><span class="nm">${escapeHtml(s.name)}</span><span class="st">${cat.label}</span></span>
+      <span class="score-badge" style="background:${cat.color}">${s.score}</span>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.rank-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const site = sites.get(row.dataset.site);
+      if (!site) return;
+      map.flyTo([site.lat, site.lon], Math.max(map.getZoom(), 11), { duration: 0.8 });
+      site.marker && site.marker.openPopup();
+    });
+  });
+}
+
+/* ───────────────────────── Status ───────────────────────── */
+
+function setStatus(msg, isError) {
+  const el = document.getElementById('status');
+  document.getElementById('status-text').textContent = msg;
+  el.classList.add('show');
+  el.classList.toggle('error', !!isError);
+  if (isError) setTimeout(clearStatus, 6000);
+}
+function clearStatus() {
+  document.getElementById('status').classList.remove('show', 'error');
+}
+
+/* ───────────────────────── Map wiring ───────────────────────── */
+
+function viewBox() {
+  const b = map.getBounds();
+  return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+}
+
+function onViewChange() {
+  clearTimeout(fetchTimer);
+  fetchTimer = setTimeout(() => {
+    const b = viewBox();
+    const area = (b[2] - b[0]) * (b[3] - b[1]);
+    if (area <= MAX_BBOX_AREA && area > 0) {
+      fetchBox(b);
+    } else if (!boxCoveredAny()) {
+      setStatus('Zoom in to load every station in view — showing major-city stations meanwhile.');
+      setTimeout(clearStatus, 3500);
+    }
+    refreshRanking();
+  }, FETCH_DEBOUNCE_MS);
+}
+
+function boxCoveredAny() { return sites.size > 0; }
+
+function init() {
+  map = L.map('map', { zoomControl: false, worldCopyJump: true })
+         .setView([39.3, -96.5], 5);
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    subdomains: 'abcd', maxZoom: 19
+  }).addTo(map);
+
+  markerLayer = L.layerGroup().addTo(map);
+  map.on('moveend zoomend', onViewChange);
+
+  // Seed the national view with major-metro stations (staggered to be polite to USGS).
+  SEED_REGIONS.forEach((r, i) => setTimeout(() => fetchBox(r.bbox, r.name), i * 350));
+
+  // UI wiring
+  document.getElementById('btn-about').addEventListener('click', () =>
+    document.getElementById('about-overlay').classList.add('show'));
+  document.getElementById('btn-close-about').addEventListener('click', () =>
+    document.getElementById('about-overlay').classList.remove('show'));
+  document.getElementById('about-overlay').addEventListener('click', e => {
+    if (e.target.id === 'about-overlay') e.target.classList.remove('show');
+  });
+  document.getElementById('panel-toggle').addEventListener('click', e => {
+    const p = document.getElementById('panel');
+    p.classList.toggle('collapsed');
+    e.target.textContent = p.classList.contains('collapsed') ? '▸' : '▾';
+  });
+  document.getElementById('sort-worst').addEventListener('click', () => setSort(true));
+  document.getElementById('sort-best').addEventListener('click', () => setSort(false));
+}
+
+function setSort(worst) {
+  sortWorstFirst = worst;
+  document.getElementById('sort-worst').classList.toggle('active', worst);
+  document.getElementById('sort-best').classList.toggle('active', !worst);
+  refreshRanking();
+}
+
+init();
+</script>
+</body>
+</html>
