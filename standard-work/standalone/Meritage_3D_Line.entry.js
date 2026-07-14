@@ -801,6 +801,44 @@ function resetOutbound() {
   forkLifts.forEach(fl => { if (fl.waitMeshes) fl.waitMeshes.length = 0; });
   spawnedM = spawnedSola = spawnedCanyon = 0;
 }
+/* ---- 🛒 cart test-drive (Edit Layout): a preview cart glides each materials
+   cart's FULL loop — elevator → waypoints → cart spot → return waypoints →
+   endpoint — so the routes can be sanity-checked while editing. ---- */
+let cartDemoOn = false;
+const demoCarts = [];
+function demoRoute(i) {
+  try {
+    if (i === 0) return [[EL[0], EL[1]], ...cartWaypoints.map(w => [w.x, w.z]), [nodes.cart.x, nodes.cart.z], ...returnWps.map(w => [w.x, w.z]), endPt(1)];
+    if (i === 1) return [[EL[0], EL[1]], ...cart2Waypoints.map(w => [w.x, w.z]), [nodes.cart2.x, nodes.cart2.z], ...returnWps2.map(w => [w.x, w.z]), endPt(2)];
+    return [[EL[0], EL[1]], ...cart3Waypoints.map(w => [w.x, w.z]), [nodes.cart3.x, nodes.cart3.z], ...returnWps3.map(w => [w.x, w.z]), endPt(3)];
+  } catch (e) { return null; }
+}
+function stopCartDemo() {
+  cartDemoOn = false;
+  demoCarts.forEach(d => { d.mesh.visible = false; });
+  const b = document.getElementById('runCartsBtn'); if (b) { b.textContent = '🛒 Run carts'; b.classList.remove('on'); }
+}
+function updateCartDemo(dt) {
+  if (!cartDemoOn) return;
+  if (demoCarts.length === 0) {
+    for (let i = 0; i < 3; i++) { const m = makePartsCart(); m.scale.set(1.61, 1.2, 1.04); m.visible = false; level2.add(m); demoCarts.push({ mesh: m, prog: i * 2 }); }
+  }
+  demoCarts.forEach((d, i) => {
+    const pts = demoRoute(i);
+    if (!pts || pts.length < 2) { d.mesh.visible = false; return; }
+    let len = 0; for (let k = 0; k < pts.length - 1; k++) len += Math.hypot(pts[k + 1][0] - pts[k][0], pts[k + 1][1] - pts[k][1]);
+    if (len < 0.5) { d.mesh.visible = false; return; }
+    d.prog = (d.prog + 2.6 * dt) % len;                      // ~2.6 m/s walking-push pace, looping
+    let rem = d.prog, x = pts[0][0], z = pts[0][1], ang = 0;
+    for (let k = 0; k < pts.length - 1; k++) {
+      const dx = pts[k + 1][0] - pts[k][0], dz = pts[k + 1][1] - pts[k][1], sl = Math.hypot(dx, dz) || 1e-6;
+      if (rem <= sl) { const fr = rem / sl; x = pts[k][0] + dx * fr; z = pts[k][1] + dz * fr; ang = Math.atan2(dx, dz); break; }
+      rem -= sl;
+    }
+    d.mesh.visible = focusShows(LINE_KEYS[i]);
+    d.mesh.position.set(x, 0, z); d.mesh.rotation.y = ang;
+  });
+}
 function makeForkGap(){
   const g = new THREE.Group();
   const W = 2.6, D = 2.0;                                   // ~8.5' x 6.5' opening (fits a sofa)
@@ -2630,6 +2668,7 @@ function setEditing(on) {
     }
   } else {
     dragId = null; measure.visible = false; measurePanel.innerHTML = '';
+    stopCartDemo();                                  // cart test-drive is an edit-mode aid
     if (elevHidden) setElevHidden(false);            // always bring the elevator back when leaving Edit Layout
     if (typeof setCadOverlay === 'function') setCadOverlay(false);   // the CAD overlay is an edit-only comparison aid
     if (!is2D && savedView) { camera.position.copy(savedView.p); controls.target.copy(savedView.t); }
@@ -2888,6 +2927,16 @@ document.getElementById('addwp').onclick = () => {
   ends.textContent = '⚑ Endpoints: off';
   ends.title = 'Show the endpoint of each cart line. In Edit Layout, drag a marker to end that line somewhere other than the elevator; right-click to snap it back.';
   lanes.parentNode.insertBefore(ends, lanes.nextSibling);
+  // 🛒 Run carts: preview the materials carts driving their delivery loops (edit mode)
+  const rc = document.createElement('button');
+  rc.id = 'runCartsBtn'; rc.className = awp.className || '';
+  rc.textContent = '🛒 Run carts';
+  ends.parentNode.insertBefore(rc, ends.nextSibling);
+  rc.onclick = () => {
+    if (!editing) setEditing(true);
+    if (cartDemoOn) { stopCartDemo(); return; }
+    cartDemoOn = true; rc.textContent = '🛒 Carts: running'; rc.classList.add('on');
+  };
   ends.onclick = () => {
     endpointsOn = !endpointsOn;
     ends.textContent = '⚑ Endpoints: ' + (endpointsOn ? 'on' : 'off');
@@ -3584,6 +3633,7 @@ function loop(now){
     if (merDone && solDone) setPlay(false);
   }
   updateCarts();   // carts stay parked in a line along the path
+  updateCartDemo(dt);   // 🛒 edit-mode cart test-drive
   if (!focusShows('meritage')) cartPool.forEach(c => { c.mesh.visible = false; });   // line focus hides the Meritage delivery carts
   crew.forEach(c => { const v = focusShows(stLineOf(c.station)); if (c.fig.visible !== v) c.fig.visible = v; });
   updateHelp();    // help-movement arrows follow the stations
@@ -3661,6 +3711,7 @@ function addPanelX(panel, onClose) {
     addwp: 'Add a waypoint to the selected cart’s DELIVERY path (elevator → cart)',
     returnwp: 'Add a waypoint to the selected cart’s RETURN path (cart → endpoint)',
     lanesBtn: 'Show / hide the 5′ lanes while editing',
+    runCartsBtn: 'Preview the materials carts driving their delivery loops (elevator → cart → back) while you edit the routes',
     endsBtn: 'Show each cart line’s endpoint flag — drag one to end that line somewhere other than the elevator; right-click it to snap back',
     shipStartBtn: 'Choose which table each line’s green furniture lane ships from',
     helparrow: 'Draw a help path: click the FROM station, then the TO station',
