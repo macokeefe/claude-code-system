@@ -95,6 +95,18 @@ connectors = 14 (base) + 2 × (number of arms) + 4 × (middle leg present)
 - Sheets contain copy-paste noise (both headers say "No arms") — don't trust
   prose over the engineer's explicit rules.
 
+### Sola 1-arm print SWI (2026-07, b0ebf78c)
+Step times (min): rivnut 10; conn pre-assembly 13.33 (16 connectors); conn
+plate install 14.866; conn attach 3.66; frame sub 19 (8:30 no-arm side +
+10:30 right-arm side); frame connection 20.2 (+2 gathering NOT included);
+corner caps 6.66; seat support + frame prep 33.00; leg assembly install
+13.41; packing 18 + 6 + 12. TRUE total = 170.13 — the sheet's header
+(206.13) double-counts the packing rows, which are printed twice. Product
+factor vs the mezzanine Sola base (168.7): ≈101% (1.01), now the default
+for 'Sola Lounge — 1 arm' in lineProducts. NOTE: saved layouts persist
+__products, so layouts saved under the old 110% guess keep it until the %
+is edited in the Products panel.
+
 ## App/modeling conventions tied to these facts
 
 - SKU = one configuration (SOLA-BASE / SOLA-RA / SOLA-NA seeded; SOLA-BASE is

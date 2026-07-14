@@ -2222,7 +2222,7 @@ let dayMin = 420;   // AVAILABLE minutes per worker per day (drives takt + capac
 // each line can run different furniture: name + labor factor vs the base times
 let lineProducts = {
   meritage: { active: 0, list: [{ name: 'Meritage 3-Seater', f: 1 }, { name: 'Meritage 2-Seater', f: 0.75 }, { name: 'Meritage Ottoman', f: 0.4 }] },
-  sola:     { active: 0, list: [{ name: 'Sola Lounge — no arms', f: 1 }, { name: 'Sola Lounge — 1 arm', f: 1.1 }, { name: 'Sola — middle leg', f: 1.05 }] },
+  sola:     { active: 0, list: [{ name: 'Sola Lounge — no arms', f: 1 }, { name: 'Sola Lounge — 1 arm', f: 1.01 }, { name: 'Sola — middle leg', f: 1.05 }] },   // 1-arm = MEASURED: SWI total 170.13 min (header 206.13 double-counts the duplicated packing rows) ÷ 168.7 base
   canyon:   { active: 0, list: [{ name: 'Canyon Chair', f: 1 }, { name: 'Canyon Ottoman', f: 0.5 }] },
 };
 function reflowAll() {   // one call after any product / available-time change
