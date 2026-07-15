@@ -2583,10 +2583,10 @@ function renderHelpPanel() {
     helpPanel.querySelectorAll('.hmin').forEach(inp => inp.onchange = e => {
       const a = helpArrows[+e.target.dataset.i]; const spare = availIdleAny(a.from, a.fromIdx || 0) + (a.helpMin || 0);
       a.helpMin = Math.max(0, Math.min(spare, parseFloat(e.target.value) || 0));
-      buildHelp(); buildSolaSched(); renderIdle(); renderSolaData(); saveLayout(); renderHelpPanel();
+      buildHelp(); buildSolaSched(); renderIdle(); renderSolaData(); renderTaskChart(); saveLayout(); renderHelpPanel();
     });
     helpPanel.querySelectorAll('.hdel').forEach(b => b.onclick = e => {
-      helpArrows.splice(+e.target.dataset.i, 1); buildHelp(); buildSolaSched(); renderIdle(); renderSolaData(); saveLayout(); renderHelpPanel();
+      helpArrows.splice(+e.target.dataset.i, 1); buildHelp(); buildSolaSched(); renderIdle(); renderSolaData(); renderTaskChart(); saveLayout(); renderHelpPanel();
     });
     wireProdTags(); wireLineSel(helpPanel); return;
   }
@@ -2634,7 +2634,14 @@ function renderTaskChart() {
   if (chartLine !== 'meritage') {   // Sola or Canyon Crew — each its own line
     const ids = orderedLine(chartLine);
     const cf = prodF(chartLine);
-    rows = ids.map(id => { const s = nodes[id].s; return { title: s.title, tt: ((s.t || 0) / Math.max(1, s.ppl || 1)) * cf, steps: s.steps, bn: false }; });
+    rows = ids.filter(id => !coverOf(id)).map(id => {                    // covered stations fold into their covering crew's bar
+      const s = nodes[id].s;
+      const cov = ids.filter(x => coverOf(x) === id);
+      const tt = effNet(id) + cov.reduce((a, x) => a + effNet(x), 0);    // effNet reflects help paths (and walk); coverage rolls in
+      const steps = cov.length ? [...(s.steps || []), ...cov.flatMap(x => nodes[x].s.steps || [])] : s.steps;
+      const title = cov.length ? s.title + ' + ' + cov.map(x => nodes[x].s.title).join(' + ') : s.title;
+      return { title, tt, steps, bn: false };
+    });
     totalLabor = ids.reduce((a, id) => a + (nodes[id].s.t || 0), 0) * cf;
   } else {
     // Full assembly + pack are done by the SAME 2 people back-to-back → one bar.
