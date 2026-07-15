@@ -1279,6 +1279,8 @@ function refreshPath() {
 
 // ---- help-movement arrows: where an operator goes to help after finishing ----
 let helpArrows = [];                  // [{from, fromIdx, to, helpMin}] — added via the “Help arrow” tool (no demo defaults, so chart times match the station times)
+let dayPlan = { meritage: [], sola: [], canyon: [] };   // Planner: per line, an ordered list of {p: productIndex, q: quantity} builds for the day
+let planStart = 7 * 60;                                  // Planner day start, minutes from midnight (clock display)
 const helpGroup = new THREE.Group(); level2.add(helpGroup);
 const HELP_COL = 0x8f3fbf;
 
@@ -2702,27 +2704,34 @@ document.getElementById('taskbtn').onclick = () => {
 };
 
 // ---- Takt board: pace / capacity / takt for EVERY product on EVERY line, in one full page ----
-(function taktBoardCss(){
+(function plannerCss(){
   const s = document.createElement('style'); s.textContent = `
-  #taktPanel{position:fixed;inset:0;z-index:82;overflow:auto;background:#eef1f5;padding:16px 30px 44px}
-  #taktPanel h3{max-width:1500px;margin:2px auto 2px;font-size:20px;color:#15263a}
-  #taktPanel .tkctl{max-width:1500px;margin:0 auto 16px;font-size:12.5px;color:#5a6672;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
-  #taktPanel .tkctl input{width:52px;text-align:center}
-  #taktPanel .tkgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:22px;max-width:1500px;margin:0 auto;align-items:start}
-  #taktPanel .tkcol{background:#fff;border:1px solid #e2e7ee;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(20,30,45,.06)}
-  #taktPanel .tkhd{padding:11px 16px;color:#fff;font-weight:800;font-size:15px;display:flex;justify-content:space-between;align-items:center}
-  #taktPanel .tkrow{padding:11px 16px;border-top:1px solid #eef1f5}
-  #taktPanel .tkrow.run{background:#f4f9ff}
-  #taktPanel .tknm{font-weight:700;font-size:14px;color:#15263a;display:flex;align-items:center;gap:8px;margin-bottom:6px}
-  #taktPanel .tkchip{font-size:10px;font-weight:800;background:#1f6df6;color:#fff;border-radius:9px;padding:1px 8px;letter-spacing:.03em}
-  #taktPanel .tkbar{position:relative;height:17px;background:#eef2f7;border-radius:5px;overflow:visible;margin:5px 0 7px}
-  #taktPanel .tkbar > i{display:block;height:100%;border-radius:5px}
-  #taktPanel .tkmk{position:absolute;top:-3px;bottom:-3px;width:2px;background:#e11;box-shadow:0 0 0 .5px rgba(255,255,255,.6)}
-  #taktPanel .tkmeta{font-size:12px;color:#5a6672;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
-  #taktPanel .tkmeta b{color:#15263a}
-  #taktPanel .tkmeta input{width:50px;text-align:center;font-size:12px}
-  #taktPanel .tkok{color:#2f7d52;font-weight:700}
-  #taktPanel .tkover{color:#c0552c;font-weight:700}`;
+  #plannerPanel{position:fixed;inset:0;z-index:82;overflow:auto;background:#eef1f5;padding:16px 30px 44px}
+  #plannerPanel h3{max-width:1500px;margin:2px auto 2px;font-size:20px;color:#15263a}
+  #plannerPanel .plctl{max-width:1500px;margin:0 auto 16px;font-size:12.5px;color:#5a6672;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  #plannerPanel .plctl input[type=number]{width:52px;text-align:center}
+  #plannerPanel .plgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:22px;max-width:1500px;margin:0 auto;align-items:start}
+  #plannerPanel .plcol{background:#fff;border:1px solid #e2e7ee;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(20,30,45,.06)}
+  #plannerPanel .plhd{padding:11px 16px;color:#fff;font-weight:800;font-size:15px;display:flex;justify-content:space-between;align-items:center}
+  #plannerPanel .pladd{display:flex;gap:6px;align-items:center;padding:10px 16px;background:#f7f9fc;border-bottom:1px solid #eef1f5}
+  #plannerPanel .pladd .plProd{flex:1;font-size:12.5px;padding:3px 5px}
+  #plannerPanel .pladd .plQty{width:52px;text-align:center;font-size:12.5px}
+  #plannerPanel .pladd .plAdd{background:#1f6df6;border:0;color:#fff;border-radius:7px;padding:4px 11px;font-size:12px;font-weight:700;cursor:pointer}
+  #plannerPanel .plrow{padding:10px 16px;border-top:1px solid #eef1f5}
+  #plannerPanel .plnm{font-size:13.5px;color:#15263a;display:flex;align-items:center;gap:7px;margin-bottom:5px}
+  #plannerPanel .plnm b{color:#15263a}
+  #plannerPanel .plseq{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:50%;background:#e7eef7;color:#33414f;font-size:11px;font-weight:800;flex:none}
+  #plannerPanel .plctls{margin-left:auto;display:flex;gap:3px}
+  #plannerPanel .plctls button{border:1px solid #cfd6de;background:#fff;color:#5a6672;border-radius:5px;padding:1px 6px;font-size:11px;cursor:pointer;line-height:1.4}
+  #plannerPanel .plctls .plDel{color:#c0552c;border-color:#dcae9f}
+  #plannerPanel .plbar{position:relative;height:16px;background:#eef2f7;border-radius:5px;overflow:visible;margin:3px 0 5px}
+  #plannerPanel .plbar > i{position:absolute;top:0;height:100%;border-radius:4px}
+  #plannerPanel .plmk{position:absolute;top:-3px;bottom:-3px;width:2px;background:#e11;box-shadow:0 0 0 .5px rgba(255,255,255,.6)}
+  #plannerPanel .plmeta{font-size:11.5px;color:#5a6672}
+  #plannerPanel .plover{color:#c0552c;font-weight:700}
+  #plannerPanel .plsum{padding:10px 16px;border-top:2px solid #eef1f5;font-size:12.5px;font-weight:700}
+  #plannerPanel .plsum.ok{color:#2f7d52;background:#f2faf5}
+  #plannerPanel .plsum.over{color:#c0552c;background:#fdf4f1}`;
   document.head.appendChild(s);
 })();
 // pace / labor / capacity / takt for ONE product WITHOUT changing what the line is running (pure read from the definition)
@@ -2744,57 +2753,87 @@ function productMetrics(line, prod) {
   const demand = Math.max(0.1, +prod.demand || taktDemand || 10);
   return { pace, labor, cap: dayMinSafe() / Math.max(0.1, pace), demand, takt: dayMinSafe() / demand, bn };
 }
-function renderTaktBoard() {
-  const panel = document.getElementById('taktPanel');
+// ---- daily build plan: which furniture, how many, and in what order, per line ----
+function planClock(offsetMin) {
+  let t = Math.round(planStart + offsetMin); t = ((t % 1440) + 1440) % 1440;
+  const h = Math.floor(t / 60), mm = t % 60, ap = h < 12 ? 'AM' : 'PM', hh = ((h + 11) % 12) + 1;
+  return `${hh}:${String(mm).padStart(2, '0')} ${ap}`;
+}
+function renderPlanner() {
+  const panel = document.getElementById('plannerPanel');
   if (!panel || panel.style.display === 'none') return;
   const LINES = [['meritage', 'MERITAGE', '#1d3a66'], ['sola', 'SOLA', '#236043'], ['canyon', 'CANYON CREW', '#9a5b1f']];
+  const avail = dayMinSafe();
   const cols = LINES.map(([key, label, color]) => {
     const lp = (typeof lineProducts !== 'undefined' && lineProducts) ? lineProducts[key] : null;
-    const products = (lp && lp.list) ? lp.list.map((p, i) => ({ name: p.name, i, ...productMetrics(key, p) })) : [];
-    return { key, label, color, products, running: lp ? lp.active : -1 };
+    const list = (lp && lp.list) || [];
+    const orders = (dayPlan[key] || []).filter(o => list[o.p]);
+    let cum = 0;
+    const rows = orders.map((o, idx) => {
+      const prod = list[o.p], m = productMetrics(key, prod), q = Math.max(0, o.q || 0);
+      const mins = q * m.pace, start = cum; cum += mins;
+      return { idx, name: prod.name, q, pace: m.pace, mins, start, end: cum };
+    });
+    return { key, label, color, list, orders, rows, total: cum };
   });
-  let scaleMax = 1; cols.forEach(c => c.products.forEach(p => { scaleMax = Math.max(scaleMax, p.pace, p.takt); })); scaleMax *= 1.05;
-  let html = `<h3>Takt board — pace &amp; capacity by product</h3>`;
-  html += `<div class="tkctl">Day length <input type="number" id="tkDay" value="${(dayMinSafe()/60)}" min="1" max="16" step="0.5"> hr`
-        + ` · <b style="color:#2f6df6">bar</b> = pace (min/unit) · <b style="color:#e11">red line</b> = takt · set each product's target/day to move its takt · <b style="color:#2f7d52">green</b> meets takt, <b style="color:#c0552c">red</b> is over</div>`;
-  html += `<div class="tkgrid">`;
+  const scale = Math.max(avail, ...cols.map(c => c.total), 1) * 1.02;
+  let html = `<h3>Planner: build the day's schedule</h3>`;
+  html += `<div class="plctl">Day length <input type="number" id="plDay" value="${(avail / 60)}" min="1" max="16" step="0.5"> hr`
+        + ` · Start <input type="time" id="plStart" value="${String(Math.floor(planStart / 60)).padStart(2, '0')}:${String(planStart % 60).padStart(2, '0')}" style="font-size:12px">`
+        + ` · pick each line's furniture, how many, and the order to build them; the schedule builds itself. <b style="color:#e11">Red line</b> = end of day.</div>`;
+  html += `<div class="plgrid">`;
   cols.forEach(c => {
-    html += `<div class="tkcol"><div class="tkhd" style="background:${c.color}"><span>${c.label}</span><span>${c.products.length} product${c.products.length === 1 ? '' : 's'}</span></div>`;
-    if (!c.products.length) { html += `<div class="tkrow" style="color:#8a8f98">No products yet.</div></div>`; return; }
-    c.products.forEach(p => {
-      const over = p.pace > p.takt + 0.05;
-      const paceW = Math.min(100, p.pace / scaleMax * 100), taktL = Math.min(100, p.takt / scaleMax * 100);
-      const grad = over ? 'linear-gradient(90deg,#e0906e,#c0552c)' : 'linear-gradient(90deg,#7ba6e0,#2f6df6)';
-      html += `<div class="tkrow${p.i === c.running ? ' run' : ''}">
-        <div class="tknm">${(p.name || '').replace(/</g, '&lt;')}${p.i === c.running ? '<span class="tkchip">RUNNING</span>' : ''}</div>
-        <div class="tkbar"><i style="width:${paceW}%;background:${grad}"></i><span class="tkmk" style="left:${taktL}%"></span></div>
-        <div class="tkmeta">
-          <span>pace <b>${p.pace.toFixed(1)}m</b></span>
-          <span>labor <b>${p.labor.toFixed(0)}m</b></span>
-          <span>capacity <b>${p.cap.toFixed(1)}/day</b></span>
-          <span>takt <b>${p.takt.toFixed(1)}m</b> @ <input type="number" class="tkTarget" data-line="${c.key}" data-i="${p.i}" value="${(+p.demand.toFixed(1))}" min="1" step="1">/day</span>
-          <span class="${over ? 'tkover' : 'tkok'}">${over ? ('⚠ over takt by ' + (p.pace - p.takt).toFixed(1) + 'm') : '✓ meets takt'}</span>
-        </div>
+    const over = c.total > avail + 0.5;
+    html += `<div class="plcol"><div class="plhd" style="background:${c.color}"><span>${c.label}</span><span>${c.total > 0 ? (planClock(0) + ' → ' + planClock(c.total)) : '—'}</span></div>`;
+    if (c.list.length) {
+      html += `<div class="pladd"><select class="plProd" data-line="${c.key}">${c.list.map((p, i) => `<option value="${i}">${(p.name || '').replace(/</g, '&lt;')}</option>`).join('')}</select>`
+            + `<input type="number" class="plQty" data-line="${c.key}" value="1" min="1" step="1" title="How many to build">`
+            + `<button class="plAdd" data-line="${c.key}">+ add</button></div>`;
+    } else { html += `<div class="plrow" style="color:#8a8f98">No products on this line.</div>`; }
+    if (!c.rows.length) { html += `<div class="plrow" style="color:#8a8f98">No builds planned yet. Add the furniture you need today.</div>`; }
+    c.rows.forEach(r => {
+      const segOver = r.end > avail + 0.5;
+      const fill = segOver ? 'repeating-linear-gradient(45deg,#c0552c,#c0552c 6px,#dd9b82 6px,#dd9b82 12px)' : c.color;
+      html += `<div class="plrow">
+        <div class="plnm"><span class="plseq">${r.idx + 1}</span> <b>${r.q}×</b> ${(r.name || '').replace(/</g, '&lt;')}
+          <span class="plctls"><button class="plUp" data-line="${c.key}" data-i="${r.idx}" title="Build earlier">▲</button><button class="plDn" data-line="${c.key}" data-i="${r.idx}" title="Build later">▼</button><button class="plDel" data-line="${c.key}" data-i="${r.idx}" title="Remove">✕</button></span></div>
+        <div class="plbar"><i style="left:${(r.start / scale * 100).toFixed(2)}%;width:${(r.mins / scale * 100).toFixed(2)}%;background:${fill}"></i><span class="plmk" style="left:${(avail / scale * 100).toFixed(2)}%"></span></div>
+        <div class="plmeta">${r.q} unit${r.q === 1 ? '' : 's'} · ${r.pace.toFixed(1)}m each · ${r.mins.toFixed(0)}m total · done <b>${planClock(r.end)}</b>${segOver ? ' <span class="plover">· runs past end of day</span>' : ''}</div>
       </div>`;
     });
+    if (c.rows.length) {
+      const units = c.orders.reduce((a, o) => a + Math.max(0, o.q || 0), 0);
+      html += `<div class="plsum ${over ? 'over' : 'ok'}">${units} unit${units === 1 ? '' : 's'} · ${c.total.toFixed(0)} of ${avail.toFixed(0)} min · ${over ? ('⚠ over by ' + (c.total - avail).toFixed(0) + ' min, won\'t all finish today') : ('✓ fits with ' + (avail - c.total).toFixed(0) + ' min to spare')}</div>`;
+    }
     html += `</div>`;
   });
   html += `</div>`;
   panel.innerHTML = html;
-  addPanelX(panel, () => { panel.style.display = 'none'; const b = document.getElementById('taktbtn'); if (b) b.classList.remove('on'); });
-  const dEl = document.getElementById('tkDay');
-  if (dEl) dEl.onchange = e => { dayMin = Math.max(60, Math.min(16 * 60, (parseFloat(e.target.value) || 7) * 60)); if (typeof reflowAll === 'function') reflowAll(); renderTaktBoard(); };
-  panel.querySelectorAll('.tkTarget').forEach(inp => inp.onchange = e => {
-    const lp = lineProducts[e.target.dataset.line], p = lp && lp.list[+e.target.dataset.i];
-    if (p) { p.demand = Math.max(1, parseFloat(e.target.value) || 10); saveLayout(); renderTaktBoard(); }
+  addPanelX(panel, () => { panel.style.display = 'none'; const b = document.getElementById('plannerbtn'); if (b) b.classList.remove('on'); });
+  const dEl = document.getElementById('plDay');
+  if (dEl) dEl.onchange = e => { dayMin = Math.max(60, Math.min(16 * 60, (parseFloat(e.target.value) || 7) * 60)); if (typeof reflowAll === 'function') reflowAll(); renderPlanner(); };
+  const sEl = document.getElementById('plStart');
+  if (sEl) sEl.onchange = e => { const m = /^(\d\d):(\d\d)$/.exec(e.target.value); if (m) { planStart = (+m[1]) * 60 + (+m[2]); saveLayout(); renderPlanner(); } };
+  panel.querySelectorAll('.plAdd').forEach(btn => btn.onclick = e => {
+    const line = e.target.dataset.line;
+    const sel = panel.querySelector(`.plProd[data-line="${line}"]`), qty = panel.querySelector(`.plQty[data-line="${line}"]`);
+    if (!sel) return;
+    (dayPlan[line] = dayPlan[line] || []).push({ p: +sel.value, q: Math.max(1, parseInt(qty && qty.value) || 1) });
+    saveLayout(); renderPlanner();
   });
+  panel.querySelectorAll('.plDel').forEach(btn => btn.onclick = e => {
+    dayPlan[e.target.dataset.line].splice(+e.target.dataset.i, 1); saveLayout(); renderPlanner();
+  });
+  const move = (line, i, d) => { const arr = dayPlan[line], j = i + d; if (j < 0 || j >= arr.length) return; const t = arr[i]; arr[i] = arr[j]; arr[j] = t; saveLayout(); renderPlanner(); };
+  panel.querySelectorAll('.plUp').forEach(btn => btn.onclick = e => move(e.target.dataset.line, +e.target.dataset.i, -1));
+  panel.querySelectorAll('.plDn').forEach(btn => btn.onclick = e => move(e.target.dataset.line, +e.target.dataset.i, 1));
 }
-document.getElementById('taktbtn').onclick = () => {
-  const panel = document.getElementById('taktPanel');
+document.getElementById('plannerbtn').onclick = () => {
+  const panel = document.getElementById('plannerPanel');
   const show = panel.style.display === 'none';
   panel.style.display = show ? 'block' : 'none';
-  document.getElementById('taktbtn').classList.toggle('on', show);
-  renderTaktBoard();
+  document.getElementById('plannerbtn').classList.toggle('on', show);
+  renderPlanner();
 };
 // toggle the editable Station-times panel like the other panels
 { const tb = document.getElementById('timesbtn'); if (tb) tb.onclick = () => {
@@ -2854,7 +2893,7 @@ function setStationRot(id, rot) {
 }
 // Build the working-layout object from the LIVE scene (not from storage).
 function buildWorkingLayout() {
-  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0, a.prod || '']); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__cover = Object.fromEntries(ST.map(s => [s.id, s.cover || ''])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); o.__wps3 = cart3Waypoints.map(w => [w.x, w.z]); o.__rwps3 = returnWps3.map(w => [w.x, w.z]); o.__ends = [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null); o.__fwps = prodWps.map(l => l.map(w => [w.x, w.z])); o.__fstart = prodStart.slice(); o.__dayMin = dayMin; o.__products = JSON.parse(JSON.stringify(lineProducts)); o.__baseSteps = JSON.parse(JSON.stringify(baseSteps)); o.__boxZone = [boxZone.x, boxZone.z, boxZone.w, boxZone.d]; o.__names = Object.fromEntries(ST.map(s2 => [s2.id, s2.title])); return o;
+  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0, a.prod || '']); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__cover = Object.fromEntries(ST.map(s => [s.id, s.cover || ''])); o.__plan = JSON.parse(JSON.stringify(dayPlan)); o.__planStart = planStart; o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); o.__wps3 = cart3Waypoints.map(w => [w.x, w.z]); o.__rwps3 = returnWps3.map(w => [w.x, w.z]); o.__ends = [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null); o.__fwps = prodWps.map(l => l.map(w => [w.x, w.z])); o.__fstart = prodStart.slice(); o.__dayMin = dayMin; o.__products = JSON.parse(JSON.stringify(lineProducts)); o.__baseSteps = JSON.parse(JSON.stringify(baseSteps)); o.__boxZone = [boxZone.x, boxZone.z, boxZone.w, boxZone.d]; o.__names = Object.fromEntries(ST.map(s2 => [s2.id, s2.title])); return o;
 }
 // In-memory mirror so the layout survives even when localStorage is blocked
 // (Safari / file:// often refuses to persist) — bake reads THIS, never storage.
@@ -2898,7 +2937,7 @@ window.addEventListener('keydown', e => {
   }
 });
 function applyWorkingLayout(o) {   // apply a working-layout object to the LIVE scene (shared by load + import)
-  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } if (Array.isArray(o.__ends)) { const e = o.__ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; } if (Array.isArray(o.__fwps)) prodWps = [0, 1, 2].map(i => (o.__fwps[i] || []).map(a => ({ x: a[0], z: a[1] }))); if (Array.isArray(o.__fstart)) prodStart = [0, 1, 2].map(i => o.__fstart[i] || null); if (typeof o.__dayMin === 'number' && o.__dayMin > 0) dayMin = o.__dayMin; if (o.__products && o.__products.meritage) mergeProducts(o.__products); if (o.__baseSteps) baseSteps = o.__baseSteps; refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0, prod: a[4] || null })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__cover) { ST.forEach(s => { s.cover = o.__cover[s.id] || null; }); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; } }); } ST.forEach(s => { rebuildCrew(s.id); placeStation(s.id); }); renderTimes(); if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } extraStations.forEach(applyLineAccent); if (typeof refreshProdFlow === 'function') refreshProdFlow(); if (typeof applyLineFocus === 'function') applyLineFocus();
+  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } if (Array.isArray(o.__ends)) { const e = o.__ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; } if (Array.isArray(o.__fwps)) prodWps = [0, 1, 2].map(i => (o.__fwps[i] || []).map(a => ({ x: a[0], z: a[1] }))); if (Array.isArray(o.__fstart)) prodStart = [0, 1, 2].map(i => o.__fstart[i] || null); if (typeof o.__dayMin === 'number' && o.__dayMin > 0) dayMin = o.__dayMin; if (o.__products && o.__products.meritage) mergeProducts(o.__products); if (o.__baseSteps) baseSteps = o.__baseSteps; refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0, prod: a[4] || null })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__cover) { ST.forEach(s => { s.cover = o.__cover[s.id] || null; }); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; } }); } ST.forEach(s => { rebuildCrew(s.id); placeStation(s.id); }); renderTimes(); if (o.__plan && typeof o.__plan === 'object') { dayPlan = { meritage: o.__plan.meritage || [], sola: o.__plan.sola || [], canyon: o.__plan.canyon || [] }; } if (typeof o.__planStart === 'number') planStart = o.__planStart; if (typeof renderPlanner === 'function') renderPlanner(); if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } extraStations.forEach(applyLineAccent); if (typeof refreshProdFlow === 'function') refreshProdFlow(); if (typeof applyLineFocus === 'function') applyLineFocus();
 }
 let hadSavedLayout = false;   // true when ANY layout (localStorage or baked) was loaded — defaults must then keep their hands off
 function loadLayout() { try { let o = null; try { o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch (e) {} if (!o && window.__M3D_LAYOUT__) o = window.__M3D_LAYOUT__;   // baked-in working layout (travels with the file)
@@ -3583,13 +3622,16 @@ function snapshot() {
   ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
   if (nodes.cart) pos.cart = [nodes.cart.x, nodes.cart.z];
   const cap = sch ? dayMinSafe() / Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 0;
-  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0, a.prod || '']), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), ppl: Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])), cover: Object.fromEntries(ST.map(s => [s.id, s.cover || ''])), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), extras: extraSnap(), flow: flowArrows.map(a => [a.from, a.to]), areas: areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]), rwps: returnWps.map(w => [w.x, w.z]), rwps2: returnWps2.map(w => [w.x, w.z]), wps3: cart3Waypoints.map(w => [w.x, w.z]), rwps3: returnWps3.map(w => [w.x, w.z]), ends: [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null), fwps: prodWps.map(l => l.map(w => [w.x, w.z])), fstart: prodStart.slice(), dayMin, products: JSON.parse(JSON.stringify(lineProducts)), boxZone: [boxZone.x, boxZone.z, boxZone.w, boxZone.d], names: Object.fromEntries(ST.map(s2 => [s2.id, s2.title])), cap: +cap.toFixed(1) };
+  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0, a.prod || '']), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), ppl: Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])), cover: Object.fromEntries(ST.map(s => [s.id, s.cover || ''])), plan: JSON.parse(JSON.stringify(dayPlan)), planStart, access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), extras: extraSnap(), flow: flowArrows.map(a => [a.from, a.to]), areas: areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]), rwps: returnWps.map(w => [w.x, w.z]), rwps2: returnWps2.map(w => [w.x, w.z]), wps3: cart3Waypoints.map(w => [w.x, w.z]), rwps3: returnWps3.map(w => [w.x, w.z]), ends: [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null), fwps: prodWps.map(l => l.map(w => [w.x, w.z])), fstart: prodStart.slice(), dayMin, products: JSON.parse(JSON.stringify(lineProducts)), boxZone: [boxZone.x, boxZone.z, boxZone.w, boxZone.d], names: Object.fromEntries(ST.map(s2 => [s2.id, s2.title])), cap: +cap.toFixed(1) };
 }
 function applyLayout(L) {
   if (L.steps) { ST.forEach(s => { if (L.steps[s.id]) { s.steps = L.steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); }
   if (L.cover) { ST.forEach(s => { s.cover = L.cover[s.id] || null; }); }
   if (L.ppl) { ST.forEach(s => { if (L.ppl[s.id] != null) s.ppl = L.ppl[s.id]; }); }
   if (L.ppl || L.cover) ST.forEach(s => { rebuildCrew(s.id); placeStation(s.id); });
+  if (L.plan && typeof L.plan === 'object') { dayPlan = { meritage: L.plan.meritage || [], sola: L.plan.sola || [], canyon: L.plan.canyon || [] }; }
+  if (typeof L.planStart === 'number') planStart = L.planStart;
+  if (typeof renderPlanner === 'function') renderPlanner();
   else if (L.times) ST.forEach(s => { if (L.times[s.id] != null) { get(s.id).t = L.times[s.id]; get(s.id).steps = [{ name: s.sub || 'Step', t: L.times[s.id] }]; } });
   if (L.pos) Object.keys(L.pos).forEach(id => { if (nodes[id]) setStationPos(id, L.pos[id][0], L.pos[id][1]); });
   if (typeof L.walkOn === 'boolean') { walkOn = L.walkOn; const c = document.getElementById('walkOn'); if (c) c.checked = walkOn; }
@@ -4062,7 +4104,7 @@ function addPanelX(panel, onClose) {
     idlebtn: 'Idle time per operator across the day',
     helppaths: 'List and tune the help paths (minutes of help per unit)',
     taskbtn: 'Task distribution chart — operator loading vs the takt line',
-    taktbtn: 'Takt board — pace, capacity and takt for every product on every line',
+    plannerbtn: 'Planner: pick the day\'s furniture, quantities and build order; it creates the schedule',
     cam: 'Angled 3-quarter camera view', top: 'Straight-down plan view',
     btn2d: 'Flat 2D layout view', cadBtn: 'Overlay the CAD floor plan 1:1 to compare against the model',
     layoutSel: 'Switch between saved layouts', saveLayout: 'Save the current layout under a name',
