@@ -346,7 +346,7 @@ const ST = [
   { id:'tre', title:'TRELLIS',      sub:'Trellis',      ppl:1, t:22.5,  role:'feeder', kind:'trellis',    accent:'#1d3a66', steps:[{name:'Trellis', t:22.5}] },
   { id:'sea', title:'SEAT FRAME',   sub:'Seat frame',   ppl:1, t:47,    role:'feeder', kind:'seat',       accent:'#9a3b1f', bot:true, steps:[{name:'Seat frame', t:47}] },
   { id:'fa',  title:'FULL ASSEMBLY',sub:'Assemble frame',ppl:2, t:58,   role:'fa',     accent:'#1d3a66', steps:[{name:'Assemble frame', t:58}] },
-  { id:'pak', title:'CUSHIONS & PACK',sub:'Cushions + ship',ppl:0, t:18, role:'pack',   accent:'#236043', steps:[{name:'Cushions + pack', t:18}] },
+  { id:'pak', title:'CUSHIONS & PACK',sub:'Cushions + ship',ppl:1, t:18, role:'pack',   accent:'#236043', cover:'fa', steps:[{name:'Cushions + pack', t:18}] },  // default: covered by Full Assembly's crew (admin can change/clear this)
 ];
 function recalc(id) { const s = get(id); if (s && s.steps) s.t = s.steps.reduce((a, st) => a + (parseFloat(st.t) || 0), 0); }
 const get = id => ST.find(s => s.id === id);
@@ -399,15 +399,26 @@ function arrowOn(a) {
 function helpInto(id) { return (typeof helpArrows === 'undefined') ? 0 : helpArrows.reduce((s, a) => s + ((a.to === id && arrowOn(a)) ? (a.helpMin || 0) : 0), 0); }
 function helpFromOp(id, idx) { return (typeof helpArrows === 'undefined') ? 0 : helpArrows.reduce((s, a) => s + ((a.from === id && (a.fromIdx || 0) === idx && arrowOn(a)) ? (a.helpMin || 0) : 0), 0); }
 function effNet(id) { return Math.max(0.1, eff(id) - helpInto(id)); }   // a helped station's time drops by the help minutes
-function lineCyc() { return sch ? Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 1; }
-function availIdleOp(id, idx) { return Math.max(0, lineCyc() - effNet(id) - helpFromOp(id, idx)); }   // spare min/chair a specific operator can give
+// ---- crew COVERAGE (admin-controlled, not hard-coded): a station's crew can also cover another station's work ----
+// If station P has cover === A, then P has no operators of its own; P's per-unit time rolls onto EACH of A's operators.
+function coverOf(id) { const s = getAny(id); const c = s && s.cover; return (c && c !== id && getAny(c)) ? c : null; }
+function coveredBy(id) {   // ids of the stations whose work THIS station's crew also does
+  const line = (typeof stLineOf === 'function') ? stLineOf(id) : 'meritage';
+  const ids = (typeof lineStationIds === 'function') ? lineStationIds(line) : (typeof ST !== 'undefined' ? ST.map(s => s.id) : []);
+  return ids.filter(x => x !== id && coverOf(x) === id);
+}
+// per-OPERATOR busy time for a station's crew: its own cycle + the full time of every station it covers
+function opLoad(id) { return effNet(id) + coveredBy(id).reduce((a, c) => a + effNet(c), 0); }
+function isPrimary(id) { return !coverOf(id); }   // a station that has its own crew (not folded into another)
+function lineCyc() { let m = 0.1; ST.forEach(s => { if (isPrimary(s.id)) { const v = opLoad(s.id); if (v > m) m = v; } }); return m; }   // line paces on the busiest crew's combined load
+function availIdleOp(id, idx) { return Math.max(0, lineCyc() - opLoad(id) - helpFromOp(id, idx)); }   // spare min/chair a specific operator can give (own cycle + any covered work)
 // side-aware versions so help paths work on the Sola (added-station) side too
-function solaCyc() { let m = 0.1; extraStations.filter(id => sideOf(nodes[id].x, nodes[id].z) === 'other').forEach(id => { const e = effNet(id); if (e > m) m = e; }); return m; }
+function solaCyc() { let m = 0.1; extraStations.filter(id => sideOf(nodes[id].x, nodes[id].z) === 'other' && isPrimary(id)).forEach(id => { const e = opLoad(id); if (e > m) m = e; }); return m; }
 function cycOf(id) { return (typeof isExtra === 'function' && isExtra(id)) ? solaCyc() : lineCyc(); }
-function availIdleAny(id, idx) { return Math.max(0, cycOf(id) - effNet(id) - helpFromOp(id, idx)); }
+function availIdleAny(id, idx) { return Math.max(0, cycOf(id) - opLoad(id) - helpFromOp(id, idx)); }
 function schedule() {
   const seaT=effNet('sea'), armT=effNet('arm'), bakT=effNet('bak'), treT=effNet('tre'), conT=effNet('con');
-  const ASM=effNet('fa'), PACK=effNet('pak');
+  const ASM=effNet('fa'), PACK=coveredBy('fa').reduce((a,c)=>a+effNet(c),0);   // any stations covered by Full Assembly (default: Cushions & Pack) roll onto the FA pair
   const seatEnd=[],armEnd=[],bakEnd=[],kit=[],faStart=[],faEnd=[];
   let prev=0;
   for (let u=0;u<N;u++){
@@ -418,11 +429,11 @@ function schedule() {
   }
   sch={seaT,armT,bakT,treT,conT,ASM,PACK,seatEnd,armEnd,bakEnd,kit,faStart,faEnd};
   horizon=(faEnd[N-1]||0)+6;
-  const cyc=Math.max(conT,armT,bakT,treT,seaT,ASM+PACK);
-  const cap=dayMinSafe()/cyc;
-  let bot='Seat frame', bv=seaT;
-  [['Connectors',conT],['Arms',armT],['Back frame',bakT],['Trellis',treT],['Seat frame',seaT],['Full assy + pack',ASM+PACK]]
-    .forEach(([nm,v])=>{ if(v>bv){bv=v;bot=nm;} });
+  const cyc=lineCyc();
+  const cap=dayMinSafe()/Math.max(0.1,cyc);
+  // bottleneck = busiest PRIMARY crew, named for its station (+ what it covers, e.g. "Full assembly + Cushions & Pack")
+  let bot='—', bv=-1;
+  ST.forEach(s=>{ if(isPrimary(s.id)){ const v=opLoad(s.id); if(v>bv){ bv=v; const cov=coveredBy(s.id).map(c=>getAny(c).title); bot=s.title+(cov.length?' + '+cov.join(' + '):''); } } });
   ui.cyc.textContent=cyc.toFixed(1).replace(/\.0$/,'');
   ui.cap.textContent=cap.toFixed(1);
   ui.bot.textContent=`${bot} (${bv.toFixed(1).replace(/\.0$/,'')})`;
@@ -2050,7 +2061,7 @@ function addStation(name, x, z, id, t) {
 }
 function buildExtraCrew(id) {                                 // operator figures for an added station (mirrors Meritage)
   for (let i = crew.length - 1; i >= 0; i--) { if (crew[i].station === id) { level2.remove(crew[i].fig); crew.splice(i, 1); } }
-  const nd = nodes[id]; if (!nd) return; const s = nd.s, np = Math.max(0, s.ppl || 0);
+  const nd = nodes[id]; if (!nd) return; const s = nd.s, np = coverOf(id) ? 0 : Math.max(0, s.ppl || 0);
   const base = Math.max(0, extraStations.indexOf(id));
   for (let i = 0; i < np; i++) {
     const color = OP_COLORS[(base * 2 + i + 3) % OP_COLORS.length];
@@ -2117,9 +2128,21 @@ function rowsHtml(list, accent, fac) {
         ${smv ? smv.replace('class="smv"', `class="smv" data-si="${si}"`) : ''}
         <button class="sdel" data-id="${s.id}" data-si="${si}" title="Delete this step">✕</button></div>`;
     });
-    html += `<div class="stfoot">👤<input class="sppl" type="number" min="1" max="6" step="1" data-id="${s.id}" value="${ppl}" title="People working at this station"/>
-        <span>people → ${st_t.toFixed(0)} ÷ ${ppl} = <b>${cyc.toFixed(1)} min/unit</b></span>
+    // crew control: own operators, or "covered by" another station's crew (admin-controlled)
+    const covTargets = moveTargets(s.id);
+    const cov = (typeof coverOf === 'function') ? coverOf(s.id) : null;
+    const covSel = covTargets.length
+      ? `<select class="scov" data-id="${s.id}" title="Does this station have its own operators, or is its work done by another station's crew?"><option value="">own crew</option>${covTargets.map(t => `<option value="${t.id}"${cov === t.id ? ' selected' : ''}>covered by ${(t.title || t.id).replace(/</g, '&lt;')}</option>`).join('')}</select>`
+      : '';
+    if (cov) {
+      const covName = ((getAny(cov) || {}).title || cov).replace(/</g, '&lt;');
+      html += `<div class="stfoot">${covSel}<span>done by <b>${covName}</b>'s crew · adds <b>${cyc.toFixed(1)} min/unit</b> to them</span>
         <button class="sadd" data-id="${s.id}" title="Add a step to this station">+ step</button></div>`;
+    } else {
+      html += `<div class="stfoot">👤<input class="sppl" type="number" min="1" max="6" step="1" data-id="${s.id}" value="${ppl}" title="People working at this station"/>
+        <span>people → ${st_t.toFixed(0)} ÷ ${ppl} = <b>${cyc.toFixed(1)} min/unit</b></span>${covSel}
+        <button class="sadd" data-id="${s.id}" title="Add a step to this station">+ step</button></div>`;
+    }
     html += `</div>`;
   });
   return html;
@@ -2162,7 +2185,7 @@ function afterEdit(id) {                                     // ST stations re-p
 // working layout AND named layouts so a saved/baked layout carries the Sola line
 // (positions, per-station steps, people, rotation, and the flow arrows). ----
 function extraSnap() {
-  return extraStations.map(id => { const n = nodes[id]; return { id, name: n.s.title, x: n.x, z: n.z, t: n.t || 0, rot: n.rot || 0, ppl: n.s.ppl || 1, steps: (n.s.steps || []).map(st => [st.name, st.t]) }; });
+  return extraStations.map(id => { const n = nodes[id]; return { id, name: n.s.title, x: n.x, z: n.z, t: n.t || 0, rot: n.rot || 0, ppl: n.s.ppl || 1, cover: n.s.cover || '', steps: (n.s.steps || []).map(st => [st.name, st.t]) }; });
 }
 function clearExtras() {
   [...extraStations].forEach(id => {
@@ -2182,6 +2205,7 @@ function restoreExtras(list) {
     const nd = nodes[e.id]; if (!nd) return;
     if (Array.isArray(e.steps) && e.steps.length) { nd.s.steps = e.steps.map(a => ({ name: a[0], t: +a[1] || 0 })); recalcAny(e.id); }
     if (e.ppl && e.ppl !== 1) { nd.s.ppl = e.ppl; buildExtraCrew(e.id); }
+    if (e.cover) { nd.s.cover = e.cover; buildExtraCrew(e.id); }
     if (e.rot) setStationRot(e.id, e.rot);
   });
 }
@@ -2195,6 +2219,17 @@ function wireRows(host) {
     const id = e.target.dataset.id, s = getAny(id); s.ppl = Math.max(1, parseInt(e.target.value) || 1);
     if (isExtra(id)) buildExtraCrew(id); else { rebuildCrew(id); placeStation(id); }
     afterEdit(id);
+  });
+  host.querySelectorAll('select.scov').forEach(sel => sel.onchange = e => {   // admin: assign/clear which crew covers this station
+    const id = e.target.dataset.id, s = getAny(id); if (!s) return;
+    const val = e.target.value || null;
+    s.cover = (val && val !== id) ? val : null;
+    if (isExtra(id)) buildExtraCrew(id); else { rebuildCrew(id); placeStation(id); }
+    renderTimes();
+    schedule(); if (typeof buildSolaSched === 'function') buildSolaSched();
+    try { renderIdle(); renderHelpPanel(); renderTaskChart(); } catch (_) {}
+    T = 0; if (typeof setPlay === 'function') setPlay(false);
+    saveLayout();
   });
   host.querySelectorAll('input.sname').forEach(inp => inp.onchange = e => {
     getAny(e.target.dataset.id).steps[+e.target.dataset.si].name = e.target.value; saveLayout();
@@ -2440,19 +2475,24 @@ function orderedLine(sec) {
 function operatorsList(line) {
   const list = [];
   if (line !== 'meritage') {   // Sola or Canyon Crew — its own set of added stations
-    orderedLine(line).forEach(id => { const s = nodes[id].s, ppl = Math.max(1, s.ppl || 1), per = (s.t || 0) / ppl; for (let i = 0; i < ppl; i++) list.push({ name: s.title + (ppl > 1 ? ' ' + (i + 1) : ''), bpu: per }); });
+    const ord = orderedLine(line);
+    ord.forEach(id => {
+      if (coverOf(id)) return;                                   // covered station: no operators of its own
+      const s = nodes[id].s, ppl = Math.max(1, s.ppl || 1);
+      const covered = ord.filter(x => coverOf(x) === id).reduce((a, x) => a + (nodes[x].s.t || 0) / Math.max(1, nodes[x].s.ppl || 1), 0);
+      const per = (s.t || 0) / ppl + covered;                    // own cycle + any station this crew covers
+      for (let i = 0; i < ppl; i++) list.push({ name: s.title + (ppl > 1 ? ' ' + (i + 1) : ''), bpu: per });
+    });
     return list;
   }
-  for (const id of ['con','arm','bak','tre','sea']) {
-    const s = get(id), base = effNet(id);          // station's per-unit time (reduced if it receives help)
-    for (let i = 0; i < s.ppl; i++) {
-      const bpu = base + helpFromOp(id, i);         // each operator's own help time adds to their busy
-      list.push({ name: FEEDNAME[id] + (s.ppl > 1 ? ' ' + (i+1) : ''), bpu });
+  for (const id of ['con','arm','bak','tre','sea','fa','pak']) {
+    if (!isPrimary(id)) continue;                   // covered stations have no operators of their own
+    const s = get(id), base = opLoad(id);           // own per-unit time + any station this crew covers (e.g. FA + Cushions/Pack)
+    const nm = FEEDNAME[id] || s.title;
+    const ppl = Math.max(0, s.ppl || 0);
+    for (let i = 0; i < ppl; i++) {
+      list.push({ name: nm + (ppl > 1 ? ' ' + (i+1) : ''), bpu: base + helpFromOp(id, i) });   // each operator's own help time adds to their busy
     }
-  }
-  const faS = get('fa'), faBase = effNet('fa') + effNet('pak');   // FA pair also does the packing/cushions
-  for (let i = 0; i < faS.ppl; i++) {
-    list.push({ name: 'Full assembly ' + (i+1), bpu: faBase + helpFromOp('fa', i) });
   }
   return list;
 }
@@ -2501,12 +2541,17 @@ function wireProdTags() {
     renderIdle(); if (typeof renderSolaData === 'function') renderSolaData(); saveLayout(); renderHelpPanel();
   });
 }
-function bottleneckInfo() {
-  const items = [['con', effNet('con')], ['arm', effNet('arm')], ['bak', effNet('bak')], ['tre', effNet('tre')], ['sea', effNet('sea')], ['fapak', effNet('fa') + effNet('pak')]];
-  let bn = items[0]; items.forEach(it => { if (it[1] > bn[1]) bn = it; });
-  return { key: bn[0], time: bn[1], cap: dayMinSafe() / bn[1] };
+function bottleneckInfo() {   // busiest PRIMARY crew on the Meritage line (its combined own+covered load)
+  let bn = null;
+  ST.forEach(s => { if (isPrimary(s.id)) { const v = opLoad(s.id); if (!bn || v > bn.time) bn = { key: s.id, time: v }; } });
+  bn = bn || { key: 'sea', time: effNet('sea') };
+  const cov = coveredBy(bn.key).map(c => getAny(c).title);
+  bn.name = getAny(bn.key).title + (cov.length ? ' + ' + cov.join(' + ') : '');
+  bn.cap = dayMinSafe() / Math.max(0.1, bn.time);
+  return bn;
 }
-function isBottleneckTarget(to, bnKey) { return bnKey === 'fapak' ? (to === 'fa' || to === 'pak') : (to === bnKey); }
+// a help arrow relieves the bottleneck if it targets the bottleneck station OR a station that station covers
+function isBottleneckTarget(to, bnKey) { return to === bnKey || coverOf(to) === bnKey; }
 function renderHelpPanel() {
   if (!helpPanel || helpPanel.style.display === 'none') return;
   if (chartLine !== 'meritage') {   // Sola or Canyon Crew — each its own line
@@ -2546,7 +2591,7 @@ function renderHelpPanel() {
     wireProdTags(); wireLineSel(helpPanel); return;
   }
   const bn = bottleneckInfo();
-  const bnName = bn.key === 'fapak' ? 'Full assy + pack' : FEEDNAME[bn.key];
+  const bnName = bn.name;
   const head = `<h3>Help paths</h3>` + lineSel() + `<div class="ihint"><b>Line now: ${bn.cap.toFixed(1)} chairs/day</b> · bottleneck: ${bnName} (${bn.time.toFixed(1)} min). Output only rises when the bottleneck drops.</div>`;
   if (!helpArrows.length) { helpPanel.innerHTML = head + '<div class="ihint">No paths — click “➤ Help arrow”, then a FROM station and the TO station.</div>'; addPanelX(helpPanel, () => { helpPanel.style.display = 'none'; }); wireLineSel(helpPanel); return; }
   let html = head;
@@ -2681,7 +2726,7 @@ const STORDER = ['con','arm','bak','tre','sea','fa','pak'];
 function rebuildCrew(id) {              // recreate a station's operator figures to match its people count
   for (let i = crew.length - 1; i >= 0; i--) { if (crew[i].station === id) { level2.remove(crew[i].fig); crew.splice(i, 1); } }
   const s = get(id), nd = nodes[id]; if (!nd) return;
-  const np = s.role === 'pack' ? 0 : Math.max(0, s.ppl || 0);
+  const np = coverOf(id) ? 0 : Math.max(0, s.ppl || 0);   // a covered station's work is done by the covering crew, so no figures stand here
   const base = Math.max(0, STORDER.indexOf(id)), spread = s.double ? 4 * FT : 1.1;
   for (let i = 0; i < np; i++) {
     const color = OP_COLORS[(base * 2 + i) % OP_COLORS.length];
@@ -2706,7 +2751,7 @@ function setStationRot(id, rot) {
 }
 // Build the working-layout object from the LIVE scene (not from storage).
 function buildWorkingLayout() {
-  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0, a.prod || '']); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); o.__wps3 = cart3Waypoints.map(w => [w.x, w.z]); o.__rwps3 = returnWps3.map(w => [w.x, w.z]); o.__ends = [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null); o.__fwps = prodWps.map(l => l.map(w => [w.x, w.z])); o.__fstart = prodStart.slice(); o.__dayMin = dayMin; o.__products = JSON.parse(JSON.stringify(lineProducts)); o.__baseSteps = JSON.parse(JSON.stringify(baseSteps)); o.__boxZone = [boxZone.x, boxZone.z, boxZone.w, boxZone.d]; o.__names = Object.fromEntries(ST.map(s2 => [s2.id, s2.title])); return o;
+  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0, a.prod || '']); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__cover = Object.fromEntries(ST.map(s => [s.id, s.cover || ''])); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); o.__wps3 = cart3Waypoints.map(w => [w.x, w.z]); o.__rwps3 = returnWps3.map(w => [w.x, w.z]); o.__ends = [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null); o.__fwps = prodWps.map(l => l.map(w => [w.x, w.z])); o.__fstart = prodStart.slice(); o.__dayMin = dayMin; o.__products = JSON.parse(JSON.stringify(lineProducts)); o.__baseSteps = JSON.parse(JSON.stringify(baseSteps)); o.__boxZone = [boxZone.x, boxZone.z, boxZone.w, boxZone.d]; o.__names = Object.fromEntries(ST.map(s2 => [s2.id, s2.title])); return o;
 }
 // In-memory mirror so the layout survives even when localStorage is blocked
 // (Safari / file:// often refuses to persist) — bake reads THIS, never storage.
@@ -2750,7 +2795,7 @@ window.addEventListener('keydown', e => {
   }
 });
 function applyWorkingLayout(o) {   // apply a working-layout object to the LIVE scene (shared by load + import)
-  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } if (Array.isArray(o.__ends)) { const e = o.__ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; } if (Array.isArray(o.__fwps)) prodWps = [0, 1, 2].map(i => (o.__fwps[i] || []).map(a => ({ x: a[0], z: a[1] }))); if (Array.isArray(o.__fstart)) prodStart = [0, 1, 2].map(i => o.__fstart[i] || null); if (typeof o.__dayMin === 'number' && o.__dayMin > 0) dayMin = o.__dayMin; if (o.__products && o.__products.meritage) mergeProducts(o.__products); if (o.__baseSteps) baseSteps = o.__baseSteps; refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0, prod: a[4] || null })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); renderTimes(); } if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } extraStations.forEach(applyLineAccent); if (typeof refreshProdFlow === 'function') refreshProdFlow(); if (typeof applyLineFocus === 'function') applyLineFocus();
+  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } if (Array.isArray(o.__ends)) { const e = o.__ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; } if (Array.isArray(o.__fwps)) prodWps = [0, 1, 2].map(i => (o.__fwps[i] || []).map(a => ({ x: a[0], z: a[1] }))); if (Array.isArray(o.__fstart)) prodStart = [0, 1, 2].map(i => o.__fstart[i] || null); if (typeof o.__dayMin === 'number' && o.__dayMin > 0) dayMin = o.__dayMin; if (o.__products && o.__products.meritage) mergeProducts(o.__products); if (o.__baseSteps) baseSteps = o.__baseSteps; refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0, prod: a[4] || null })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__cover) { ST.forEach(s => { s.cover = o.__cover[s.id] || null; }); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; } }); } ST.forEach(s => { rebuildCrew(s.id); placeStation(s.id); }); renderTimes(); if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } extraStations.forEach(applyLineAccent); if (typeof refreshProdFlow === 'function') refreshProdFlow(); if (typeof applyLineFocus === 'function') applyLineFocus();
 }
 let hadSavedLayout = false;   // true when ANY layout (localStorage or baked) was loaded — defaults must then keep their hands off
 function loadLayout() { try { let o = null; try { o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch (e) {} if (!o && window.__M3D_LAYOUT__) o = window.__M3D_LAYOUT__;   // baked-in working layout (travels with the file)
@@ -3435,11 +3480,13 @@ function snapshot() {
   ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
   if (nodes.cart) pos.cart = [nodes.cart.x, nodes.cart.z];
   const cap = sch ? dayMinSafe() / Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 0;
-  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0, a.prod || '']), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), ppl: Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), extras: extraSnap(), flow: flowArrows.map(a => [a.from, a.to]), areas: areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]), rwps: returnWps.map(w => [w.x, w.z]), rwps2: returnWps2.map(w => [w.x, w.z]), wps3: cart3Waypoints.map(w => [w.x, w.z]), rwps3: returnWps3.map(w => [w.x, w.z]), ends: [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null), fwps: prodWps.map(l => l.map(w => [w.x, w.z])), fstart: prodStart.slice(), dayMin, products: JSON.parse(JSON.stringify(lineProducts)), boxZone: [boxZone.x, boxZone.z, boxZone.w, boxZone.d], names: Object.fromEntries(ST.map(s2 => [s2.id, s2.title])), cap: +cap.toFixed(1) };
+  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0, a.prod || '']), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), ppl: Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])), cover: Object.fromEntries(ST.map(s => [s.id, s.cover || ''])), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), extras: extraSnap(), flow: flowArrows.map(a => [a.from, a.to]), areas: areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]), rwps: returnWps.map(w => [w.x, w.z]), rwps2: returnWps2.map(w => [w.x, w.z]), wps3: cart3Waypoints.map(w => [w.x, w.z]), rwps3: returnWps3.map(w => [w.x, w.z]), ends: [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null), fwps: prodWps.map(l => l.map(w => [w.x, w.z])), fstart: prodStart.slice(), dayMin, products: JSON.parse(JSON.stringify(lineProducts)), boxZone: [boxZone.x, boxZone.z, boxZone.w, boxZone.d], names: Object.fromEntries(ST.map(s2 => [s2.id, s2.title])), cap: +cap.toFixed(1) };
 }
 function applyLayout(L) {
   if (L.steps) { ST.forEach(s => { if (L.steps[s.id]) { s.steps = L.steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); }
-  if (L.ppl) { ST.forEach(s => { if (L.ppl[s.id] != null) { s.ppl = L.ppl[s.id]; rebuildCrew(s.id); placeStation(s.id); } }); }
+  if (L.cover) { ST.forEach(s => { s.cover = L.cover[s.id] || null; }); }
+  if (L.ppl) { ST.forEach(s => { if (L.ppl[s.id] != null) s.ppl = L.ppl[s.id]; }); }
+  if (L.ppl || L.cover) ST.forEach(s => { rebuildCrew(s.id); placeStation(s.id); });
   else if (L.times) ST.forEach(s => { if (L.times[s.id] != null) { get(s.id).t = L.times[s.id]; get(s.id).steps = [{ name: s.sub || 'Step', t: L.times[s.id] }]; } });
   if (L.pos) Object.keys(L.pos).forEach(id => { if (nodes[id]) setStationPos(id, L.pos[id][0], L.pos[id][1]); });
   if (typeof L.walkOn === 'boolean') { walkOn = L.walkOn; const c = document.getElementById('walkOn'); if (c) c.checked = walkOn; }
@@ -3586,7 +3633,7 @@ function buildReportHTML() {
   const feeders = ['con', 'arm', 'bak', 'tre', 'sea'].map(get);
   const merLabor = ['con', 'arm', 'bak', 'tre', 'sea', 'fa', 'pak'].reduce((a, id) => a + (get(id).t || 0), 0);
   const merPpl = ['con', 'arm', 'bak', 'tre', 'sea', 'fa', 'pak'].reduce((a, id) => a + (get(id).ppl || 1), 0);
-  const bn = bottleneckInfo(), bnName = bn.key === 'fapak' ? 'Full Assembly + Pack' : FEEDNAME[bn.key];
+  const bn = bottleneckInfo(), bnName = bn.name;
   const takt = dayMin / taktDemand;
   const merHelp = helpArrows.filter(a => !isExtra(a.to));
   const kpi = (l, v) => `<div class="kpi"><div class="kl">${l}</div><div class="kv">${v}</div></div>`;
