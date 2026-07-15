@@ -60,8 +60,8 @@ Mirror the plant's ECN/PCN culture:
 | 1 | IT setup: create the SharePoint/Teams site and a "Layouts" List; register an Entra "SPA" app; admin-consent the Graph scope (Sites.ReadWrite.All) | CI + IT | ~½ day |
 | 2 | Start the interim bridge now: publish the official copy to the SharePoint/Teams site, announce "open it from here only" | CI | 1 hr |
 | 3 | Transfer the code: move the repo into TUUCI's GitHub org (or IT-controlled equivalent) with a README covering the one-command build | CI + IT | ½ day |
-| 4 | Implement storage: add MSAL sign-in and Graph read/write against the Layouts List (with ETag concurrency); swap the four storage functions; host the page on an internal HTTPS URL | Dev (CI or IT) | ~1–2 days |
-| 5 | Pilot with 2–3 users (mezzanine supervisor + engineer): verify saves propagate and nothing is lost | CI | 1 week in parallel |
+| 4 | Implement storage: add MSAL sign-in and Graph read/write against the Layouts List (with ETag concurrency); swap the four storage functions; host the page on an internal HTTPS URL | Dev (CI or IT) | ~1-2 days |
+| 5 | Pilot with 2-3 users (mezzanine supervisor + engineer): verify saves propagate and nothing is lost | CI | 1 week in parallel |
 | 6 | Name owners: a **technical owner** (builds/deploys/hosts) and a **data owner** (publishes Official layouts/times) | Mgmt | . |
 | 7 | Training: 1-hour session plus a one-page cheat sheet (Play, products, edit times, help paths, layouts) | CI | ½ day prep |
 | 8 | Support path: where users report issues; keep the assumptions register current | Data owner | ongoing |
