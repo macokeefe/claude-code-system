@@ -1281,6 +1281,7 @@ function refreshPath() {
 let helpArrows = [];                  // [{from, fromIdx, to, helpMin}] — added via the “Help arrow” tool (no demo defaults, so chart times match the station times)
 let dayPlan = { meritage: [], sola: [], canyon: [] };   // Planner: per line, an ordered list of {p: productIndex, q: quantity} builds for the day
 let planStart = 7 * 60;                                  // Planner day start, minutes from midnight (clock display)
+let plDrag = null;                                       // Planner drag-to-reorder: { line, i } of the order being dragged
 const helpGroup = new THREE.Group(); level2.add(helpGroup);
 const HELP_COL = 0x8f3fbf;
 
@@ -2721,6 +2722,10 @@ document.getElementById('taskbtn').onclick = () => {
   #plannerPanel .plnm{font-size:13.5px;color:#15263a;display:flex;align-items:center;gap:7px;margin-bottom:5px}
   #plannerPanel .plnm b{color:#15263a}
   #plannerPanel .plseq{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:50%;background:#e7eef7;color:#33414f;font-size:11px;font-weight:800;flex:none}
+  #plannerPanel .plorder{cursor:default}
+  #plannerPanel .plgrip{cursor:grab;color:#aab2bd;font-size:14px;letter-spacing:-3px;flex:none;padding-right:3px}
+  #plannerPanel .plorder.dragging{opacity:.45}
+  #plannerPanel .plorder.dragover{box-shadow:inset 0 3px 0 #1f6df6;border-radius:6px}
   #plannerPanel .plctls{margin-left:auto;display:flex;gap:3px}
   #plannerPanel .plctls button{border:1px solid #cfd6de;background:#fff;color:#5a6672;border-radius:5px;padding:1px 6px;font-size:11px;cursor:pointer;line-height:1.4}
   #plannerPanel .plctls .plDel{color:#c0552c;border-color:#dcae9f}
@@ -2794,8 +2799,8 @@ function renderPlanner() {
     c.rows.forEach(r => {
       const segOver = r.end > avail + 0.5;
       const fill = segOver ? 'repeating-linear-gradient(45deg,#c0552c,#c0552c 6px,#dd9b82 6px,#dd9b82 12px)' : c.color;
-      html += `<div class="plrow">
-        <div class="plnm"><span class="plseq">${r.idx + 1}</span> <b>${r.q}×</b> ${(r.name || '').replace(/</g, '&lt;')}
+      html += `<div class="plrow plorder" draggable="true" data-line="${c.key}" data-i="${r.idx}">
+        <div class="plnm"><span class="plgrip" title="Drag to reorder">⠿</span><span class="plseq">${r.idx + 1}</span> <b>${r.q}×</b> ${(r.name || '').replace(/</g, '&lt;')}
           <span class="plctls"><button class="plUp" data-line="${c.key}" data-i="${r.idx}" title="Build earlier">▲</button><button class="plDn" data-line="${c.key}" data-i="${r.idx}" title="Build later">▼</button><button class="plDel" data-line="${c.key}" data-i="${r.idx}" title="Remove">✕</button></span></div>
         <div class="plbar"><i style="left:${(r.start / scale * 100).toFixed(2)}%;width:${(r.mins / scale * 100).toFixed(2)}%;background:${fill}"></i><span class="plmk" style="left:${(avail / scale * 100).toFixed(2)}%"></span></div>
         <div class="plmeta">${r.q} unit${r.q === 1 ? '' : 's'} · ${r.pace.toFixed(1)}m each · ${r.mins.toFixed(0)}m total · done <b>${planClock(r.end)}</b>${segOver ? ' <span class="plover">· runs past end of day</span>' : ''}</div>
@@ -2827,6 +2832,24 @@ function renderPlanner() {
   const move = (line, i, d) => { const arr = dayPlan[line], j = i + d; if (j < 0 || j >= arr.length) return; const t = arr[i]; arr[i] = arr[j]; arr[j] = t; saveLayout(); renderPlanner(); };
   panel.querySelectorAll('.plUp').forEach(btn => btn.onclick = e => move(e.target.dataset.line, +e.target.dataset.i, -1));
   panel.querySelectorAll('.plDn').forEach(btn => btn.onclick = e => move(e.target.dataset.line, +e.target.dataset.i, 1));
+  // drag to reorder within a line ("move the furniture if one got there before the other")
+  const clearDnd = () => panel.querySelectorAll('.plorder').forEach(r => r.classList.remove('dragover', 'dragging'));
+  panel.querySelectorAll('.plorder').forEach(row => {
+    row.ondragstart = e => { plDrag = { line: row.dataset.line, i: +row.dataset.i }; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', row.dataset.i); } catch (_) {} row.classList.add('dragging'); };
+    row.ondragend = () => { plDrag = null; clearDnd(); };
+    row.ondragover = e => { if (plDrag && plDrag.line === row.dataset.line) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (!row.classList.contains('dragover')) { panel.querySelectorAll('.plorder.dragover').forEach(r => r.classList.remove('dragover')); row.classList.add('dragover'); } } };
+    row.ondragleave = () => row.classList.remove('dragover');
+    row.ondrop = e => {
+      e.preventDefault();
+      if (!plDrag || plDrag.line !== row.dataset.line) return;
+      const line = row.dataset.line, from = plDrag.i, to = +row.dataset.i;
+      plDrag = null;
+      if (from === to) { renderPlanner(); return; }
+      const arr = dayPlan[line], [it] = arr.splice(from, 1);
+      arr.splice(from < to ? to - 1 : to, 0, it);
+      saveLayout(); renderPlanner();
+    };
+  });
 }
 document.getElementById('plannerbtn').onclick = () => {
   const panel = document.getElementById('plannerPanel');
