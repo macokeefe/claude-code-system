@@ -2880,9 +2880,58 @@ document.getElementById('plannerbtn').onclick = () => {
   #taktPanel .tkmeta b{color:#15263a}
   #taktPanel .tkmeta input{width:50px;text-align:center;font-size:12px}
   #taktPanel .tkok{color:#2f7d52;font-weight:700}
-  #taktPanel .tkover{color:#c0552c;font-weight:700}`;
+  #taktPanel .tkover{color:#c0552c;font-weight:700}
+  #taktPanel .tkoptbox{background:#f2faf5;border:1px solid #bfe3cd;border-radius:8px;padding:7px 10px;margin-top:8px}
+  #taktPanel .tkopthd{font-size:12px;color:#26523a;margin-bottom:4px}
+  #taktPanel .tkopthd b{color:#15263a}
+  #taktPanel .tkoptbar{height:13px;margin:4px 0 6px}
+  #taktPanel .tkoptbar > i{background:linear-gradient(90deg,#7cc79a,#2f7d52)}
+  #taktPanel .tkopta{font-size:11.5px;color:#3c5a49;padding:1px 0}
+  #taktPanel .tkopta b{color:#15263a}
+  #taktPanel .tkoptnone{font-size:11.5px;color:#7a8a80}
+  #taktPanel #tkOpt.on{background:#2f7d52;border-color:#2f7d52}`;
   document.head.appendChild(s);
 })();
+// propose up to N help paths for one product on one line, minimizing the pace.
+// PURE what-if: reads the product definition, never touches helpArrows.
+function optimizeHelpFor(line, prod, N) {
+  const ids = lineStationIds(line).filter(id => getAny(id));
+  const isSteps = !!prod.stations;
+  const f = isSteps ? 1 : Math.max(0.05, +prod.f || 1);
+  const baseT = id => {
+    if (isSteps) return (prod.stations[id] || []).reduce((a, st) => a + (+st[1] || 0), 0);
+    if (typeof baseSteps !== 'undefined' && baseSteps[line] && baseSteps[line][id]) return baseSteps[line][id].reduce((a, st) => a + (+st.t || 0), 0);
+    const s = getAny(id); return (s.steps || []).reduce((a, st) => a + (+st.t || 0), 0);
+  };
+  const nt = id => { const s = getAny(id), ppl = Math.max(1, s.ppl || 1); return Math.max(0.1, (baseT(id) / ppl) * f + walkOf(id)); };
+  const prim = ids.filter(id => isPrimary(id));
+  if (!prim.length) return null;
+  const load0 = {}; prim.forEach(id => { load0[id] = nt(id) + ids.filter(x => coverOf(x) === id).reduce((a, x) => a + nt(x), 0); });
+  const ops = []; prim.forEach(id => { const ppl = Math.max(1, getAny(id).ppl || 1); for (let i = 0; i < ppl; i++) ops.push({ id, idx: i, given: 0 }); });
+  const recv = {}; prim.forEach(id => recv[id] = 0);
+  const busy = op => Math.max(0.1, load0[op.id] - recv[op.id]) + op.given;
+  const paceNoHelp = Math.max(...prim.map(id => load0[id]), 0.1);
+  const arrows = [];
+  for (let k = 0; k < N; k++) {
+    let bOp = ops[0]; ops.forEach(o => { if (busy(o) > busy(bOp)) bOp = o; });
+    const B = busy(bOp), bSt = bOp.id;
+    const givers = ops.filter(o => o.id !== bSt && o.given === 0);   // one path per operator (they walk to one place)
+    if (!givers.length) break;
+    let g = givers[0]; givers.forEach(o => { if (busy(o) < busy(g)) g = o; });
+    const G = busy(g);
+    let L2 = 0; ops.forEach(o => { if (o.id !== bSt && o !== g) L2 = Math.max(L2, busy(o)); });
+    const half = (B - G) / 2, toNext = B - L2;
+    let m = (L2 > (B + G) / 2 + 0.05 && toNext >= 0.3) ? toNext : half;   // stop at the next constraint, else balance giver & receiver
+    m = Math.floor(m * 10) / 10;
+    if (m < 0.3) break;                                                   // no meaningful gain left
+    recv[bSt] += m; g.given += m;
+    const ex = arrows.find(a => a.from === g.id && a.fromIdx === g.idx && a.to === bSt);
+    if (ex) ex.min += m; else arrows.push({ from: g.id, fromIdx: g.idx, to: bSt, min: m });
+  }
+  const pace = Math.max(...ops.map(busy), 0.1);
+  return { pace, paceNoHelp, arrows };
+}
+let tkOptShow = false, tkMaxHelp = 3;   // Takt board optimizer: proposal display toggle + path budget
 function renderTaktBoard() {
   const panel = document.getElementById('taktPanel');
   if (!panel || panel.style.display === 'none') return;
@@ -2895,7 +2944,10 @@ function renderTaktBoard() {
   let scaleMax = 1; cols.forEach(c => c.products.forEach(p => { scaleMax = Math.max(scaleMax, p.pace, p.takt); })); scaleMax *= 1.05;
   let html = `<h3>Takt board: pace &amp; capacity by product</h3>`;
   html += `<div class="tkctl">Day length <input type="number" id="tkDay" value="${(dayMinSafe()/60)}" min="1" max="16" step="0.5"> hr`
-        + ` · <b style="color:#2f6df6">bar</b> = pace (min/unit) · <b style="color:#e11">red line</b> = takt · set each product's target/day to move its takt · <b style="color:#2f7d52">green</b> meets takt, <b style="color:#c0552c">red</b> is over</div>`;
+        + ` · <b style="color:#2f6df6">bar</b> = pace (min/unit) · <b style="color:#e11">red line</b> = takt · set each product's target/day to move its takt · <b style="color:#2f7d52">green</b> meets takt, <b style="color:#c0552c">red</b> is over`
+        + ` · <span style="border-left:1px solid #cfd6de;padding-left:14px">up to <input type="number" id="tkMaxHelp" value="${tkMaxHelp}" min="1" max="12" step="1" title="Path budget: most help paths the optimizer may propose per line"> help paths</span>`
+        + ` <button id="tkOpt" class="${tkOptShow ? 'on' : ''}" style="padding:4px 12px">⚡ Optimize</button>`
+        + `${tkOptShow ? ' <span style="color:#2f7d52;font-weight:700">showing proposals only, your help paths are untouched</span>' : ''}</div>`;
   html += `<div class="tkgrid">`;
   cols.forEach(c => {
     html += `<div class="tkcol"><div class="tkhd" style="background:${c.color}"><span>${c.label}</span><span>${c.products.length} product${c.products.length === 1 ? '' : 's'}</span></div>`;
@@ -2913,8 +2965,23 @@ function renderTaktBoard() {
           <span>capacity <b>${p.cap.toFixed(1)}/day</b></span>
           <span>takt <b>${p.takt.toFixed(1)}m</b> @ <input type="number" class="tkTarget" data-line="${c.key}" data-i="${p.i}" value="${(+p.demand.toFixed(1))}" min="1" step="1">/day</span>
           <span class="${over ? 'tkover' : 'tkok'}">${over ? ('⚠ over takt by ' + (p.pace - p.takt).toFixed(1) + 'm') : '✓ meets takt'}</span>
-        </div>
-      </div>`;
+        </div>`;
+      if (tkOptShow) {
+        const opt = optimizeHelpFor(c.key, (lineProducts[c.key] || { list: [] }).list[p.i], tkMaxHelp);
+        if (opt && opt.arrows.length && opt.pace < p.pace - 0.2) {
+          const optW = Math.min(100, opt.pace / scaleMax * 100);
+          const capNow = dayMinSafe() / Math.max(0.1, p.pace), capOpt = dayMinSafe() / Math.max(0.1, opt.pace);
+          const optOver = opt.pace > p.takt + 0.05;
+          html += `<div class="tkoptbox">
+            <div class="tkopthd">⚡ with ${opt.arrows.length} help path${opt.arrows.length === 1 ? '' : 's'}: pace <b>${p.pace.toFixed(1)} → ${opt.pace.toFixed(1)}m</b> · capacity <b>${capNow.toFixed(1)} → ${capOpt.toFixed(1)}/day</b>${optOver ? '' : ' · <span style="color:#2f7d52">✓ would meet takt</span>'}</div>
+            <div class="tkbar tkoptbar"><i style="width:${optW}%"></i><span class="tkmk" style="left:${Math.min(100, p.takt / scaleMax * 100)}%"></span></div>
+            ${opt.arrows.map(a => { const fs = getAny(a.from), fp = Math.max(1, fs.ppl || 1); return `<div class="tkopta">${(fs.title || a.from)}${fp > 1 ? ' op ' + (a.fromIdx + 1) : ''} → <b>${(getAny(a.to) || {}).title || a.to}</b> · ${a.min.toFixed(1)} min/unit</div>`; }).join('')}
+          </div>`;
+        } else if (opt) {
+          html += `<div class="tkoptbox tkoptnone">⚡ already balanced: no meaningful gain within ${tkMaxHelp} path${tkMaxHelp === 1 ? '' : 's'}</div>`;
+        }
+      }
+      html += `</div>`;
     });
     html += `</div>`;
   });
@@ -2927,6 +2994,10 @@ function renderTaktBoard() {
     const lp = lineProducts[e.target.dataset.line], p = lp && lp.list[+e.target.dataset.i];
     if (p) { p.demand = Math.max(1, parseFloat(e.target.value) || 10); saveLayout(); renderTaktBoard(); }
   });
+  const oEl = document.getElementById('tkOpt');
+  if (oEl) oEl.onclick = () => { tkOptShow = !tkOptShow; renderTaktBoard(); };
+  const mEl = document.getElementById('tkMaxHelp');
+  if (mEl) mEl.onchange = e => { tkMaxHelp = Math.max(1, Math.min(12, parseInt(e.target.value) || 3)); if (tkOptShow) renderTaktBoard(); };
 }
 document.getElementById('taktbtn').onclick = () => {
   const panel = document.getElementById('taktPanel');
