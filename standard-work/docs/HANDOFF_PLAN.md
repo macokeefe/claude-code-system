@@ -39,7 +39,7 @@ Two facts to plan around, both confirmed:
 - **The app page is served from a static web address, not from the OneDrive folder.** SharePoint serves a raw `.html` as a download, and a double-clicked local file cannot sign in. Host on an internal web server, Azure Static Web Apps, or package into SharePoint (SPFx). Static hosting, not an application server.
 - **One-time admin consent.** Reaching a shared site needs an Entra "SPA" app registration plus a one-time tenant admin consent for the Graph scope (Sites.ReadWrite.All). About 15 minutes, once.
 
-The code is shaped for the swap: every read and write funnels through four functions (`saveLayout`, `loadLayout`, `readLayouts`, `writeLayouts`). Replacing localStorage with MSAL sign-in plus Graph calls is roughly one to two days of development.
+**Status: the app side is BUILT.** The app now ships with the MSAL + Graph storage layer inside it, behind a config block (`window.M3D_CLOUD` at the top of the HTML). Until IT fills in the four values (tenantId, clientId, siteHost, sitePath), it runs local-only exactly as before and the toolbar shows "Local only." Once configured: sign-in with the company account, the SharePoint List is created automatically on first connect, saves push debounced with stale-save protection (a conflict prompts the user instead of silently overwriting), named layouts sync both ways including deletes, and a fresh machine pulls everything on open. Verified end to end against a mock Graph server.
 
 **Interim bridge (start now, zero IT):** one copy on the SharePoint/Teams site is the only official copy. One owner makes changes, uses "Save into app," republishes there. Everyone opens from that link only.
 
@@ -56,7 +56,7 @@ Ownership note: a SharePoint/Teams site, not a person's personal OneDrive, so no
 | Phase | What happens | Who | Effort |
 |---|---|---|---|
 | 0. Now | Publish the official copy to the SharePoint/Teams site; announce "open from here only." Freeze a v1: tag the repo, list known assumptions. | CI | 1 hr |
-| 1. Storage | IT setup (site, Layouts list, Entra SPA registration, admin consent). Implement MSAL + Graph in the four storage functions; host the page on an internal HTTPS URL. | CI + IT | ~2-3 days total |
+| 1. Storage | IT setup (site, Entra SPA registration, admin consent), then fill in the app's config block and host the page on an internal HTTPS URL. App-side code is already built and tested. | CI + IT | ~half a day |
 | 2. Pilot | 2-3 users (mezzanine supervisor + engineer) run it for a week; verify saves propagate, nothing lost, numbers trusted. | CI | 1 week parallel |
 | 3. Roles | Split admin vs floor-manager experience (start with the toggle convention, add sign-in role check). Line supervisors trained on Planner/Takt board only. | CI + IT | 2-3 days |
 | 4. Ownership | Name a **technical owner** (builds, deploys, hosts) and a **data owner** (publishes Official layouts/times). Move the repo into TUUCI's org. Training: 1 hour for supervisors, 2 hours for the admin owner, plus one-page cheat sheets. | Mgmt + CI | ½ day + sessions |

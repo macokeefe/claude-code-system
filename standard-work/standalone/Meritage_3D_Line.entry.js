@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { PublicClientApplication } from '@azure/msal-browser';   // TUUCI shared data (Phase 1): sign in with the company M365 account
 
 // Capture the pristine page HTML before the 3D scene mutates the DOM, so we can
 // bake the current layouts into a fresh self-contained copy of this app.
@@ -3083,6 +3084,7 @@ function saveLayout() {
   } catch (e) {}
   __workingLayout = next;
   try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(next)); } catch (e) {}
+  try { cloudQueueWorking(); } catch (e) {}   // shared store (when configured): debounce-push so everyone gets it
   try { refreshProdFlow(); } catch (e) {}   // catch-all: any layout mutation may move a forklift access — re-route the furniture lanes
 }
 function undoLayout() {
@@ -3095,6 +3097,7 @@ function undoLayout() {
     applyWorkingLayout(prev);
     __workingLayout = prev;
     try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(prev)); } catch (e) {}
+    try { cloudQueueWorking(); } catch (e) {}
     renderTimes(); schedule(); if (typeof buildSolaSched === 'function') buildSolaSched();
     try { renderIdle(); renderHelpPanel(); } catch (e) {}
     T = 0; Ts = 0; setPlay(false);
@@ -3789,7 +3792,7 @@ const readLayouts = () => {
   if (!__namedCache) { let ls = {}; try { ls = JSON.parse(localStorage.getItem(LAYOUTS_KEY)) || {}; } catch (e) {} __namedCache = Object.assign({}, builtinLayouts(), ls); }
   return __namedCache;
 };
-const writeLayouts = o => { __namedCache = o; try { localStorage.setItem(LAYOUTS_KEY, JSON.stringify(o)); } catch (e) {} };
+const writeLayouts = o => { __namedCache = o; try { localStorage.setItem(LAYOUTS_KEY, JSON.stringify(o)); } catch (e) {} try { cloudSyncNamed(o); } catch (e) {} };
 function snapshot() {
   const pos = {}, times = {};
   ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
@@ -4295,6 +4298,7 @@ function addPanelX(panel, onClose) {
     taktbtn: 'Takt board: pace, capacity and takt for every product on every line, side by side',
     floorTools: 'Show / hide the floor-editing tools (stations, carts, lanes, racks)',
     layoutsBtn: 'Save, load, share, or bake in layouts',
+    cloudBtn: 'Shared data status: local-only until IT configures the TUUCI SharePoint store',
     cam: 'Angled 3-quarter camera view', top: 'Straight-down plan view',
     btn2d: 'Flat 2D layout view', cadBtn: 'Overlay the CAD floor plan 1:1 to compare against the model',
     layoutSel: 'Switch between saved layouts', saveLayout: 'Save the current layout under a name',
@@ -4328,3 +4332,204 @@ function addPanelX(panel, onClose) {
 try { refreshRunSelectors(); } catch (e) {}
 try { schedule(); update(); } catch (e) { console.error('init schedule/update failed', e); }
 requestAnimationFrame(loop);   // always start the render loop
+
+/* ============================================================
+   TUUCI SHARED DATA (handoff Phase 1)
+   The store is a SharePoint List (one row per layout) on the shared
+   TUUCI site, reached through Microsoft Graph with each person's normal
+   M365 sign-in. Until window.M3D_CLOUD is configured (after IT registers
+   the app in Entra), everything keeps running local-only exactly as before.
+   ============================================================ */
+const CLOUD = (() => {
+  const cfg = (typeof window !== 'undefined' && window.M3D_CLOUD) || {};
+  const enabled = !!(((cfg.clientId && cfg.tenantId) || cfg.testToken) && cfg.siteHost && cfg.sitePath);
+  return { cfg, enabled, state: enabled ? 'idle' : 'off', account: null, siteId: null, listId: null, items: {}, lastError: null, lastSync: 0, msal: null };
+})();
+const GRAPH_BASE = () => CLOUD.cfg.graphBase || 'https://graph.microsoft.com/v1.0';
+async function cloudMsal() {
+  if (!CLOUD.msal) {
+    CLOUD.msal = new PublicClientApplication({
+      auth: { clientId: CLOUD.cfg.clientId, authority: 'https://login.microsoftonline.com/' + CLOUD.cfg.tenantId, redirectUri: location.origin + location.pathname },
+      cache: { cacheLocation: 'localStorage' },
+    });
+    await CLOUD.msal.initialize();
+  }
+  return CLOUD.msal;
+}
+async function cloudToken(interactive) {
+  if (CLOUD.cfg.testToken) return CLOUD.cfg.testToken;
+  const msal = await cloudMsal();
+  const req = { scopes: ['Sites.ReadWrite.All'] };
+  let acct = msal.getAllAccounts()[0];
+  if (!acct) {
+    if (!interactive) throw new Error('not signed in');
+    const r = await msal.loginPopup(req); acct = r.account;
+  }
+  CLOUD.account = acct;
+  try { const r = await msal.acquireTokenSilent({ ...req, account: acct }); return r.accessToken; }
+  catch (e) { if (!interactive) throw e; const r = await msal.acquireTokenPopup(req); return r.accessToken; }
+}
+let __cloudInteractive = false;
+async function gfetch(path, opt) {
+  const tok = await cloudToken(__cloudInteractive);
+  const url = path.startsWith('http') ? path : GRAPH_BASE() + path;
+  const r = await fetch(url, { ...(opt || {}), headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json', ...((opt && opt.headers) || {}) } });
+  if (r.status === 412) { const err = new Error('conflict'); err.code = 412; throw err; }
+  if (!r.ok) { const t = await r.text().catch(() => ''); const err = new Error('Graph ' + r.status + ': ' + t.slice(0, 240)); err.code = r.status; throw err; }
+  return r.status === 204 ? null : r.json();
+}
+async function cloudEnsureList() {
+  if (CLOUD.listId) return;
+  const site = await gfetch('/sites/' + CLOUD.cfg.siteHost + ':' + CLOUD.cfg.sitePath + '?$select=id');
+  CLOUD.siteId = site.id;
+  const name = CLOUD.cfg.listName || 'M3D Layouts';
+  const ls = await gfetch(`/sites/${CLOUD.siteId}/lists?$select=id,displayName`);
+  let list = (ls.value || []).find(l => l.displayName === name);
+  if (!list) list = await gfetch(`/sites/${CLOUD.siteId}/lists`, { method: 'POST', body: JSON.stringify({ displayName: name, columns: [{ name: 'Data', text: { allowMultipleLines: true } }], list: { template: 'genericList' } }) });
+  CLOUD.listId = list.id;
+}
+async function cloudPullAll() {
+  await cloudEnsureList();
+  const out = {};
+  let url = `/sites/${CLOUD.siteId}/lists/${CLOUD.listId}/items?$expand=fields($select=Title,Data)&$top=200`;
+  while (url) {
+    const page = await gfetch(url);
+    (page.value || []).forEach(it => {
+      const nm = it.fields && it.fields.Title; if (!nm) return;
+      CLOUD.items[nm] = { id: String(it.id), etag: it['@odata.etag'] || '' };
+      try { out[nm] = JSON.parse(it.fields.Data || 'null'); } catch (e) {}
+    });
+    url = page['@odata.nextLink'] || null;
+  }
+  return out;
+}
+async function cloudPut(name, obj, force) {
+  await cloudEnsureList();
+  const known = CLOUD.items[name];
+  if (known) {
+    const headers = (force || !known.etag) ? {} : { 'If-Match': known.etag };
+    await gfetch(`/sites/${CLOUD.siteId}/lists/${CLOUD.listId}/items/${known.id}/fields`, { method: 'PATCH', headers, body: JSON.stringify({ Data: JSON.stringify(obj) }) });
+    const it = await gfetch(`/sites/${CLOUD.siteId}/lists/${CLOUD.listId}/items/${known.id}?$select=id`);
+    known.etag = it['@odata.etag'] || '';
+  } else {
+    const it = await gfetch(`/sites/${CLOUD.siteId}/lists/${CLOUD.listId}/items`, { method: 'POST', body: JSON.stringify({ fields: { Title: name, Data: JSON.stringify(obj) } }) });
+    CLOUD.items[name] = { id: String(it.id), etag: it['@odata.etag'] || '' };
+  }
+}
+async function cloudDeleteItem(name) {
+  const known = CLOUD.items[name]; if (!known) return;
+  await gfetch(`/sites/${CLOUD.siteId}/lists/${CLOUD.listId}/items/${known.id}`, { method: 'DELETE' });
+  delete CLOUD.items[name];
+}
+async function cloudPullOne(name) {
+  const known = CLOUD.items[name]; if (!known) return null;
+  const it = await gfetch(`/sites/${CLOUD.siteId}/lists/${CLOUD.listId}/items/${known.id}?$expand=fields($select=Title,Data)`);
+  known.etag = it['@odata.etag'] || '';
+  try { return JSON.parse(it.fields.Data || 'null'); } catch (e) { return null; }
+}
+// ---- sync engine: debounced working-layout push + named-layout diff push ----
+let __cloudTimer = null, __cloudBusy = false, __cloudDirtyWorking = false, __namedPushed = {};
+function cloudQueueWorking() {
+  if (CLOUD.state !== 'on') return;
+  __cloudDirtyWorking = true;
+  clearTimeout(__cloudTimer); __cloudTimer = setTimeout(cloudFlush, 1800);
+}
+async function cloudFlush() {
+  if (__cloudBusy || CLOUD.state !== 'on') return;
+  __cloudBusy = true;
+  try {
+    if (__cloudDirtyWorking) {
+      __cloudDirtyWorking = false;
+      try { await cloudPut('__working', __workingLayout); }
+      catch (e) { if (e.code === 412) await cloudConflictWorking(); else throw e; }
+    }
+    CLOUD.lastSync = Date.now(); CLOUD.lastError = null;
+  } catch (e) { CLOUD.lastError = e.message || String(e); }
+  finally { __cloudBusy = false; refreshCloudChip(); }
+}
+async function cloudConflictWorking() {
+  const theirs = await cloudPullOne('__working');   // refreshes the etag either way
+  const keepMine = confirm('Someone else just saved a different working layout to the shared store.\n\nOK = keep MY version (theirs is overwritten)\nCancel = load THEIR version');
+  if (keepMine) { await cloudPut('__working', __workingLayout, true); }
+  else if (theirs) {
+    clearExtras(); helpArrows = []; buildHelp();
+    applyWorkingLayout(theirs);
+    __workingLayout = buildWorkingLayout();
+    try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(__workingLayout)); } catch (e) {}
+  }
+}
+function cloudSyncNamed(map) {
+  if (CLOUD.state !== 'on') return;
+  (async () => {
+    try {
+      for (const [nm, obj] of Object.entries(map)) {
+        const j = JSON.stringify(obj);
+        if (__namedPushed[nm] !== j) { await cloudPut(nm, obj); __namedPushed[nm] = j; }
+      }
+      for (const nm of Object.keys(__namedPushed)) {
+        if (!(nm in map)) { await cloudDeleteItem(nm); delete __namedPushed[nm]; }
+      }
+      CLOUD.lastSync = Date.now(); CLOUD.lastError = null;
+    } catch (e) { CLOUD.lastError = e.message || String(e); }
+    refreshCloudChip();
+  })();
+}
+async function cloudConnect(interactive) {
+  if (!CLOUD.enabled || CLOUD.state === 'on' || CLOUD.state === 'connecting') return;
+  __cloudInteractive = !!interactive;
+  if (!interactive && !CLOUD.cfg.testToken) {   // only auto-connect when an account is already cached
+    try { const msal = await cloudMsal(); if (!msal.getAllAccounts().length) { refreshCloudChip(); return; } }
+    catch (e) { refreshCloudChip(); return; }
+  }
+  CLOUD.state = 'connecting'; refreshCloudChip();
+  try {
+    const all = await cloudPullAll();
+    if (all.__working) {   // the shared store is the source of truth on connect
+      clearExtras(); helpArrows = []; buildHelp();
+      applyWorkingLayout(all.__working);
+      __workingLayout = buildWorkingLayout();
+      try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(__workingLayout)); } catch (e) {}
+    } else { __cloudDirtyWorking = true; }   // first machine in seeds the store
+    const local = readLayouts();
+    const merged = Object.assign({}, local);
+    Object.entries(all).forEach(([nm, obj]) => { if (nm !== '__working' && obj) { merged[nm] = obj; __namedPushed[nm] = JSON.stringify(obj); } });
+    __namedCache = merged;
+    try { localStorage.setItem(LAYOUTS_KEY, JSON.stringify(merged)); } catch (e) {}
+    refreshLayoutSel(layoutSel.value);
+    CLOUD.state = 'on';
+    cloudFlush();
+    cloudSyncNamed(merged);   // push anything the store doesn't have yet
+  } catch (e) { CLOUD.state = 'error'; CLOUD.lastError = e.message || String(e); }
+  __cloudInteractive = false;
+  refreshCloudChip();
+}
+// ---- status chip in the toolbar ----
+function refreshCloudChip() {
+  const b = document.getElementById('cloudBtn'); if (!b) return;
+  const map = { off: '☁ Local only', idle: '☁ Sign in', connecting: '☁ Connecting…', on: '☁ Shared ✓', error: '☁ Retry sync' };
+  b.textContent = map[CLOUD.state] || '☁';
+  b.classList.toggle('on', CLOUD.state === 'on');
+  b.title = CLOUD.state === 'error' ? ('Sync error: ' + (CLOUD.lastError || '')) : '';
+}
+(() => {
+  const gf = document.getElementById('grpFile'); if (!gf) return;
+  const b = document.createElement('button'); b.id = 'cloudBtn';
+  gf.parentNode.insertBefore(b, gf);
+  b.onclick = () => {
+    if (!CLOUD.enabled) {
+      alert('Shared data is not configured yet, so this copy saves locally only.\n\nWhen IT registers the app in Microsoft Entra (see the handoff plan), fill in window.M3D_CLOUD near the top of this file: tenantId, clientId, siteHost, sitePath. From then on everyone who opens this page reads and writes ONE shared store on the TUUCI SharePoint site.');
+      return;
+    }
+    if (CLOUD.state === 'on') {
+      alert('Connected to the shared TUUCI store.\nSite: ' + CLOUD.cfg.siteHost + CLOUD.cfg.sitePath +
+        '\nSigned in: ' + (CLOUD.account ? (CLOUD.account.username || CLOUD.account.name) : 'service') +
+        (CLOUD.lastSync ? '\nLast sync: ' + new Date(CLOUD.lastSync).toLocaleTimeString() : '') +
+        (CLOUD.lastError ? '\nLast error: ' + CLOUD.lastError : ''));
+      return;
+    }
+    if (CLOUD.state === 'error') CLOUD.state = 'idle';
+    cloudConnect(true);
+  };
+  refreshCloudChip();
+  if (CLOUD.enabled) setTimeout(() => cloudConnect(false), 900);
+})();
