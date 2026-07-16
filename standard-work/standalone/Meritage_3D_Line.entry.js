@@ -3482,7 +3482,8 @@ document.getElementById('addwp').onclick = () => {
   lanes.id = 'lanesBtn'; lanes.className = awp.className || '';
   lanes.textContent = '🔵 Lanes: on';
   lanes.title = 'Show / hide the blue 5\'-wide cart lanes while editing the layout';
-  b.parentNode.insertBefore(lanes, b.nextSibling);
+  const _grpView = document.getElementById('grpView');
+  if (_grpView) _grpView.appendChild(lanes); else b.parentNode.insertBefore(lanes, b.nextSibling);
   lanes.onclick = () => {
     aisleOn = !aisleOn;
     lanes.textContent = '🔵 Lanes: ' + (aisleOn ? 'on' : 'off');
@@ -3502,7 +3503,8 @@ document.getElementById('addwp').onclick = () => {
   const rc = document.createElement('button');
   rc.id = 'runCartsBtn'; rc.className = awp.className || '';
   rc.textContent = '🛒 Run carts';
-  ends.parentNode.insertBefore(rc, ends.nextSibling);
+  const _grpRun = document.getElementById('grpRun');
+  if (_grpRun) _grpRun.appendChild(rc); else ends.parentNode.insertBefore(rc, ends.nextSibling);
   rc.onclick = () => {
     if (!editing) setEditing(true);
     if (cartDemoOn) { stopCartDemo(); return; }
@@ -3522,7 +3524,8 @@ document.getElementById('addwp').onclick = () => {
   shipB.id = 'shipStartBtn'; shipB.className = awp.className || '';
   shipB.textContent = '⇊ Ship point';
   shipB.title = 'Choose which table each line\'s green furniture lane starts from';
-  ends.parentNode.insertBefore(shipB, ends.nextSibling);
+  const _buildRow = document.getElementById('buildRow');
+  if (_buildRow) _buildRow.appendChild(shipB); else ends.parentNode.insertBefore(shipB, ends.nextSibling);
   // a simple picker: one dropdown per line, listing that line's tables
   const shipPanel = document.createElement('div');
   shipPanel.id = 'shipPanel';
@@ -3550,7 +3553,7 @@ document.getElementById('addwp').onclick = () => {
   const flB = document.createElement('button');
   flB.id = 'flowLanesBtn'; flB.className = shipB.className || '';
   flB.textContent = '📦 Flow lanes: on';
-  shipB.parentNode.insertBefore(flB, shipB.nextSibling);
+  if (_grpView) _grpView.appendChild(flB); else shipB.parentNode.insertBefore(flB, shipB.nextSibling);
   flB.onclick = () => {
     prodLanesOn = !prodLanesOn;
     flB.textContent = '📦 Flow lanes: ' + (prodLanesOn ? 'on' : 'off');
@@ -3561,7 +3564,8 @@ document.getElementById('addwp').onclick = () => {
   const avB = document.createElement('button');
   avB.id = 'availBtn'; avB.className = shipB.className || '';
   avB.textContent = '⏱ Avail time';
-  flB.parentNode.insertBefore(avB, flB.nextSibling);
+  const _grpAn = document.getElementById('grpAnalyze');
+  if (_grpAn) _grpAn.appendChild(avB); else flB.parentNode.insertBefore(avB, flB.nextSibling);
   const avPanel = document.createElement('div');
   avPanel.id = 'availPanel';
   avPanel.style.cssText = 'position:fixed;display:none;z-index:60;background:#fff;border:1px solid #d8dee6;border-radius:12px;box-shadow:0 12px 30px rgba(20,30,45,.18);padding:12px 14px;font:12px/1.5 Arial,sans-serif;color:#15263a;min-width:250px';
@@ -4028,27 +4032,41 @@ function openReport() {
   if (!w) { const a = document.createElement('a'); a.href = url; a.download = 'Assembly_Line_Plan.html'; document.body.appendChild(a); a.click(); a.remove(); }
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
-(() => {                                                     // add Report + Areas buttons to the toolbar (next to Import)
+(() => {                                                     // add Report / Areas / Undo buttons into their groups
   const imp = document.getElementById('importLayout'); if (!imp) return;
+  const cls = document.getElementById('play') ? document.getElementById('play').className.replace('go', '').trim() : '';
   const rep = document.createElement('button');
-  rep.id = 'reportBtn'; rep.className = imp.className || '';
+  rep.id = 'reportBtn'; rep.className = cls;
   rep.textContent = '📄 Report';
   rep.title = 'Open a printable line plan (build sequence, steps, people, help paths) to share with the assembly-line lead';
-  imp.parentNode.insertBefore(rep, imp.nextSibling);
+  const gAn = document.getElementById('grpAnalyze');
+  if (gAn) gAn.appendChild(rep); else imp.parentNode.insertBefore(rep, imp.nextSibling);
   rep.onclick = openReport;
   const area = document.createElement('button');
-  area.id = 'areasBtn'; area.className = imp.className || '';
+  area.id = 'areasBtn'; area.className = cls;
   area.textContent = '🏭 Areas: on';
   area.title = 'Show / hide the surrounding warehouse areas (staging, racks, forklift lanes, gate)';
-  rep.parentNode.insertBefore(area, rep.nextSibling);
+  const gV = document.getElementById('grpView');
+  if (gV) gV.appendChild(area); else rep.parentNode.insertBefore(area, rep.nextSibling);
   area.onclick = () => { surroundings.visible = !surroundings.visible; area.textContent = '🏭 Areas: ' + (surroundings.visible ? 'on' : 'off'); };
   const und = document.createElement('button');
-  und.id = 'undoBtn'; und.className = imp.className || '';
+  und.id = 'undoBtn'; und.className = cls;
   und.textContent = '↩ Undo';
   und.title = 'Undo the last layout change (Ctrl/Cmd+Z)';
-  area.parentNode.insertBefore(und, area.nextSibling);
+  const gB = document.getElementById('buildRow');
+  if (gB) gB.appendChild(und); else area.parentNode.insertBefore(und, area.nextSibling);
   und.onclick = undoLayout;
   refreshUndoBtn();
+})();
+// ---- toolbar organization: Floor-tools reveal + Layouts dropdown ----
+(() => {
+  const ft = document.getElementById('floorTools'), br = document.getElementById('buildRow');
+  if (ft && br) ft.onclick = () => { const open = !br.classList.contains('open'); br.classList.toggle('open', open); ft.classList.toggle('on', open); };
+  const lb = document.getElementById('layoutsBtn'), lm = document.getElementById('layoutsMenu');
+  if (lb && lm) {
+    lb.onclick = e => { e.stopPropagation(); lm.classList.toggle('open'); };
+    document.addEventListener('pointerdown', e => { if (lm.classList.contains('open') && !e.target.closest('#grpFile')) lm.classList.remove('open'); });
+  }
 })();
 
 /* =========================== UPDATE =========================== */
@@ -4277,6 +4295,8 @@ function addPanelX(panel, onClose) {
     taskbtn: 'Task distribution chart — operator loading vs the takt line',
     plannerbtn: 'Planner: pick the day\'s furniture, quantities and build order; it creates the schedule',
     taktbtn: 'Takt board: pace, capacity and takt for every product on every line, side by side',
+    floorTools: 'Show / hide the floor-editing tools (stations, carts, lanes, racks)',
+    layoutsBtn: 'Save, load, share, or bake in layouts',
     cam: 'Angled 3-quarter camera view', top: 'Straight-down plan view',
     btn2d: 'Flat 2D layout view', cadBtn: 'Overlay the CAD floor plan 1:1 to compare against the model',
     layoutSel: 'Switch between saved layouts', saveLayout: 'Save the current layout under a name',
