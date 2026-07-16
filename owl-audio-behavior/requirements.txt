@@ -1,0 +1,17 @@
+# Capture
+yt-dlp>=2024.1.0        # resolve/stream the live cam; ffmpeg does the segmenting
+
+# Audio features
+numpy>=1.24
+librosa>=0.10           # log-mel spectrograms + spectral features
+soundfile>=0.12         # wav IO (librosa backend)
+
+# Data + plotting
+pandas>=2.0
+matplotlib>=3.7
+scikit-learn>=1.3       # simple day/night behavior-from-audio classifier
+
+# Vision auto-labeling (optional; only needed for real labeling, not selftest)
+anthropic>=0.40         # claude-haiku-4-5 image classification
+
+# NOTE: ffmpeg must be installed at the system level (brew install ffmpeg).

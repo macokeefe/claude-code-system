@@ -1,0 +1,8 @@
+# Captured footage + generated artifacts — do NOT commit.
+# Raw frames/audio are also ToS-sensitive: keep them local, publish only
+# derived results.
+data/
+out/
+.venv/
+__pycache__/
+*.pyc
