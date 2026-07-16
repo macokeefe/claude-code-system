@@ -813,9 +813,9 @@ function resetOutbound() {
   forkLifts.forEach(fl => { if (fl.waitMeshes) fl.waitMeshes.length = 0; });
   spawnedM = spawnedSola = spawnedCanyon = 0;
 }
-/* ---- 🛒 cart test-drive (Edit Layout): a preview cart glides each materials
-   cart's FULL loop — elevator → waypoints → cart spot → return waypoints →
-   endpoint — so the routes can be sanity-checked while editing. ---- */
+/* ---- 🛒 cart test-drive: a preview cart glides each materials cart's FULL
+   loop — elevator → waypoints → cart spot → return waypoints → endpoint —
+   on the normal floor or in Edit Layout. ---- */
 let cartDemoOn = false;
 const demoCarts = [];
 function demoRoute(i) {
@@ -3238,7 +3238,6 @@ function setEditing(on) {
     }
   } else {
     dragId = null; measure.visible = false; measurePanel.innerHTML = '';
-    stopCartDemo();                                  // cart test-drive is an edit-mode aid
     if (elevHidden) setElevHidden(false);            // always bring the elevator back when leaving Edit Layout
     if (typeof setCadOverlay === 'function') setCadOverlay(false);   // the CAD overlay is an edit-only comparison aid
     if (!is2D && savedView) { camera.position.copy(savedView.p); controls.target.copy(savedView.t); }
@@ -3505,8 +3504,7 @@ document.getElementById('addwp').onclick = () => {
   rc.textContent = '🛒 Run carts';
   const _grpRun = document.getElementById('grpRun');
   if (_grpRun) _grpRun.appendChild(rc); else ends.parentNode.insertBefore(rc, ends.nextSibling);
-  rc.onclick = () => {
-    if (!editing) setEditing(true);
+  rc.onclick = () => {                                 // works on the normal floor AND in Edit Layout
     if (cartDemoOn) { stopCartDemo(); return; }
     cartDemoOn = true; rc.textContent = '🛒 Carts: running'; rc.classList.add('on');
   };
