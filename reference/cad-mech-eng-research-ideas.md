@@ -1,4 +1,4 @@
-# 35 Unexplored Ideas: Mechanical Engineering + CAD to Improve Earth
+# 36 Unexplored Ideas: Mechanical Engineering + CAD to Improve Earth
 
 Modern CAD superpowers — generative/topology optimization, parametric design, integrated
 CFD/FEA simulation, and cheap digital fabrication (CNC, 3D printing) — make it possible to
@@ -169,6 +169,30 @@ idea below leans on that shift and targets a gap where little or no serious work
     every device — pump, cart, weeder, silo, cooler — auto-adapts to the user's local
     materials, available tools, and body dimensions. Treats global manufacturing equity as
     a parametric-design problem rather than a shipping-and-logistics problem.
+
+## Assistive Technology
+
+36. **Scan-driven variable-stiffness pressure-relief cushion with built-in shift
+    reminders.** Pressure injuries hit an estimated 25–40% of full-time wheelchair users
+    *per year* (lifetime risk ~50–80%) and are a leading cause of rehospitalization after
+    spinal cord injury. The best current cushions are air-cell designs (e.g. ROHO), which
+    redistribute load well but are unstable to sit on, puncture-prone, and depend on the
+    user maintaining exact inflation — the main reason real-world results lag lab results.
+
+    The design: capture a seated pressure map of the individual (clinic mat or
+    instrumented scan), then generatively design a 3D-printed lattice cushion whose
+    stiffness varies point-by-point — soft and load-shedding under the ischial
+    tuberosities, firmer elsewhere for trunk stability — with thin-film pressure sensors
+    embedded in the lattice that buzz the user's phone when they've gone too long without
+    a weight shift or when loading drifts from the prescription. No pump, no air to
+    maintain, no silent puncture failure; personalization comes from geometry instead of
+    clinic visits.
+
+    Why it's open: research prototypes and a few startups exist, but nobody has closed
+    the loop of *scan → automatic lattice generation → local printing → integrated
+    sensing* at a price accessible outside specialist seating clinics. Arguably the
+    strongest "geometry is the innovation" case on this list, with direct life-or-death
+    stakes.
 
 ---
 
