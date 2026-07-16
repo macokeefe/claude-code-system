@@ -1,0 +1,623 @@
+<style>
+  :root {
+    --paper: #F5F6F8;
+    --surface: #FFFFFF;
+    --surface-2: #EEF0F4;
+    --ink: #191C22;
+    --ink-soft: #3A414D;
+    --muted: #626C7A;
+    --faint: #8A94A2;
+    --hair: rgba(25, 28, 34, 0.11);
+    --hair-strong: rgba(25, 28, 34, 0.20);
+    --accent: #2B4A6F;
+    --accent-soft: #E4EAF2;
+    --clean: #1E7A5A;
+    --clean-bg: #E4F1EA;
+    --contest: #9A6410;
+    --contest-bg: #F6ECD6;
+    --struck: #B23A2E;
+    --struck-bg: #F6E3E0;
+    --shadow: 0 1px 2px rgba(20,24,34,.04), 0 6px 22px rgba(20,24,34,.06);
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0F1116;
+      --surface: #171A21;
+      --surface-2: #1E222B;
+      --ink: #E8EAEF;
+      --ink-soft: #C4CAD4;
+      --muted: #9AA3B2;
+      --faint: #6B7484;
+      --hair: rgba(232, 234, 239, 0.11);
+      --hair-strong: rgba(232, 234, 239, 0.22);
+      --accent: #7BA6D8;
+      --accent-soft: #1C2A3C;
+      --clean: #4FBF92;
+      --clean-bg: #17301F;
+      --contest: #D9A94A;
+      --contest-bg: #322915;
+      --struck: #E5796B;
+      --struck-bg: #331D1A;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 26px rgba(0,0,0,.34);
+    }
+  }
+  :root[data-theme="light"] {
+    --paper: #F5F6F8; --surface: #FFFFFF; --surface-2: #EEF0F4; --ink: #191C22; --ink-soft: #3A414D;
+    --muted: #626C7A; --faint: #8A94A2; --hair: rgba(25,28,34,.11); --hair-strong: rgba(25,28,34,.20);
+    --accent: #2B4A6F; --accent-soft: #E4EAF2; --clean: #1E7A5A; --clean-bg: #E4F1EA; --contest: #9A6410;
+    --contest-bg: #F6ECD6; --struck: #B23A2E; --struck-bg: #F6E3E0;
+    --shadow: 0 1px 2px rgba(20,24,34,.04), 0 6px 22px rgba(20,24,34,.06);
+  }
+  :root[data-theme="dark"] {
+    --paper: #0F1116; --surface: #171A21; --surface-2: #1E222B; --ink: #E8EAEF; --ink-soft: #C4CAD4;
+    --muted: #9AA3B2; --faint: #6B7484; --hair: rgba(232,234,239,.11); --hair-strong: rgba(232,234,239,.22);
+    --accent: #7BA6D8; --accent-soft: #1C2A3C; --clean: #4FBF92; --clean-bg: #17301F; --contest: #D9A94A;
+    --contest-bg: #322915; --struck: #E5796B; --struck-bg: #331D1A;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 26px rgba(0,0,0,.34);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .page {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    padding: 0 20px 96px;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; }
+  .reading { max-width: 680px; }
+
+  /* ---------- header ---------- */
+  header.masthead {
+    border-bottom: 1.5px solid var(--hair-strong);
+    padding: 56px 0 30px;
+    margin-bottom: 40px;
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .eyebrow .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); display: inline-block; }
+  h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(30px, 5vw, 46px);
+    line-height: 1.08;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 20px 0 0;
+    max-width: 18ch;
+  }
+  .standfirst {
+    font-family: var(--serif);
+    font-size: clamp(17px, 2.2vw, 20px);
+    line-height: 1.5;
+    color: var(--ink-soft);
+    max-width: 60ch;
+    margin: 18px 0 0;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    margin-top: 26px;
+  }
+  .chip {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: .02em;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--hair);
+    border-radius: 999px;
+    padding: 5px 12px;
+    display: inline-flex;
+    gap: 7px;
+    align-items: center;
+  }
+  .chip b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- section headings ---------- */
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin: 64px 0 22px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--hair);
+  }
+  .sec-num {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 600;
+    letter-spacing: .05em;
+  }
+  .sec-head h2 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(21px, 3vw, 27px);
+    letter-spacing: -0.01em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  p.lede { font-size: 16.5px; color: var(--ink-soft); }
+  p.lede strong, .prose strong { color: var(--ink); font-weight: 600; }
+  .prose { color: var(--ink-soft); }
+
+  /* ---------- thesis band ---------- */
+  .thesis {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-top: 8px;
+  }
+  .thesis .card {
+    background: var(--surface);
+    border: 1px solid var(--hair);
+    border-radius: 12px;
+    padding: 22px 22px 20px;
+    box-shadow: var(--shadow);
+  }
+  .thesis .card h3 {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    margin: 0 0 12px;
+    font-weight: 600;
+  }
+  .thesis .supply h3 { color: var(--clean); }
+  .thesis .demand h3 { color: var(--accent); }
+  .thesis .card p { margin: 0; font-size: 14.5px; color: var(--ink-soft); line-height: 1.55; }
+  .thesis .card p + p { margin-top: 10px; }
+  .pull {
+    grid-column: 1 / -1;
+    font-family: var(--serif);
+    font-size: clamp(18px, 2.6vw, 23px);
+    line-height: 1.4;
+    color: var(--ink);
+    border-left: 3px solid var(--accent);
+    padding: 4px 0 4px 22px;
+    margin: 6px 0 0;
+    text-wrap: pretty;
+  }
+  .pull b { color: var(--accent); font-weight: 600; }
+
+  /* ---------- leaderboard cards ---------- */
+  .concepts { display: flex; flex-direction: column; gap: 18px; }
+  .concept {
+    background: var(--surface);
+    border: 1px solid var(--hair);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: 62px 1fr 232px;
+  }
+  .concept.demoted { border-style: dashed; border-color: var(--hair-strong); opacity: .96; }
+  .concept.rec { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow); }
+
+  .rail {
+    background: var(--surface-2);
+    border-right: 1px solid var(--hair);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 18px 0;
+    gap: 4px;
+  }
+  .rail .rank {
+    font-family: var(--mono);
+    font-size: 26px;
+    font-weight: 600;
+    color: var(--accent);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .rail .rank.dim { color: var(--faint); }
+  .rail .rank-label { font-family: var(--mono); font-size: 9px; letter-spacing: .1em; color: var(--faint); text-transform: uppercase; }
+
+  .body { padding: 20px 22px 20px; min-width: 0; }
+  .concept .title-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .concept h3 {
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .rec-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .12em;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #fff;
+    background: var(--accent);
+    padding: 3px 8px;
+    border-radius: 5px;
+  }
+  .oneliner { font-size: 14.5px; color: var(--ink-soft); margin: 9px 0 16px; line-height: 1.5; }
+
+  .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 13px 26px; }
+  @media (max-width: 560px) { .facts { grid-template-columns: 1fr; } }
+  .fact .k {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin: 0 0 3px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .fact .v { font-size: 13.5px; color: var(--ink-soft); margin: 0; line-height: 1.5; }
+  .fact.killshot .k { color: var(--struck); }
+  .fact.killshot .v { color: var(--ink); }
+
+  /* ---------- score panel ---------- */
+  .scores {
+    border-left: 1px solid var(--hair);
+    padding: 20px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    background: linear-gradient(180deg, transparent, var(--surface-2) 260%);
+  }
+  .weighted { display: flex; align-items: baseline; gap: 9px; }
+  .weighted .num {
+    font-family: var(--mono);
+    font-size: 34px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .weighted .den { font-family: var(--mono); font-size: 13px; color: var(--faint); }
+  .weighted .lbl { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-left: auto; text-align: right; line-height: 1.3; }
+
+  .meters { display: flex; flex-direction: column; gap: 9px; }
+  .meter .mrow { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px; }
+  .meter .mk { font-family: var(--mono); font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  .meter .mv { font-family: var(--mono); font-size: 11px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .track { height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; border: 1px solid var(--hair); }
+  .fill { height: 100%; border-radius: 3px; background: var(--accent); width: 0; transition: width 900ms cubic-bezier(.22,.61,.36,1); }
+  .meter.impact .fill { background: var(--accent); }
+  .meter.commercial .fill { background: #4B7BB0; }
+  .meter.feasibility .fill { background: #8AA6C4; }
+
+  .vstatus {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .02em;
+    padding: 6px 10px;
+    border-radius: 7px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    align-self: flex-start;
+  }
+  .vstatus::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+  .vstatus.clean { color: var(--clean); background: var(--clean-bg); }
+  .vstatus.contest { color: var(--contest); background: var(--contest-bg); }
+  .vstatus.struck { color: var(--struck); background: var(--struck-bg); }
+
+  /* ---------- recommendation ---------- */
+  .reco {
+    background: var(--accent);
+    color: #fff;
+    border-radius: 16px;
+    padding: 34px 32px;
+    margin-top: 8px;
+    box-shadow: var(--shadow);
+  }
+  :root[data-theme="dark"] .reco, .reco { color: #fff; }
+  .reco .eyebrow { color: rgba(255,255,255,.72); }
+  .reco .eyebrow .dot { background: rgba(255,255,255,.72); }
+  .reco h3 { font-family: var(--serif); font-size: clamp(24px,3.4vw,32px); margin: 14px 0 0; font-weight: 600; letter-spacing: -0.01em; }
+  .reco p { color: rgba(255,255,255,.88); font-size: 15.5px; line-height: 1.6; max-width: 68ch; }
+  .reco .why { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 22px; }
+  @media (max-width: 620px){ .reco .why { grid-template-columns: 1fr; } }
+  .reco .why div { background: rgba(255,255,255,.10); border: 1px solid rgba(255,255,255,.16); border-radius: 10px; padding: 15px 16px; }
+  .reco .why .h { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.7); margin: 0 0 7px; }
+  .reco .why .t { font-size: 13.5px; color: #fff; margin: 0; line-height: 1.5; }
+  .reco .caveat { margin-top: 22px; font-size: 13.5px; padding: 14px 16px; background: rgba(0,0,0,.16); border-radius: 10px; border-left: 3px solid rgba(255,255,255,.5); }
+
+  /* ---------- graveyard ---------- */
+  .patterns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 680px){ .patterns { grid-template-columns: 1fr; } }
+  .pattern {
+    background: var(--surface);
+    border: 1px solid var(--hair);
+    border-radius: 11px;
+    padding: 16px 17px;
+  }
+  .pattern .pk { font-family: var(--mono); font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--struck); font-weight: 600; display: flex; gap: 9px; }
+  .pattern .pk .n { color: var(--faint); }
+  .pattern .pt { font-size: 13.5px; color: var(--ink-soft); margin: 8px 0 0; line-height: 1.5; }
+  .pattern .pt b { color: var(--ink); }
+
+  /* ---------- parked ---------- */
+  .parked { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px; }
+  @media (max-width: 620px){ .parked { grid-template-columns: 1fr; } }
+  .parked .pk { background: var(--surface); border: 1px dashed var(--hair-strong); border-radius: 11px; padding: 16px 17px; }
+  .parked h4 { font-family: var(--serif); font-size: 17px; margin: 0 0 6px; font-weight: 600; }
+  .parked p { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.5; }
+  .parked .lowconf { font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--contest); display: inline-block; margin-top: 8px; }
+
+  /* ---------- footer / method ---------- */
+  .method {
+    margin-top: 30px;
+    background: var(--surface);
+    border: 1px solid var(--hair);
+    border-radius: 14px;
+    padding: 26px 26px;
+  }
+  .method ol { margin: 0; padding-left: 0; list-style: none; counter-reset: step; display: flex; flex-direction: column; gap: 11px; }
+  .method li { display: flex; gap: 14px; align-items: baseline; font-size: 13.5px; color: var(--ink-soft); }
+  .method li::before {
+    counter-increment: step;
+    content: counter(step, decimal-leading-zero);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 600;
+    flex: none;
+    width: 24px;
+  }
+  .method li b { color: var(--ink); font-weight: 600; }
+  .foot {
+    margin-top: 40px; padding-top: 22px; border-top: 1px solid var(--hair);
+    font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.7;
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 4px 0 0; }
+  .legend span { font-family: var(--mono); font-size: 11px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+  @media (max-width: 760px) {
+    .concept { grid-template-columns: 48px 1fr; }
+    .scores { grid-column: 1 / -1; border-left: none; border-top: 1px solid var(--hair); flex-direction: row; flex-wrap: wrap; align-items: center; }
+    .scores .meters { flex: 1 1 220px; }
+    .weighted { flex: 0 0 auto; }
+    .thesis { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { .fill { transition: none; } }
+</style>
+
+<div class="page">
+  <div class="wrap">
+
+    <header class="masthead">
+      <div class="eyebrow">
+        <span>Venture Research</span><span class="dot"></span>
+        <span>Computer Vision</span><span class="dot"></span>
+        <span>July 2026</span>
+      </div>
+      <h1>Computer Vision Venture Theses, 2026</h1>
+      <p class="standfirst">A ranked, verification-weighted build guide. Ten concepts scored by a three-judge panel; eight deep-dived and adversarially fact-checked — three independent refuters per load-bearing claim, two-of-three refutes strikes it.</p>
+      <div class="meta-row">
+        <span class="chip"><b>59</b> agents</span>
+        <span class="chip"><b>10</b> domains swept</span>
+        <span class="chip"><b>21</b> raw concepts</span>
+        <span class="chip"><b>6</b> ranked · <b>2</b> demoted</span>
+        <span class="chip"><b>~3.6M</b> tokens</span>
+        <span class="chip">every claim cited &amp; confidence-labeled</span>
+      </div>
+    </header>
+
+    <!-- THESIS -->
+    <div class="sec-head"><span class="sec-num">01</span><h2>What changed — and why the model is no longer the moat</h2></div>
+    <div class="thesis">
+      <div class="card supply">
+        <h3>Supply side · build cost fell off a cliff</h3>
+        <p>In one year: <strong>SAM 3</strong> (Meta, Nov 2025) — text-promptable "segment anything by noun phrase," no per-class training; <strong>DINOv3</strong> (Aug 2025) — a frozen backbone at SOTA "often without fine-tuning," incl. a satellite variant; self-hostable VLMs; and edge boards that halved in price (<strong>Jetson Orin Nano Super, $249</strong>; <strong>Hailo-10H, ~$130 / 2.5W</strong>).</p>
+        <p>Labeling campaigns and per-call API fees — the two historical build-cost sinks — are gone.</p>
+      </div>
+      <div class="card demand">
+        <h3>Demand side · regulation created dated buyers</h3>
+        <p>Hard deadlines now compel spend: <strong>EPA LCRI</strong> lead-line inventory due Nov 2027; <strong>CMS never-event</strong> non-payment for hospital-acquired pressure injuries; the <strong>European Accessibility Act</strong> (live, penalties to 4% of revenue); and — the standout — <strong>workers-comp insurers moving from discount to mandate</strong>: Zurich now conditions coverage on jobsite cameras after a pilot cut claims &gt;70%.</p>
+        <p>Caution the verification kept surfacing: <strong>separate the mandate from the money</strong> — the methane fee slipped to 2034 even as monitoring mandates held.</p>
+      </div>
+      <p class="pull">The durable question is not "can vision do this?" — it now can. It is: <b>who has a budgeted, non-discretionary reason to pay, and is that reason already in force?</b> Crowd into the compliance / data layer, not the perception layer.</p>
+    </div>
+
+    <!-- LEADERBOARD -->
+    <div class="sec-head"><span class="sec-num">02</span><h2>The ranked concepts</h2></div>
+    <p class="lede reading" style="margin-top:-6px">Ranked by an impact-tilted weighted score (0.35 impact · 0.35 commercial · 0.30 feasibility), then demoted if two-plus load-bearing claims were struck in verification. Each card shows the flagged kill-shot risk — the single likeliest way it dies.</p>
+    <div class="legend" style="margin:0 0 22px">
+      <span><i style="background:var(--clean)"></i> clean — 0 struck</span>
+      <span><i style="background:var(--contest)"></i> contested — single-refuter flags</span>
+      <span><i style="background:var(--struck)"></i> struck / demoted</span>
+    </div>
+    <div class="concepts" id="concepts"></div>
+
+    <div class="parked" id="parked" style="margin-top:18px"></div>
+
+    <!-- RECOMMENDATION -->
+    <div class="sec-head"><span class="sec-num">03</span><h2>The recommendation</h2></div>
+    <div class="reco">
+      <div class="eyebrow"><span>Build this first</span><span class="dot"></span><span>Weighted 6.83 · 0 claims struck</span></div>
+      <h3>PoleLedger — stampable pole-condition records for wildfire liability</h3>
+      <p>Highest weighted composite and highest impact in the set, and the <strong>only</strong> top-tier concept whose every load-bearing claim survived adversarial verification. It attaches to the most solvent, most structurally compelled buyer in the study: electric utilities facing existential wildfire liability (PG&amp;E: ~$30B, Chapter 11), spending from regulator-mandated wildfire-mitigation budgets against a 180M-pole distribution blind spot that drives most utility ignitions.</p>
+      <div class="why">
+        <div><p class="h">Beats #2 ErgoClaim on</p><p class="t">Impact magnitude (catastrophic-fire prevention vs. incremental injury reduction) and budget-pool size (~$100B utility wildfire investment need).</p></div>
+        <div><p class="h">Beats #3 LineProof on</p><p class="t">Durability — LineProof is a largely one-time inventory buy against a shrinking unknown count; PoleLedger compounds into a longitudinal condition-history moat + a hard-dollar pole-rent-audit upsell.</p></div>
+      </div>
+      <div class="caveat"><b>Eyes open, not a slam dunk:</b> a funded incumbent, Noteworthy AI, already ships the near-identical fleet-mounted drive-by product incl. leaning-pole detection (verified, High confidence). This is a race on workflow and data lock-in — so the first 90 days spend zero time out-detecting them and all of it on the PE-stamped compliance artifact and the joint-use attachment-audit revenue hook.</div>
+    </div>
+
+    <!-- GRAVEYARD -->
+    <div class="sec-head"><span class="sec-num">04</span><h2>The graveyard — eight ways CV companies die</h2></div>
+    <p class="lede reading" style="margin-top:-6px">The whole CV market is only ~$20–24B of revenue, yet AV alone drew ~$21B of investment. Capital over-funded the perception layer; revenue lived in deployment and compliance. The recommendations dodge patterns 3–8 cleanly.</p>
+    <div class="patterns" id="patterns"></div>
+
+    <!-- METHOD -->
+    <div class="sec-head"><span class="sec-num">05</span><h2>How this report was produced</h2></div>
+    <div class="method">
+      <ol>
+        <li><b>Research (16 parallel agents).</b> 3 capability analysts (models / edge / sensing), 10 domain scouts, and market-funding / graveyard / timing analysts — all live web search, structured &amp; cited.</li>
+        <li><b>Synthesis memo.</b> Findings compressed to one page plus a banned "crowded categories" list, to force contrarian ideation.</li>
+        <li><b>Ideation (3 lenses × 7).</b> Contrarian, capability-first, and pain-first ideators generated 21 raw concepts.</li>
+        <li><b>Cut.</b> Dedup + anti-goal kill → 10 survivors.</li>
+        <li><b>Scoring (3 judges).</b> Each survivor scored independently on the weighted rubric; scores averaged; top 8 advanced.</li>
+        <li><b>Deep-dive → verify (pipeline).</b> Full cited one-pagers, then 3 adversarial refuters per load-bearing claim (2-of-3 = struck).</li>
+        <li><b>Synthesize + critique.</b> Lead synthesist wrote the ranked report; a completeness critic checked 10 quality gates; one revision pass fixed the flagged deficiencies.</li>
+      </ol>
+    </div>
+
+    <div class="foot">
+      <div>Full report, one-pagers &amp; verification log:<br>research/cv-product-research-report.md</div>
+      <div style="text-align:right">Impact-tilted weighted composite · 3-judge means<br>Verification: 2-of-3 refuters strikes a claim</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  const concepts = [
+    { rank: 1, name: "PoleLedger", rec: true, status: "clean", statusLabel: "clean · 0 struck",
+      one: "Passive fleet-mounted CV turns every drive-by of a distribution pole into a GIS-keyed, PE-stampable condition record — for the 180M-pole blind spot behind most utility wildfire ignitions.",
+      i: 7.67, c: 7.00, f: 5.67, w: 6.83,
+      problem: "180M+ poles cause >90% of outages and most utility wildfire ignitions, yet the long tail has no defensible condition record. PG&E: ~$30B, Chapter 11.",
+      why: "SAM 3 + DINOv3 kill the per-utility labeling blocker; FAA Part 108 BVLOS lowers optional drone cost.",
+      model: "Per-pole/yr SaaS (~$2–4 base, $6–8 blended). TAM ~$540M; SOM ~$60–72M ARR. Buyer: wildfire-exposed IOUs, mandated mitigation budgets.",
+      kill: "Noteworthy AI already ships the near-identical drive-by product incl. leaning-pole detection. A race on workflow + data lock-in, not greenfield." },
+    { rank: 2, name: "ErgoClaim", status: "clean", statusLabel: "clean · 0 struck",
+      one: "On-device, face-free pose CV scores lifting/reaching biomechanics and hands workers-comp insurers an actuarial per-site MSD-risk trend — sold as a condition of coverage.",
+      i: 5.67, c: 7.33, f: 7.00, w: 6.65,
+      problem: "MSDs are the #1 injury cost driver: ~937,600 DART cases/yr; overexertion #1 at $12.49B.",
+      why: "Zurich now only insures NY construction wrap-ups that install jobsite cameras (pilot cut claims >70%); sub-$250 boards run real-time pose; incumbent Arrowsight still uses human reviewers — the automation wedge.",
+      model: "~$100–200/camera/mo, ~$14,400/site/yr; $100M ARR ≈ 6,950 sites; TAM ~$1.44B. Carrier = distribution channel; revealed WTP (Zurich already pays).",
+      kill: "The 'Arrowsight ceiling' — the incumbent keeps humans deliberately. If automated scores need human backup, unit economics collapse. Must prove near-zero-intervention scores predict & reduce claims." },
+    { rank: 3, name: "LineProof", status: "contest", statusLabel: "contested · 3 @ 1 vote",
+      one: "A field-crew phone app whose offline VLM classifies water service-line material and auto-fills the EPA LCRI inventory record before the Nov 2027 deadline.",
+      i: 7.00, c: 5.00, f: 7.33, w: 6.40,
+      problem: "LCRI forces every water system to identify unknown-material service lines by Nov 2027; curb hand-classification is slow and carries misclassification liability.",
+      why: "Int4 small VLMs (Moondream, SmolVLM) run offline on phones; hard federal deadline.",
+      model: "~$5–20/verified line + workflow SaaS. Honest ceiling: a strong ~$5–15M ARR business, not a $100M lead-only pure-play — needs adjacency (gas lines, 811 locates).",
+      kill: "Occlusion / regulatory sufficiency — many lines can't be read from a visible stub, capping CV-addressable share to ~25–35% and inviting commodity classifiers." },
+    { rank: 4, name: "TurnProof", status: "struck", statusLabel: "1 struck · premise",
+      one: "A ceiling-mounted <5W edge camera classifies patient posture on-device to timestamp repositioning and auto-generate a per-bed turn-adherence audit — attacking the CMS never-event pressure-injury cost.",
+      i: 6.67, c: 6.33, f: 6.00, w: 6.35,
+      problem: "HAPIs cost ~$9–12B/yr; CMS won't pay the higher DRG for hospital-acquired Stage III/IV ulcers (~$43k/case).",
+      why: "Edge <5W generative vision is real (Ambarella CV72); small int4 posture models fit on-device, no pixels leave the room.",
+      model: "~$40–100/monitored bed/mo; SAM ~$294M/yr; $100M ≈ 119k beds. Payback under one prevented event per hospital per year.",
+      kill: "Causal-chain / privacy — documenting non-adherence without fixing it creates a liability record; nurse-union resistance to in-room cameras has stalled deployments. The 'low adherence' premise was struck (real gap is verification, not turn frequency)." },
+    { rank: 5, name: "MethaneSEM", status: "struck", statusLabel: "1 struck · credit math",
+      one: "Continuous CV surface-methane monitoring for landfills that auto-generates the Clean Air Act SEM exceedance report plus an RNG capture-verification record.",
+      i: 6.33, c: 5.33, f: 5.00, w: 5.58,
+      problem: "Landfill methane runs ~51% above EPA inventory; walking Method-21 surveys miss the dominant plumes; operators must still pass quarterly SEM.",
+      why: "SEM mandate in force; EPA now recognizes non-walking methods; the WEC fee slipped to 2034 — so this rests on the monitoring mandate, not a subsidy.",
+      model: "~900 recurring-compliance sites × ~$90k ≈ $81M/yr. A defensible ~$100M US niche; $100M ARR needs the premium RNG tier + international.",
+      kill: "Capability over-claim — cheap 'phone-grade thermal' detects heat, NOT methane; real OGI/SWIR is still tens of thousands. And Sniffer + Project Canary already hold the compliance-artifact position." },
+    { rank: 6, name: "EquivMRV", status: "struck", statusLabel: "1 struck · MARS stat",
+      one: "Satellite monitoring + attribution producing auditor-ready OGMP-L5-equivalent methane MRV deliverables for EU gas importers ahead of the Jan 2027 mandate.",
+      i: 5.67, c: 6.67, f: 4.00, w: 5.52,
+      problem: "From Jan 2027 EU importers must show equivalent MRV; no exporting country is yet deemed equivalent; only ~7% of global O&G reached L5 in 2024.",
+      why: "Hard 2027 mandate; free SAR (Umbra) + a DINOv3 satellite backbone make facility attribution cheap exactly as the deadline lands.",
+      model: "SAM ~$65–70M/yr. Honest verdict: the '$1B, zero-incumbent' framing is overstated — MiQ/CIRIS is already operational. A viable attribution-vendor business, not an own-the-certificate prize.",
+      kill: "False premise / capability mismatch — the market is occupied and SAR+DINOv3 can't measure methane (still needs hyperspectral). Feasibility scored lowest in the set (4.0)." },
+    { rank: 7, name: "PodiaTherm", demoted: true, status: "struck", statusLabel: "demoted · 3 struck",
+      one: "Home thermal pre-ulcer triage for diabetic-foot risk, billed PMPM to risk-bearing payers. By raw score it would rank 3rd — demoted for three struck load-bearing claims.",
+      i: 7.33, c: 6.00, f: 5.67, w: 6.37,
+      problem: "2M DFUs/yr precede ~80% of amputations (~$52k each); risk-bearing payers are solvent, motivated buyers. Real problem, real buyer.",
+      why: "Struck: the '60–90% risk reduction' efficacy claim (real ~49%, low certainty), the '<$220 thermal camera' (false), and the 'on-device 99% accuracy' (unsourced) all failed verification.",
+      model: "PMPM per enrolled patient — but two FDA-cleared incumbents (Podimetrics, Siren) already run exactly this model, and a 510(k) the feasibility story understated.",
+      kill: "Three of eight load-bearing claims struck, hitting the spine of the thesis (efficacy, hardware cost, capability). Cannot rank above concepts whose claims survived." },
+    { rank: 8, name: "LateralPACP", demoted: true, status: "struck", statusLabel: "demoted · 2 struck",
+      one: "Automated NASSCO condition-coding for the private-sewer lateral blind spot. Demoted for two struck load-bearing claims that were the competitive spine of the pitch.",
+      i: 5.33, c: 5.67, f: 5.67, w: 5.55,
+      problem: "~500k miles of private laterals are largely uninspected — a genuine blind spot, but the headline urgency figure was mis-attributed.",
+      why: "Struck: the '$452B / 260k breaks/yr' urgency is drinking-water mains (not sewers), and 'Pallon codes laterals and was acquired' is false on both counts.",
+      model: "Bottom-up TAM is only tens of millions; core auto-PACP is a funded red ocean (SewerAI, WinCan, VAPAR).",
+      kill: "NASSCO does not yet certify machine coding (unresolved gate) and the competitive analysis was built on wrong facts. A real point-of-sale-lateral wedge exists, but the scaffolding didn't survive." },
+  ];
+
+  const parked = [
+    { name: "AflaGate", raw: "raw 5.10", desc: "Aflatoxin risk grading for exporters. Scientific ceiling — aflatoxin is only partially visible, so UV/RGB proxies correlate imperfectly with actual ppb; false-negative liability pushes buyers back to chemical assays." },
+    { name: "AccessProof", raw: "raw 5.03", desc: "ADA/EAA visual-assistance layer. Real budgeted liability spend, but the thesis rests on reliable autonomous GUI-agent transaction completion (~54% OSWorld) — not yet dependable enough to transact hands-free." },
+  ];
+
+  const patterns = [
+    { n: "01", t: "Long-tail reliability trap", d: "A 95–99% demo is not a product (Cruise burned >$10B). <b>Avoided:</b> the top concepts keep a human — PE, nurse — in the loop; the deliverable is a prioritized record, not an autonomous safety action." },
+    { n: "02", t: "Human-in-the-loop kills the ROI", d: "Amazon Just Walk Out's ~1,000 reviewers; Arrowsight's human ceiling. <b>Avoided:</b> ErgoClaim's whole wedge is removing the reviewer; PoleLedger prices the bounded PE step in rather than pretending it away." },
+    { n: "03", t: "Commodity 'good-enough' erases the moat", d: "Airware vs. DJI; free MegaDetector. <b>Avoided:</b> the moat moves off the now-commodity model onto an accepted compliance artifact + longitudinal data." },
+    { n: "04", t: "Premium consumer hardware has no distribution", d: "Humane, Lighthouse, Anki. <b>Avoided:</b> every top concept sells B2B into an existing budget line — no consumer hardware, no DTC." },
+    { n: "05", t: "No budget line / no reimbursement, no business", d: "IBM Watson Health; ~80% of medical AI is radiology with no CPT. <b>Avoided:</b> mandated wildfire budgets, WC underwriting, a live CMS non-payment lever needing no new code." },
+    { n: "06", t: "Capital-intensity dies when funding closes", d: "Embark's 72% SPAC redemptions, AppHarvest. <b>Avoided:</b> all are 1–5-person, 12-month, software-first v1s reaching revenue inside one seed round." },
+    { n: "07", t: "Episodic/government demand + free data starves startups", d: "Orbital Insight, One Concern, conservation 'pilotitis'. <b>Avoided:</b> utilities, insurers, hospitals — recurring-budget commercial buyers, not emergency grants." },
+    { n: "08", t: "Policy-dependent demand can vaporize", d: "Methane WEC postponed to 2034; NOAA whale rule withdrawn. <b>Avoided:</b> the top four rest on mandates already in force, not a fee/subsidy that could slip." },
+  ];
+
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const meter = (cls, k, v) => `<div class="meter ${cls}"><div class="mrow"><span class="mk">${k}</span><span class="mv">${v.toFixed(2)}</span></div><div class="track"><div class="fill" data-w="${v*10}"></div></div></div>`;
+
+  document.getElementById('concepts').innerHTML = concepts.map(c => `
+    <article class="concept ${c.rec ? 'rec' : ''} ${c.demoted ? 'demoted' : ''}">
+      <div class="rail">
+        <div class="rank ${c.demoted ? 'dim' : ''}">${c.rank}</div>
+        <div class="rank-label">${c.demoted ? 'demo' : 'rank'}</div>
+      </div>
+      <div class="body">
+        <div class="title-row">
+          <h3>${c.name}</h3>
+          ${c.rec ? '<span class="rec-tag">Recommended</span>' : ''}
+        </div>
+        <p class="oneliner">${esc(c.one)}</p>
+        <div class="facts">
+          <div class="fact"><p class="k">Problem</p><p class="v">${esc(c.problem)}</p></div>
+          <div class="fact"><p class="k">Why now</p><p class="v">${esc(c.why)}</p></div>
+          <div class="fact"><p class="k">Business model &amp; market</p><p class="v">${esc(c.model)}</p></div>
+          <div class="fact killshot"><p class="k">◆ Kill-shot risk</p><p class="v">${esc(c.kill)}</p></div>
+        </div>
+      </div>
+      <div class="scores">
+        <div class="weighted"><span class="num">${c.w.toFixed(2)}</span><span class="den">/10</span><span class="lbl">weighted<br>score</span></div>
+        <div class="meters">
+          ${meter('impact','Impact', c.i)}
+          ${meter('commercial','Commercial', c.c)}
+          ${meter('feasibility','Feasibility', c.f)}
+        </div>
+        <span class="vstatus ${c.status}">${c.statusLabel}</span>
+      </div>
+    </article>`).join('');
+
+  document.getElementById('parked').innerHTML =
+    `<div class="pk" style="grid-column:1/-1;background:transparent;border:none;padding:0 2px 4px"><p class="k" style="font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin:0">Parked — scored but not deep-dived or verified (not ranked recommendations)</p></div>` +
+    parked.map(p => `<div class="pk"><h4>${p.name} <span style="font-family:var(--mono);font-size:11px;color:var(--faint);font-weight:400">${p.raw}</span></h4><p>${esc(p.desc)}</p><span class="lowconf">Low confidence — asserted, not verified</span></div>`).join('');
+
+  document.getElementById('patterns').innerHTML = patterns.map(p => `
+    <div class="pattern">
+      <div class="pk"><span class="n">${p.n}</span><span>${p.t}</span></div>
+      <p class="pt">${p.d}</p>
+    </div>`).join('');
+
+  // animate meter fills
+  const fills = document.querySelectorAll('.fill');
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) { fills.forEach(f => f.style.width = f.dataset.w + '%'); }
+  else {
+    const io = new IntersectionObserver((es) => {
+      es.forEach(e => { if (e.isIntersecting) { e.target.style.width = e.target.dataset.w + '%'; io.unobserve(e.target); } });
+    }, { threshold: 0.3 });
+    fills.forEach(f => io.observe(f));
+  }
+</script>
