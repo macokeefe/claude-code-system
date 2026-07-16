@@ -2858,6 +2858,83 @@ document.getElementById('plannerbtn').onclick = () => {
   document.getElementById('plannerbtn').classList.toggle('on', show);
   renderPlanner();
 };
+
+// ---- Takt board: pace / capacity / takt for EVERY product on EVERY line, side by side ----
+(function taktBoardCss(){
+  const s = document.createElement('style'); s.textContent = `
+  #taktPanel{position:fixed;inset:0;z-index:82;overflow:auto;background:#eef1f5;padding:16px 30px 44px}
+  #taktPanel h3{max-width:1500px;margin:2px auto 2px;font-size:20px;color:#15263a}
+  #taktPanel .tkctl{max-width:1500px;margin:0 auto 16px;font-size:12.5px;color:#5a6672;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  #taktPanel .tkctl input{width:52px;text-align:center}
+  #taktPanel .tkgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:22px;max-width:1500px;margin:0 auto;align-items:start}
+  #taktPanel .tkcol{background:#fff;border:1px solid #e2e7ee;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(20,30,45,.06)}
+  #taktPanel .tkhd{padding:11px 16px;color:#fff;font-weight:800;font-size:15px;display:flex;justify-content:space-between;align-items:center}
+  #taktPanel .tkrow{padding:11px 16px;border-top:1px solid #eef1f5}
+  #taktPanel .tkrow.run{background:#f4f9ff}
+  #taktPanel .tknm{font-weight:700;font-size:14px;color:#15263a;display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  #taktPanel .tkchip{font-size:10px;font-weight:800;background:#1f6df6;color:#fff;border-radius:9px;padding:1px 8px;letter-spacing:.03em}
+  #taktPanel .tkbar{position:relative;height:17px;background:#eef2f7;border-radius:5px;overflow:visible;margin:5px 0 7px}
+  #taktPanel .tkbar > i{display:block;height:100%;border-radius:5px}
+  #taktPanel .tkmk{position:absolute;top:-3px;bottom:-3px;width:2px;background:#e11;box-shadow:0 0 0 .5px rgba(255,255,255,.6)}
+  #taktPanel .tkmeta{font-size:12px;color:#5a6672;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  #taktPanel .tkmeta b{color:#15263a}
+  #taktPanel .tkmeta input{width:50px;text-align:center;font-size:12px}
+  #taktPanel .tkok{color:#2f7d52;font-weight:700}
+  #taktPanel .tkover{color:#c0552c;font-weight:700}`;
+  document.head.appendChild(s);
+})();
+function renderTaktBoard() {
+  const panel = document.getElementById('taktPanel');
+  if (!panel || panel.style.display === 'none') return;
+  const LINES = [['meritage', 'MERITAGE', '#1d3a66'], ['sola', 'SOLA', '#236043'], ['canyon', 'CANYON CREW', '#9a5b1f']];
+  const cols = LINES.map(([key, label, color]) => {
+    const lp = (typeof lineProducts !== 'undefined' && lineProducts) ? lineProducts[key] : null;
+    const products = (lp && lp.list) ? lp.list.map((p, i) => ({ name: p.name, i, ...productMetrics(key, p) })) : [];
+    return { key, label, color, products, running: lp ? lp.active : -1 };
+  });
+  let scaleMax = 1; cols.forEach(c => c.products.forEach(p => { scaleMax = Math.max(scaleMax, p.pace, p.takt); })); scaleMax *= 1.05;
+  let html = `<h3>Takt board: pace &amp; capacity by product</h3>`;
+  html += `<div class="tkctl">Day length <input type="number" id="tkDay" value="${(dayMinSafe()/60)}" min="1" max="16" step="0.5"> hr`
+        + ` · <b style="color:#2f6df6">bar</b> = pace (min/unit) · <b style="color:#e11">red line</b> = takt · set each product's target/day to move its takt · <b style="color:#2f7d52">green</b> meets takt, <b style="color:#c0552c">red</b> is over</div>`;
+  html += `<div class="tkgrid">`;
+  cols.forEach(c => {
+    html += `<div class="tkcol"><div class="tkhd" style="background:${c.color}"><span>${c.label}</span><span>${c.products.length} product${c.products.length === 1 ? '' : 's'}</span></div>`;
+    if (!c.products.length) { html += `<div class="tkrow" style="color:#8a8f98">No products yet.</div></div>`; return; }
+    c.products.forEach(p => {
+      const over = p.pace > p.takt + 0.05;
+      const paceW = Math.min(100, p.pace / scaleMax * 100), taktL = Math.min(100, p.takt / scaleMax * 100);
+      const grad = over ? 'linear-gradient(90deg,#e0906e,#c0552c)' : 'linear-gradient(90deg,#7ba6e0,#2f6df6)';
+      html += `<div class="tkrow${p.i === c.running ? ' run' : ''}">
+        <div class="tknm">${(p.name || '').replace(/</g, '&lt;')}${p.i === c.running ? '<span class="tkchip">RUNNING</span>' : ''}</div>
+        <div class="tkbar"><i style="width:${paceW}%;background:${grad}"></i><span class="tkmk" style="left:${taktL}%"></span></div>
+        <div class="tkmeta">
+          <span>pace <b>${p.pace.toFixed(1)}m</b></span>
+          <span>labor <b>${p.labor.toFixed(0)}m</b></span>
+          <span>capacity <b>${p.cap.toFixed(1)}/day</b></span>
+          <span>takt <b>${p.takt.toFixed(1)}m</b> @ <input type="number" class="tkTarget" data-line="${c.key}" data-i="${p.i}" value="${(+p.demand.toFixed(1))}" min="1" step="1">/day</span>
+          <span class="${over ? 'tkover' : 'tkok'}">${over ? ('⚠ over takt by ' + (p.pace - p.takt).toFixed(1) + 'm') : '✓ meets takt'}</span>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  });
+  html += `</div>`;
+  panel.innerHTML = html;
+  addPanelX(panel, () => { panel.style.display = 'none'; const b = document.getElementById('taktbtn'); if (b) b.classList.remove('on'); });
+  const dEl = document.getElementById('tkDay');
+  if (dEl) dEl.onchange = e => { dayMin = Math.max(60, Math.min(16 * 60, (parseFloat(e.target.value) || 7) * 60)); if (typeof reflowAll === 'function') reflowAll(); renderTaktBoard(); };
+  panel.querySelectorAll('.tkTarget').forEach(inp => inp.onchange = e => {
+    const lp = lineProducts[e.target.dataset.line], p = lp && lp.list[+e.target.dataset.i];
+    if (p) { p.demand = Math.max(1, parseFloat(e.target.value) || 10); saveLayout(); renderTaktBoard(); }
+  });
+}
+document.getElementById('taktbtn').onclick = () => {
+  const panel = document.getElementById('taktPanel');
+  const show = panel.style.display === 'none';
+  panel.style.display = show ? 'block' : 'none';
+  document.getElementById('taktbtn').classList.toggle('on', show);
+  renderTaktBoard();
+};
 // toggle the editable Station-times panel like the other panels
 { const tb = document.getElementById('timesbtn'); if (tb) tb.onclick = () => {
   const hidden = timeBox.style.display === 'none';
@@ -4128,6 +4205,7 @@ function addPanelX(panel, onClose) {
     helppaths: 'List and tune the help paths (minutes of help per unit)',
     taskbtn: 'Task distribution chart — operator loading vs the takt line',
     plannerbtn: 'Planner: pick the day\'s furniture, quantities and build order; it creates the schedule',
+    taktbtn: 'Takt board: pace, capacity and takt for every product on every line, side by side',
     cam: 'Angled 3-quarter camera view', top: 'Straight-down plan view',
     btn2d: 'Flat 2D layout view', cadBtn: 'Overlay the CAD floor plan 1:1 to compare against the model',
     layoutSel: 'Switch between saved layouts', saveLayout: 'Save the current layout under a name',
