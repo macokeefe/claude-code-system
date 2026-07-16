@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>TUUCI · 3D Mezzanine Model</title>
 <style>
-  :root{--navy:#15263a;--mut:#6b7785;--rust:#b3502e;--ship:#2f7d52;--tuuci:#5f9299;--hdr1:#3b4147;--hdr2:#2c3137}
+  :root{--navy:#15263a;--mut:#6b7785;--rust:#b3502e;--ship:#2f7d52;--tuuci:#5f9299;--tuucihi:#7db3ba;--hdr1:#3b4147;--hdr2:#2c3137}
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;font-family:"Inter","Segoe UI",Arial,sans-serif;color:#1c2024;background:#e9edf1;overflow:hidden}
   #app{position:fixed;inset:0;display:flex;flex-direction:column}
-  header{background:linear-gradient(180deg,var(--hdr1),var(--hdr2));color:#fff;padding:9px 16px 8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;z-index:5;border-bottom:2px solid var(--tuuci)}
-  header .logo{height:23px;width:auto;margin-right:1px;filter:drop-shadow(0 1px 1px rgba(0,0,0,.25))}
-  header .hsub{opacity:.5;font-weight:400}
-  header h1 .tk{letter-spacing:.14em}
+  header{background:linear-gradient(180deg,var(--hdr1),var(--hdr2));color:#fff;padding:10px 16px 9px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;z-index:5;border-bottom:2px solid var(--tuuci)}
+  header .logo{height:24px;width:auto;margin-right:2px;filter:drop-shadow(0 1px 1px rgba(0,0,0,.25))}
+  header .hsub{opacity:.55;font-weight:400}
+  header h1 .tk{letter-spacing:.15em}
   header h1{font-size:15px;margin:0;font-weight:700;letter-spacing:.02em}
   header .sp{flex:1}
   header{position:relative}
@@ -32,9 +32,9 @@
   .ctl input[type=number]{width:50px}
   .ctl input[type=range]{width:90px}
   #layoutSel{max-width:160px}
-  button{background:#474d55;color:#fff;border:1px solid #5b626c;border-radius:7px;padding:7px 11px;font-size:12.5px;font-weight:600;cursor:pointer}
-  button:hover{background:#565d67;border-color:#6b727c}
-  button.go{background:var(--tuuci);border-color:var(--tuuci)}
+  button{background:#22364f;color:#fff;border:1px solid #34506f;border-radius:7px;padding:7px 11px;font-size:12.5px;font-weight:600;cursor:pointer}
+  button:hover{background:#2c465f}
+  button.go{background:var(--ship);border-color:var(--ship)}
   button.on{background:#c0552c;border-color:#c0552c}
   input,select{font-family:inherit;border:1px solid #9fb0c2;border-radius:6px;padding:4px 6px;font-size:12px;background:#fff;color:#1c2024}
   #stage{position:relative;flex:1;min-height:0}
@@ -121,6 +121,33 @@
   .shrow select.sside{font-size:10px;padding:2px}
   .shrow .sdel{background:#e7eef7;border:0;color:#c0552c;border-radius:5px;padding:2px 6px;font-size:11px;cursor:pointer}
 </style>
+<style id="tuuciSkin">
+  /* toolbar groups become soft cards */
+  header .tg{background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.10);border-radius:11px;padding:5px 11px 5px 10px;margin:0}
+  header .tgl{color:#93c4ca;margin-right:5px}
+  header button{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.17)}
+  header button:hover{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.32)}
+  header button.go{background:var(--tuuci);border-color:var(--tuuci)}
+  header button.go:hover{background:var(--tuucihi);border-color:var(--tuucihi)}
+  header button.on{background:var(--tuuci);border-color:var(--tuucihi)}
+  header .ctl{color:#c3ccd4}
+  header input[type=range]{accent-color:var(--tuucihi)}
+  /* floor-tools strip reads as its own teal tray */
+  #buildRow{background:rgba(95,146,153,.13);border:1px solid rgba(95,146,153,.32);border-radius:11px;padding:8px 11px;margin-top:7px}
+  #buildRow .tgl{color:#a5d3d9}
+  #floorTools{border-style:dashed}
+  /* layouts menu matches the theme */
+  #layoutsMenu{border-radius:12px;border-color:#cdd6da}
+  #layoutsMenu button.go{background:var(--tuuci);border-color:var(--tuuci);color:#fff}
+  #layoutsMenu button:hover{border-color:var(--tuuci)}
+  /* readout cards: crisper, teal keyline on the line titles */
+  .rd,.rdttl{border-radius:12px;border-color:#dde2e6;box-shadow:0 2px 8px rgba(30,40,50,.10)}
+  .rdttl{border-top:2px solid var(--tuuci)}
+  .rd .k{color:#61707d}
+  /* panels pick up the same corner + shadow language */
+  #times,#idlePanel,#helpPanel,#taskPanel{border-radius:14px;box-shadow:0 8px 26px rgba(20,30,40,.16)}
+</style>
+
 </head>
 <body>
 <div id="app">
