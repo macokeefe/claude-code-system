@@ -2037,9 +2037,12 @@ function plX(pl, z) {
 }
 const SOLA_BX = z => plX(SECTION_LINES[1], z);               // CAD section line 2 (x≈4.91 below z=0.99, 5.18 above)
 const CANYON_BX = z => plX(SECTION_LINES[2], z);             // CAD section line 3 (jagged) — Canyon Crew's space is line 3 → line 4; the strip east of line 4 is staging but strays parked there still FILE as Canyon
+// ---- imported floor plans: extra floors that live beside the mezzanine ----
+let customFloors = [];       // [{id, name, x, z, w, d, walls:[[x1,z1,x2,z2],...]}] — positions/sizes in meters, x/z = floor origin corner (level2 coords)
+function floorAt(x, z) { return customFloors.find(f => x >= f.x - 0.5 && x <= f.x + f.w + 0.5 && z >= f.z - 0.5 && z <= f.z + f.d + 0.5) || null; }
 const sideOf = (x, z = 0) => (x < SOLA_BX(z) ? 'meritage' : 'other');
 const CANYON_X = 17.6;                                       // legacy constant (kept for default placements)
-const sectionOf = (x, z = 0) => (x < SOLA_BX(z) ? 'meritage' : x < CANYON_BX(z) ? 'sola' : 'canyon');
+const sectionOf = (x, z = 0) => { const f = floorAt(x, z); if (f) return f.id; return x < SOLA_BX(z) ? 'meritage' : x < CANYON_BX(z) ? 'sola' : 'canyon'; };   // stations on an imported floor belong to THAT floor, not the mezzanine lines
 const STA_COLORS = ['#1d3a66','#9a3b1f','#236043','#8f5390','#a8923a','#3f8f8f','#9c4f45','#c0552c','#2f6df6','#7a5b1f'];
 function addStation(name, x, z, id, t) {
   id = id || ('x' + (++extraSeq));
@@ -3065,7 +3068,7 @@ function setStationRot(id, rot) {
 }
 // Build the working-layout object from the LIVE scene (not from storage).
 function buildWorkingLayout() {
-  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0, a.prod || '']); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__cover = Object.fromEntries(ST.map(s => [s.id, s.cover || ''])); o.__plan = JSON.parse(JSON.stringify(dayPlan)); o.__planStart = planStart; o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); o.__wps3 = cart3Waypoints.map(w => [w.x, w.z]); o.__rwps3 = returnWps3.map(w => [w.x, w.z]); o.__ends = [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null); o.__fwps = prodWps.map(l => l.map(w => [w.x, w.z])); o.__fstart = prodStart.slice(); o.__dayMin = dayMin; o.__products = JSON.parse(JSON.stringify(lineProducts)); o.__baseSteps = JSON.parse(JSON.stringify(baseSteps)); o.__boxZone = [boxZone.x, boxZone.z, boxZone.w, boxZone.d]; o.__names = Object.fromEntries(ST.map(s2 => [s2.id, s2.title])); return o;
+  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0, a.prod || '']); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__cover = Object.fromEntries(ST.map(s => [s.id, s.cover || ''])); o.__plan = JSON.parse(JSON.stringify(dayPlan)); o.__planStart = planStart; o.__floors = JSON.parse(JSON.stringify(customFloors)); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); o.__wps3 = cart3Waypoints.map(w => [w.x, w.z]); o.__rwps3 = returnWps3.map(w => [w.x, w.z]); o.__ends = [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null); o.__fwps = prodWps.map(l => l.map(w => [w.x, w.z])); o.__fstart = prodStart.slice(); o.__dayMin = dayMin; o.__products = JSON.parse(JSON.stringify(lineProducts)); o.__baseSteps = JSON.parse(JSON.stringify(baseSteps)); o.__boxZone = [boxZone.x, boxZone.z, boxZone.w, boxZone.d]; o.__names = Object.fromEntries(ST.map(s2 => [s2.id, s2.title])); return o;
 }
 // In-memory mirror so the layout survives even when localStorage is blocked
 // (Safari / file:// often refuses to persist) — bake reads THIS, never storage.
@@ -3111,7 +3114,7 @@ window.addEventListener('keydown', e => {
   }
 });
 function applyWorkingLayout(o) {   // apply a working-layout object to the LIVE scene (shared by load + import)
-  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } if (Array.isArray(o.__ends)) { const e = o.__ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; } if (Array.isArray(o.__fwps)) prodWps = [0, 1, 2].map(i => (o.__fwps[i] || []).map(a => ({ x: a[0], z: a[1] }))); if (Array.isArray(o.__fstart)) prodStart = [0, 1, 2].map(i => o.__fstart[i] || null); if (typeof o.__dayMin === 'number' && o.__dayMin > 0) dayMin = o.__dayMin; if (o.__products && o.__products.meritage) mergeProducts(o.__products); if (o.__baseSteps) baseSteps = o.__baseSteps; refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0, prod: a[4] || null })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__cover) { ST.forEach(s => { s.cover = o.__cover[s.id] || null; }); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; } }); } ST.forEach(s => { rebuildCrew(s.id); placeStation(s.id); }); renderTimes(); if (o.__plan && typeof o.__plan === 'object') { dayPlan = { meritage: o.__plan.meritage || [], sola: o.__plan.sola || [], canyon: o.__plan.canyon || [] }; } if (typeof o.__planStart === 'number') planStart = o.__planStart; if (typeof renderPlanner === 'function') renderPlanner(); if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } extraStations.forEach(applyLineAccent); if (typeof refreshProdFlow === 'function') refreshProdFlow(); if (typeof applyLineFocus === 'function') applyLineFocus();
+  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); if (Array.isArray(o.__floors)) restoreFloors(o.__floors); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } if (Array.isArray(o.__ends)) { const e = o.__ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; } if (Array.isArray(o.__fwps)) prodWps = [0, 1, 2].map(i => (o.__fwps[i] || []).map(a => ({ x: a[0], z: a[1] }))); if (Array.isArray(o.__fstart)) prodStart = [0, 1, 2].map(i => o.__fstart[i] || null); if (typeof o.__dayMin === 'number' && o.__dayMin > 0) dayMin = o.__dayMin; if (o.__products && o.__products.meritage) mergeProducts(o.__products); if (o.__baseSteps) baseSteps = o.__baseSteps; refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0, prod: a[4] || null })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__cover) { ST.forEach(s => { s.cover = o.__cover[s.id] || null; }); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; } }); } ST.forEach(s => { rebuildCrew(s.id); placeStation(s.id); }); renderTimes(); if (o.__plan && typeof o.__plan === 'object') { dayPlan = { meritage: o.__plan.meritage || [], sola: o.__plan.sola || [], canyon: o.__plan.canyon || [] }; } if (typeof o.__planStart === 'number') planStart = o.__planStart; if (typeof renderPlanner === 'function') renderPlanner(); if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } extraStations.forEach(applyLineAccent); if (typeof refreshProdFlow === 'function') refreshProdFlow(); if (typeof applyLineFocus === 'function') applyLineFocus();
 }
 let hadSavedLayout = false;   // true when ANY layout (localStorage or baked) was loaded — defaults must then keep their hands off
 function loadLayout() { try { let o = null; try { o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch (e) {} if (!o && window.__M3D_LAYOUT__) o = window.__M3D_LAYOUT__;   // baked-in working layout (travels with the file)
@@ -3798,7 +3801,7 @@ function snapshot() {
   ST.forEach(s => { const n = nodes[s.id]; pos[s.id] = [n.x, n.z]; times[s.id] = get(s.id).t; });
   if (nodes.cart) pos.cart = [nodes.cart.x, nodes.cart.z];
   const cap = sch ? dayMinSafe() / Math.max(sch.conT, sch.armT, sch.bakT, sch.treT, sch.seaT, sch.ASM + sch.PACK) : 0;
-  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0, a.prod || '']), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), ppl: Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])), cover: Object.fromEntries(ST.map(s => [s.id, s.cover || ''])), plan: JSON.parse(JSON.stringify(dayPlan)), planStart, access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), extras: extraSnap(), flow: flowArrows.map(a => [a.from, a.to]), areas: areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]), rwps: returnWps.map(w => [w.x, w.z]), rwps2: returnWps2.map(w => [w.x, w.z]), wps3: cart3Waypoints.map(w => [w.x, w.z]), rwps3: returnWps3.map(w => [w.x, w.z]), ends: [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null), fwps: prodWps.map(l => l.map(w => [w.x, w.z])), fstart: prodStart.slice(), dayMin, products: JSON.parse(JSON.stringify(lineProducts)), boxZone: [boxZone.x, boxZone.z, boxZone.w, boxZone.d], names: Object.fromEntries(ST.map(s2 => [s2.id, s2.title])), cap: +cap.toFixed(1) };
+  return { pos, times, walkOn, walkSpeed, trips: tripsPerUnit, N, wps: cartWaypoints.map(w => [w.x, w.z]), help: helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0, a.prod || '']), rot: Object.fromEntries(ST.map(s => [s.id, nodes[s.id] ? (nodes[s.id].rot || 0) : 0])), steps: Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])), ppl: Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])), cover: Object.fromEntries(ST.map(s => [s.id, s.cover || ''])), plan: JSON.parse(JSON.stringify(dayPlan)), planStart, floors: JSON.parse(JSON.stringify(customFloors)), access: accessPts.map(a => [a.x, a.z]), elev: [EL[0], EL[1]], racks: racks.map(r => [r.x, r.z, r.g.rotation.y || 0]), extras: extraSnap(), flow: flowArrows.map(a => [a.from, a.to]), areas: areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]), rwps: returnWps.map(w => [w.x, w.z]), rwps2: returnWps2.map(w => [w.x, w.z]), wps3: cart3Waypoints.map(w => [w.x, w.z]), rwps3: returnWps3.map(w => [w.x, w.z]), ends: [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null), fwps: prodWps.map(l => l.map(w => [w.x, w.z])), fstart: prodStart.slice(), dayMin, products: JSON.parse(JSON.stringify(lineProducts)), boxZone: [boxZone.x, boxZone.z, boxZone.w, boxZone.d], names: Object.fromEntries(ST.map(s2 => [s2.id, s2.title])), cap: +cap.toFixed(1) };
 }
 function applyLayout(L) {
   if (L.steps) { ST.forEach(s => { if (L.steps[s.id]) { s.steps = L.steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); }
@@ -3831,6 +3834,7 @@ function applyLayout(L) {
   extraStations.forEach(applyLineAccent); if (typeof applyLineFocus === 'function') applyLineFocus();
   if (Array.isArray(L.elev)) moveElevator(L.elev[0], L.elev[1]);
   if (Array.isArray(L.racks)) { clearRacks(); L.racks.forEach(p => addRack(p[0], p[1], p[2])); }
+  if (Array.isArray(L.floors)) restoreFloors(L.floors);
   if (Array.isArray(L.extras)) { clearExtras(); restoreExtras(L.extras); restoreFlow(L.flow); }   // rebuild the Sola side from this layout
   if (Array.isArray(L.areas)) restoreAreas(L.areas);                                                // rebuild the surrounding areas
   if (Array.isArray(L.boxZone)) { boxZone = { x: L.boxZone[0], z: L.boxZone[1], w: L.boxZone[2], d: L.boxZone[3] }; refreshBoxZone(); }
@@ -4299,6 +4303,7 @@ function addPanelX(panel, onClose) {
     floorTools: 'Show / hide the floor-editing tools (stations, carts, lanes, racks)',
     layoutsBtn: 'Save, load, share, or bake in layouts',
     cloudBtn: 'Shared data status: local-only until IT configures the TUUCI SharePoint store',
+    floorsBtn: 'Add or remove floor plans: import a CAD drawing (DXF) as a new floor, import standard-work CSVs as stations',
     cam: 'Angled 3-quarter camera view', top: 'Straight-down plan view',
     btn2d: 'Flat 2D layout view', cadBtn: 'Overlay the CAD floor plan 1:1 to compare against the model',
     layoutSel: 'Switch between saved layouts', saveLayout: 'Save the current layout under a name',
@@ -4532,4 +4537,286 @@ function refreshCloudChip() {
   };
   refreshCloudChip();
   if (CLOUD.enabled) setTimeout(() => cloudConnect(false), 900);
+})();
+
+/* ============================================================
+   FLOOR PLANS: import a CAD drawing (DXF) as a NEW floor beside the
+   mezzanine, import standard-work CSVs as stations with their steps,
+   and add/remove floors. Each imported floor is its own area: stations
+   placed on it form their own independent line (flow arrows, help paths
+   and animation all work), without touching the mezzanine lines.
+   ============================================================ */
+const floorGroups = {};                       // floor id -> THREE.Group (runtime only)
+let floorSeq = 0;
+function floorNextOrigin(w, d) {              // place new floors in a row east of the mezzanine
+  let x = 30;
+  customFloors.forEach(f => { x = Math.max(x, f.x + f.w + 8); });
+  return { x, z: -d / 2 };
+}
+function buildFloorGroup(f) {
+  const g = new THREE.Group();
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(f.w, 0.5, f.d), deckMat);
+  slab.position.set(f.x + f.w / 2, -0.29, f.z + f.d / 2); slab.receiveShadow = true; g.add(slab);
+  for (const [cx, cz] of [[f.x + 0.6, f.z + 0.6], [f.x + f.w - 0.6, f.z + 0.6], [f.x + 0.6, f.z + f.d - 0.6], [f.x + f.w - 0.6, f.z + f.d - 0.6]]) {
+    const col = new THREE.Mesh(new THREE.BoxGeometry(0.4, FLOOR2, 0.4), MAT.steel);
+    col.position.set(cx, -FLOOR2 / 2 - 0.5, cz); g.add(col);
+  }
+  const walls = f.walls || [];
+  if (walls.length) {                          // extrude the longer CAD segments as low walls; everything as floor lines
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x8b939c, roughness: 0.8 });
+    let extruded = 0;
+    const pts = [];
+    walls.forEach(s => {
+      const [x1, z1, x2, z2] = s, len = Math.hypot(x2 - x1, z2 - z1);
+      pts.push(f.x + x1, 0.03, f.z + z1, f.x + x2, 0.03, f.z + z2);
+      if (len >= 1.2 && extruded < 400) {
+        extruded++;
+        const wallH = 1.1;
+        const m = new THREE.Mesh(new THREE.BoxGeometry(len, wallH, 0.1), wallMat);
+        m.position.set(f.x + (x1 + x2) / 2, wallH / 2, f.z + (z1 + z2) / 2);
+        m.rotation.y = -Math.atan2(z2 - z1, x2 - x1);
+        g.add(m);
+      }
+    });
+    const lg = new THREE.BufferGeometry();
+    lg.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    g.add(new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0x4b5560 })));
+  }
+  const lbl = makeMiniLabel(f.name, '#3f6f8f');
+  lbl.position.set(f.x + f.w / 2, 3.2, f.z + f.d / 2); g.add(lbl);
+  level2.add(g);
+  floorGroups[f.id] = g;
+}
+function clearFloors() {
+  Object.values(floorGroups).forEach(g => level2.remove(g));
+  for (const k of Object.keys(floorGroups)) delete floorGroups[k];
+  customFloors = [];
+}
+function restoreFloors(list) {
+  clearFloors();
+  (Array.isArray(list) ? list : []).forEach(f => {
+    if (!f || !f.id || !(f.w > 0)) return;
+    const num = parseInt(String(f.id).replace(/\D/g, '')) || 0; if (num > floorSeq) floorSeq = num;
+    customFloors.push(f); buildFloorGroup(f);
+  });
+}
+function addFloor(name, w, d, walls) {
+  const { x, z } = floorNextOrigin(w, d);
+  const f = { id: 'fl' + (++floorSeq), name: name || ('Floor ' + floorSeq), x, z, w: +w.toFixed(2), d: +d.toFixed(2), walls: walls || [] };
+  customFloors.push(f); buildFloorGroup(f);
+  saveLayout(); renderFloorsPanel();
+  flyToFloor(f);
+  return f;
+}
+function removeFloor(id) {
+  const f = customFloors.find(x => x.id === id); if (!f) return;
+  [...extraStations].forEach(sid => { const nd = nodes[sid]; if (nd && floorAt(nd.x, nd.z) === f) deleteStation(sid); });
+  if (floorGroups[id]) { level2.remove(floorGroups[id]); delete floorGroups[id]; }
+  customFloors = customFloors.filter(x => x.id !== id);
+  saveLayout(); renderFloorsPanel();
+}
+function flyToFloor(f) {
+  const c = new THREE.Vector3(f.x + f.w / 2, 0, f.z + f.d / 2).applyMatrix4(level2.matrixWorld);
+  controls.target.copy(c);
+  camera.position.set(c.x + f.w * 0.35, c.y + Math.max(f.w, f.d) * 0.9 + 8, c.z + f.d * 1.1);
+  camera.lookAt(c);
+}
+// next free spot for an imported station on a floor: simple grid inside the slab
+function floorSlot(f) {
+  const n = extraStations.filter(id => nodes[id] && floorAt(nodes[id].x, nodes[id].z) === f).length;
+  const pitch = 3.2, margin = 2.0;
+  const cols = Math.max(1, Math.floor((f.w - margin * 2) / pitch));
+  const cx = f.x + margin + (n % cols) * pitch + pitch / 2;
+  const cz = f.z + margin + Math.floor(n / cols) * pitch;
+  return { x: Math.min(cx, f.x + f.w - margin), z: Math.min(cz, f.z + f.d - margin) };
+}
+// ---- DXF (DraftSight export) → floor geometry ----
+function parseDXF(text) {
+  const raw = text.split(/\r\n|\r|\n/);
+  const pairs = [];
+  for (let i = 0; i + 1 < raw.length; i += 2) { const c = parseInt(raw[i], 10); if (!isNaN(c)) pairs.push([c, raw[i + 1]]); }
+  let units = null, pendingVar = null;
+  const segs = [], polys = [];
+  let ent = null;   // {type:'LINE', x1..} | {type:'POLY', pts:[], closed}
+  const flush = () => {
+    if (!ent) return;
+    if (ent.type === 'LINE' && [ent.x1, ent.y1, ent.x2, ent.y2].every(v => typeof v === 'number')) segs.push([ent.x1, ent.y1, ent.x2, ent.y2]);
+    if (ent.type === 'POLY' && ent.pts.length >= 2) polys.push(ent);
+    ent = null;
+  };
+  for (const [c, vRaw] of pairs) {
+    const v = vRaw.trim();
+    if (c === 9) { pendingVar = v; continue; }
+    if (c === 70 && pendingVar === '$INSUNITS') { units = parseInt(v, 10); pendingVar = null; continue; }
+    if (c === 0) { flush(); pendingVar = null; if (v === 'LINE') ent = { type: 'LINE' }; else if (v === 'LWPOLYLINE' || v === 'POLYLINE') ent = { type: 'POLY', pts: [], closed: false }; continue; }
+    if (!ent) continue;
+    const n = parseFloat(v);
+    if (ent.type === 'LINE') {
+      if (c === 10) ent.x1 = n; else if (c === 20) ent.y1 = n; else if (c === 11) ent.x2 = n; else if (c === 21) ent.y2 = n;
+    } else {
+      if (c === 70) ent.closed = (parseInt(v, 10) & 1) === 1;
+      else if (c === 10) ent.pts.push([n, 0]);
+      else if (c === 20 && ent.pts.length) ent.pts[ent.pts.length - 1][1] = n;
+    }
+  }
+  flush();
+  polys.forEach(p => { for (let i = 0; i + 1 < p.pts.length; i++) segs.push([p.pts[i][0], p.pts[i][1], p.pts[i + 1][0], p.pts[i + 1][1]]); if (p.closed && p.pts.length > 2) { const a = p.pts[p.pts.length - 1], b = p.pts[0]; segs.push([a[0], a[1], b[0], b[1]]); } });
+  if (!segs.length) return null;
+  let minX = 1e12, minY = 1e12, maxX = -1e12, maxY = -1e12;
+  segs.forEach(s => { minX = Math.min(minX, s[0], s[2]); maxX = Math.max(maxX, s[0], s[2]); minY = Math.min(minY, s[1], s[3]); maxY = Math.max(maxY, s[1], s[3]); });
+  const UNIT = { 1: 0.0254, 2: 0.3048, 4: 0.001, 5: 0.01, 6: 1 };
+  let k = UNIT[units];
+  if (!k) { const span = Math.max(maxX - minX, maxY - minY); k = [1, 0.3048, 0.0254, 0.001].find(f2 => span * f2 <= 90) || 0.001; }   // no unit header: pick the scale that lands under ~90 m
+  const W = (maxX - minX) * k, D = (maxY - minY) * k;
+  if (!(W > 0.5) || !(D > 0.5)) return null;
+  const tx = (x) => (x - minX) * k, tz = (y) => (maxY - y) * k;   // CAD north stays "up" in top view (no mirroring)
+  const tables = [], tableSegKeys = new Set();
+  const segKey = (x1, y1, x2, y2) => [x1, y1, x2, y2].map(v => v.toFixed(3)).join('|');
+  polys.forEach(p => {   // closed table-sized rectangles → station candidates (their edges are furniture, not walls)
+    if (!p.closed || p.pts.length < 4 || p.pts.length > 5) return;
+    let a = 1e12, b2 = -1e12, c2 = 1e12, d2 = -1e12;
+    p.pts.forEach(([px, py]) => { a = Math.min(a, px); b2 = Math.max(b2, px); c2 = Math.min(c2, py); d2 = Math.max(d2, py); });
+    const tw = (b2 - a) * k, td = (d2 - c2) * k;
+    if (tw >= 0.5 && tw <= 4 && td >= 0.5 && td <= 4) {
+      tables.push({ x: tx((a + b2) / 2), z: tz((c2 + d2) / 2) });
+      for (let i = 0; i < p.pts.length; i++) { const u = p.pts[i], v2 = p.pts[(i + 1) % p.pts.length]; tableSegKeys.add(segKey(u[0], u[1], v2[0], v2[1])); tableSegKeys.add(segKey(v2[0], v2[1], u[0], u[1])); }
+    }
+  });
+  const walls = segs.filter(s => !tableSegKeys.has(segKey(s[0], s[1], s[2], s[3]))).map(s => [tx(s[0]), tz(s[1]), tx(s[2]), tz(s[3])]).filter(s => Math.hypot(s[2] - s[0], s[3] - s[1]) > 0.05).slice(0, 3000);
+  return { w: +W.toFixed(2), d: +D.toFixed(2), walls, tables, unitFactor: k, segCount: segs.length };
+}
+// ---- standard-work CSV → a station carrying every parsed step ----
+function parseCSVText(text) {
+  const rows = []; let cur = [], val = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) { if (ch === '"') { if (text[i + 1] === '"') { val += '"'; i++; } else q = false; } else val += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === ',') { cur.push(val); val = ''; }
+    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; cur.push(val); rows.push(cur); cur = []; val = ''; }
+    else val += ch;
+  }
+  if (val !== '' || cur.length) { cur.push(val); rows.push(cur); }
+  return rows;
+}
+function parseSWITime(s) {
+  if (!s) return null;
+  const t = String(s).trim(); if (!t) return null;
+  let m = t.match(/(\d+)\s*minutes?\s*(?:and\s*)?(\d+)\s*seconds?/i); if (m) return +m[1] + (+m[2]) / 60;
+  m = t.match(/(\d+(?:\.\d+)?)\s*min/i); if (m) return +m[1];
+  m = t.match(/(\d{1,3})\s*:\s*([0-5]\d)\b/); if (m) return +m[1] + (+m[2]) / 60;
+  m = t.match(/^(\d{1,3}(?:\.\d+)?)$/); if (m && +m[1] > 0 && +m[1] < 500) return +m[1];
+  return null;
+}
+function parseSWICSV(text) {
+  const rows = parseCSVText(text);
+  const steps = [];
+  rows.forEach(r => {
+    let time = null, desc = '';
+    r.forEach(cell => {
+      if (time == null) { const tv = parseSWITime(cell); if (tv != null && !(String(cell).trim().match(/^\d+$/) && +cell <= 40 && desc === '' )) time = tv; }
+      if (String(cell || '').trim().length > Math.max(15, desc.length)) desc = String(cell).trim();
+    });
+    if (time == null || !desc || desc.length < 10) return;
+    if (/standard work instruction|total process time|process ppe|tool list|^version/i.test(desc)) return;   // header rows, not steps
+    if (time > 150) return;                                    // a single step over 2.5 hours is a sheet total, not a step
+    let name = desc.split('\n')[0];
+    const ci = name.indexOf(':'); if (ci > 3 && ci < 60) name = name.slice(0, ci);
+    if (name.length > 58) name = name.slice(0, 55) + '…';
+    steps.push({ name: name.trim(), t: +time.toFixed(2) });
+  });
+  return steps;
+}
+function importSWIFiles(files) {
+  const f = customFloors[customFloors.length - 1] || null;
+  let made = 0, report = [];
+  const doOne = (file) => new Promise(res => {
+    const rd = new FileReader();
+    rd.onload = () => {
+      const steps = parseSWICSV(String(rd.result || ''));
+      if (!steps.length) { report.push(file.name + ': no steps found'); return res(); }
+      const nm = file.name.replace(/\.(csv|txt)$/i, '').replace(/[_-]+/g, ' ').trim().slice(0, 40) || 'Imported SWI';
+      const spot = f ? floorSlot(f) : { x: 27 + (made % 3) * 3.2, z: -6 + Math.floor(made / 3) * 3.2 };
+      addStation(nm, spot.x, spot.z);
+      const id = extraStations[extraStations.length - 1], nd = nodes[id];
+      nd.s.steps = steps.map(s2 => ({ name: s2.name, t: s2.t }));
+      recalcAny(id);
+      made++;
+      report.push(file.name + ': ' + steps.length + ' steps, ' + nd.s.steps.reduce((a2, s2) => a2 + s2.t, 0).toFixed(1) + ' min');
+      res();
+    };
+    rd.onerror = () => { report.push(file.name + ': could not read'); res(); };
+    rd.readAsText(file);
+  });
+  (async () => {
+    for (const file of files) await doOne(file);
+    renderTimes(); saveLayout(); renderFloorsPanel();
+    if (typeof buildSolaSched === 'function') buildSolaSched();
+    alert('Standard-work import:\n' + report.join('\n') + (f ? '\n\nStations placed on "' + f.name + '".' : '\n\nStations placed near the staging area (no imported floor yet).') + '\nOpen Edit times to review the steps.');
+  })();
+}
+// ---- Floors panel ----
+function renderFloorsPanel() {
+  const p = document.getElementById('floorsPanel'); if (!p || p.style.display === 'none') return;
+  let html = `<b style="font-size:13px">🏗 Floor plans</b>
+    <div style="color:#5a6672;margin:2px 0 8px">Import a CAD drawing (DXF from DraftSight) as a new floor, then import standard-work CSVs as stations with their steps.</div>`;
+  if (!customFloors.length) html += `<div style="color:#8a8f98;margin:6px 0">No imported floors yet, just the mezzanine.</div>`;
+  customFloors.forEach(f => {
+    const n = extraStations.filter(id => nodes[id] && floorAt(nodes[id].x, nodes[id].z) === f).length;
+    html += `<div style="display:flex;align-items:center;gap:6px;border-top:1px solid #eef1f5;padding:6px 0">
+      <b style="flex:1">${(f.name || f.id).replace(/</g, '&lt;')}</b>
+      <span style="color:#5a6672">${f.w.toFixed(0)}×${f.d.toFixed(0)} m · ${n} station${n === 1 ? '' : 's'}</span>
+      <button class="flGo" data-id="${f.id}" style="padding:2px 8px">✈ Go</button>
+      <button class="flDel" data-id="${f.id}" style="padding:2px 8px;color:#c0552c">✕</button>
+    </div>`;
+  });
+  html += `<div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">
+    <button id="flAddDxf" style="padding:6px">⬆ Import CAD floor (.dxf)</button>
+    <button id="flAddBlank" style="padding:6px">＋ Blank floor</button>
+    <button id="flAddSwi" style="padding:6px">⬆ Import standard work (.csv) → stations</button>
+    <button id="flClose" style="padding:6px;background:#f2f6fb;color:#1d3a66;border:1px solid #c9d2dd;font-weight:700">Done</button>
+  </div>`;
+  p.innerHTML = html;
+  p.querySelectorAll('.flGo').forEach(b => b.onclick = e => { const f = customFloors.find(x => x.id === e.target.dataset.id); if (f) flyToFloor(f); });
+  p.querySelectorAll('.flDel').forEach(b => b.onclick = e => {
+    const f = customFloors.find(x => x.id === e.target.dataset.id);
+    if (f && confirm('Remove floor "' + f.name + '" and its stations?')) removeFloor(f.id);
+  });
+  const dxfI = document.getElementById('dxfFile'), swiI = document.getElementById('swiFile');
+  const g1 = document.getElementById('flAddDxf'); if (g1 && dxfI) g1.onclick = () => dxfI.click();
+  const g3 = document.getElementById('flAddSwi'); if (g3 && swiI) g3.onclick = () => swiI.click();
+  const g2 = document.getElementById('flAddBlank'); if (g2) g2.onclick = () => {
+    const nm = (prompt('Name for the new floor:', 'New floor') || '').trim(); if (!nm) return;
+    const sz = (prompt('Size in meters, width x depth:', '20 x 14') || '').match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/i);
+    addFloor(nm, sz ? +sz[1] : 20, sz ? +sz[2] : 14, []);
+  };
+  const cl = document.getElementById('flClose'); if (cl) cl.onclick = () => { p.style.display = 'none'; };
+}
+(() => {   // Floors button + hidden file inputs
+  const br = document.getElementById('buildRow'); if (!br) return;
+  const b = document.createElement('button'); b.id = 'floorsBtn'; b.textContent = '🏗 Floors';
+  br.appendChild(b);
+  const p = document.createElement('div'); p.id = 'floorsPanel';
+  p.style.cssText = 'position:fixed;display:none;z-index:61;left:50%;top:110px;transform:translateX(-50%);background:#fff;border:1px solid #d8dee6;border-radius:12px;box-shadow:0 12px 30px rgba(20,30,45,.2);padding:12px 14px;font:12px/1.5 Arial,sans-serif;color:#15263a;min-width:360px;max-width:440px;max-height:70vh;overflow:auto';
+  document.body.appendChild(p);
+  const dxfI = document.createElement('input'); dxfI.type = 'file'; dxfI.id = 'dxfFile'; dxfI.accept = '.dxf'; dxfI.style.display = 'none'; document.body.appendChild(dxfI);
+  const swiI = document.createElement('input'); swiI.type = 'file'; swiI.id = 'swiFile'; swiI.accept = '.csv,.txt'; swiI.multiple = true; swiI.style.display = 'none'; document.body.appendChild(swiI);
+  b.onclick = () => { p.style.display = p.style.display === 'none' ? 'block' : 'none'; renderFloorsPanel(); };
+  dxfI.onchange = () => {
+    const file = dxfI.files && dxfI.files[0]; dxfI.value = ''; if (!file) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      const geo = parseDXF(String(rd.result || ''));
+      if (!geo) { alert('Could not read usable geometry from that DXF. Export from DraftSight as ASCII DXF (R12 or newer) and try again.'); return; }
+      const nm = (prompt('Name for this floor:', file.name.replace(/\.dxf$/i, '')) || '').trim() || file.name;
+      const f = addFloor(nm, geo.w, geo.d, geo.walls);
+      let msg = 'Imported "' + nm + '": ' + geo.w.toFixed(1) + ' × ' + geo.d.toFixed(1) + ' m, ' + geo.walls.length + ' wall segments (scale ' + geo.unitFactor + ' m/unit).';
+      if (geo.tables.length && confirm(msg + '\n\nDetected ' + geo.tables.length + ' table-sized rectangles. Create a station at each one?')) {
+        geo.tables.slice(0, 40).forEach((t2, i) => addStation('Table ' + (i + 1), f.x + t2.x, f.z + t2.z));
+        renderTimes(); saveLayout(); renderFloorsPanel();
+      } else if (!geo.tables.length) alert(msg + '\nNo table-sized rectangles detected; add stations with ＋ Add station or import standard-work CSVs.');
+    };
+    rd.readAsText(file);
+  };
+  swiI.onchange = () => { const files = [...(swiI.files || [])]; swiI.value = ''; if (files.length) importSWIFiles(files); };
 })();
