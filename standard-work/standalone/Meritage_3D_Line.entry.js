@@ -4893,7 +4893,7 @@ function renderKiosk() {
     if (!s.rows.length) {
       html += `<div class="kkbody"><div class="kknone">No plan entered for today.<br><span>Set it in the Planner.</span></div></div>`;
     } else if (s.finished) {
-      html += `<div class="kkbody"><div class="kkdone2">✓ Day's plan complete</div><div class="kkmeta">${s.total} unit${s.total === 1 ? '' : 's'} · plan ran ${planClock(0)} to ${planClock(s.dayEnd)}${preview ? '' : ', and it is now ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>${preview ? '' : `<div class="kkmeta" style="color:#8a95a1">Outside the planned window. Adjust the start time in the Planner, or use ▶ Preview the day.</div>`}</div>`;
+      html += `<div class="kkbody"><div class="kkdone2">Planned window ended</div><div class="kkmeta">${s.total} unit${s.total === 1 ? '' : 's'} · plan ran ${planClock(0)} to ${planClock(s.dayEnd)}${preview ? '' : ', and it is now ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>${preview ? '' : `<div class="kkmeta" style="color:#8a95a1">Outside the planned window. Adjust the start time in the Planner, or use ▶ Preview the day.</div>`}</div>`;
     } else {
       html += `<div class="kkbody">`;
       if (s.current) {
@@ -4905,7 +4905,7 @@ function renderKiosk() {
         html += `<div class="kklbl">STARTS ${s.next.at}</div><div class="kkprod">${(s.next.name || '').replace(/</g, '&lt;')}</div><div class="kkunit">${s.next.q} unit${s.next.q === 1 ? '' : 's'} queued</div>`;
       }
       if (s.current && s.next) html += `<div class="kknext">next: <b>${(s.next.name || '').replace(/</g, '&lt;')}</b> ×${s.next.q} @ ${s.next.at}</div>`;
-      html += `<div class="kkshould">should be done by now: <b>${s.shouldDone}</b> / ${s.total}</div>`;
+      html += `<div class="kkshould">on plan, <b>${s.shouldDone}</b> of ${s.total} would be done by now</div>`;
       const bn = lineBottleneckKiosk(key);
       const helps = lineHelpKiosk(key);
       if (bn) html += `<div class="kkbn">constraint: <b>${(bn.name || '').replace(/</g, '&lt;')}</b> (${bn.time.toFixed(0)} min)${helps.length ? ' · ' + helps.map(h => h.replace(/</g, '&lt;')).join(' · ') : ''}</div>`;
