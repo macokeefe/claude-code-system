@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PublicClientApplication } from '@azure/msal-browser';   // TUUCI shared data (Phase 1): sign in with the company M365 account
+import { LibreDwg, Dwg_File_Type, createModule as dwgCreateModule } from '@mlightcad/libredwg-web';   // DWG import (LibreDWG wasm; the binary ships gzipped inside this file)
 
 // Capture the pristine page HTML before the 3D scene mutates the DOM, so we can
 // bake the current layouts into a fresh self-contained copy of this app.
@@ -4303,7 +4304,7 @@ function addPanelX(panel, onClose) {
     floorTools: 'Show / hide the floor-editing tools (stations, carts, lanes, racks)',
     layoutsBtn: 'Save, load, share, or bake in layouts',
     cloudBtn: 'Shared data status: local-only until IT configures the TUUCI SharePoint store',
-    floorsBtn: 'Add or remove floor plans: import a CAD drawing (DXF) as a new floor, import standard-work CSVs as stations',
+    floorsBtn: 'Add or remove floor plans: import a CAD drawing (DWG/DXF) as a new floor, import standard-work CSVs as stations',
     floorscreen: 'Floor screen: a wall-display mode showing what each line should be building right now, from the day\'s plan',
     cam: 'Angled 3-quarter camera view', top: 'Straight-down plan view',
     btn2d: 'Flat 2D layout view', cadBtn: 'Overlay the CAD floor plan 1:1 to compare against the model',
@@ -4684,13 +4685,20 @@ function parseDXF(text) {
     }
   }
   flush();
+  return finishFloorGeo(segs, polys, units);
+}
+// shared tail for BOTH importers (DXF text and DWG binary): scale to meters,
+// normalize the origin, split walls vs table-sized rectangles
+function finishFloorGeo(segs, polys, units) {
   polys.forEach(p => { for (let i = 0; i + 1 < p.pts.length; i++) segs.push([p.pts[i][0], p.pts[i][1], p.pts[i + 1][0], p.pts[i + 1][1]]); if (p.closed && p.pts.length > 2) { const a = p.pts[p.pts.length - 1], b = p.pts[0]; segs.push([a[0], a[1], b[0], b[1]]); } });
   if (!segs.length) return null;
   let minX = 1e12, minY = 1e12, maxX = -1e12, maxY = -1e12;
   segs.forEach(s => { minX = Math.min(minX, s[0], s[2]); maxX = Math.max(maxX, s[0], s[2]); minY = Math.min(minY, s[1], s[3]); maxY = Math.max(maxY, s[1], s[3]); });
   const UNIT = { 1: 0.0254, 2: 0.3048, 4: 0.001, 5: 0.01, 6: 1 };
+  const span = Math.max(maxX - minX, maxY - minY);
   let k = UNIT[units];
-  if (!k) { const span = Math.max(maxX - minX, maxY - minY); k = [1, 0.3048, 0.0254, 0.001].find(f2 => span * f2 <= 90) || 0.001; }   // no unit header: pick the scale that lands under ~90 m
+  if (k && (span * k < 3 || span * k > 250)) k = null;   // declared unit gives an implausible building: fall back to the heuristic
+  if (!k) { k = [1, 0.3048, 0.0254, 0.001].find(f2 => span * f2 <= 90 && span * f2 >= 3) || [1, 0.3048, 0.0254, 0.001].find(f2 => span * f2 <= 90) || 0.001; }
   const W = (maxX - minX) * k, D = (maxY - minY) * k;
   if (!(W > 0.5) || !(D > 0.5)) return null;
   const tx = (x) => (x - minX) * k, tz = (y) => (maxY - y) * k;   // CAD north stays "up" in top view (no mirroring)
@@ -4708,6 +4716,44 @@ function parseDXF(text) {
   });
   const walls = segs.filter(s => !tableSegKeys.has(segKey(s[0], s[1], s[2], s[3]))).map(s => [tx(s[0]), tz(s[1]), tx(s[2]), tz(s[3])]).filter(s => Math.hypot(s[2] - s[0], s[3] - s[1]) > 0.05).slice(0, 3000);
   return { w: +W.toFixed(2), d: +D.toFixed(2), walls, tables, unitFactor: k, segCount: segs.length };
+}
+// ---- DWG (DraftSight native) → floor geometry, via LibreDWG compiled to WebAssembly.
+// The 9.5 MB engine ships gzipped+base64 inside this file and only unpacks the
+// first time someone actually imports a .dwg. ----
+let __dwgEngine = null;
+async function dwgEngine() {
+  if (__dwgEngine) return __dwgEngine;
+  const b64 = (typeof window !== 'undefined' && window.__DWG_WASM_GZB64) || '';
+  if (!b64) throw new Error('This build does not include the DWG engine. Import a DXF instead (DraftSight: Save As > DXF).');
+  if (typeof DecompressionStream === 'undefined') throw new Error('This browser cannot unpack the DWG engine. Use a current Chrome, Edge or Firefox, or import a DXF.');
+  const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const wasmBinary = new Uint8Array(await new Response(new Blob([bin]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+  const inst = await dwgCreateModule({ wasmBinary, locateFile: (f) => f });   // locateFile stops the glue from building a URL via import.meta (invalid inside this single-file bundle)
+  __dwgEngine = LibreDwg.createByWasmInstance(inst);
+  return __dwgEngine;
+}
+async function parseDWG(arrayBuffer) {
+  const L = await dwgEngine();
+  const ptr = L.dwg_read_data(arrayBuffer, Dwg_File_Type.DWG);
+  if (ptr == null || ptr === 0) throw new Error('LibreDWG could not read that file (is it a valid DWG?).');
+  let db;
+  try { db = L.convert(ptr); }
+  finally { try { if (typeof L.dwg_free === 'function') L.dwg_free(ptr); } catch (e) {} }
+  const segs = [], polys = [];
+  ((db && db.entities) || []).forEach(e => {
+    if (e.type === 'LINE' && e.startPoint && e.endPoint) {
+      segs.push([e.startPoint.x, e.startPoint.y, e.endPoint.x, e.endPoint.y]);
+    } else if ((e.type === 'LWPOLYLINE' || e.type === 'POLYLINE') && Array.isArray(e.vertices)) {
+      const pts = e.vertices.filter(v => typeof v.x === 'number' && typeof v.y === 'number').map(v => [v.x, v.y]);
+      if (pts.length < 2) return;
+      let closed = e.closed === true || ((e.flag || 0) & 1) === 1;
+      const a = pts[0], b = pts[pts.length - 1];
+      if (!closed && pts.length > 2 && Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-6) { closed = true; pts.pop(); }
+      polys.push({ pts, closed });
+    }
+  });
+  const units = db && db.header ? (db.header.INSUNITS != null ? db.header.INSUNITS : db.header.insunits) : null;
+  return finishFloorGeo(segs, polys, units);
 }
 // ---- standard-work CSV → a station carrying every parsed step ----
 function parseCSVText(text) {
@@ -4783,7 +4829,7 @@ function importSWIFiles(files) {
 function renderFloorsPanel() {
   const p = document.getElementById('floorsPanel'); if (!p || p.style.display === 'none') return;
   let html = `<b style="font-size:13px">🏗 Floor plans</b>
-    <div style="color:#5a6672;margin:2px 0 8px">Import a CAD drawing (DXF from DraftSight) as a new floor, then import standard-work CSVs as stations with their steps.</div>`;
+    <div style="color:#5a6672;margin:2px 0 8px">Import a CAD drawing (DWG or DXF from DraftSight) as a new floor, then import standard-work CSVs as stations with their steps.</div>`;
   html += `<div style="display:flex;align-items:center;gap:6px;border-top:1px solid #eef1f5;padding:6px 0">
     <b style="flex:1">🏠 Mezzanine</b><span style="color:#5a6672">the original floor</span>
     <button id="flGoMezz" style="padding:2px 8px">✈ Go</button></div>`;
@@ -4798,7 +4844,7 @@ function renderFloorsPanel() {
     </div>`;
   });
   html += `<div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">
-    <button id="flAddDxf" style="padding:6px">⬆ Import CAD floor (.dxf)</button>
+    <button id="flAddDxf" style="padding:6px">⬆ Import CAD floor (.dwg / .dxf)</button>
     <button id="flAddBlank" style="padding:6px">＋ Blank floor</button>
     <button id="flAddSwi" style="padding:6px">⬆ Import standard work (.csv) → stations</button>
     <button id="flClose" style="padding:6px;background:#f2f6fb;color:#1d3a66;border:1px solid #c9d2dd;font-weight:700">Done</button>
@@ -4827,24 +4873,33 @@ function renderFloorsPanel() {
   const p = document.createElement('div'); p.id = 'floorsPanel';
   p.style.cssText = 'position:fixed;display:none;z-index:61;left:50%;top:110px;transform:translateX(-50%);background:#fff;border:1px solid #d8dee6;border-radius:12px;box-shadow:0 12px 30px rgba(20,30,45,.2);padding:12px 14px;font:12px/1.5 Arial,sans-serif;color:#15263a;min-width:360px;max-width:440px;max-height:70vh;overflow:auto';
   document.body.appendChild(p);
-  const dxfI = document.createElement('input'); dxfI.type = 'file'; dxfI.id = 'dxfFile'; dxfI.accept = '.dxf'; dxfI.style.display = 'none'; document.body.appendChild(dxfI);
+  const dxfI = document.createElement('input'); dxfI.type = 'file'; dxfI.id = 'dxfFile'; dxfI.accept = '.dwg,.dxf'; dxfI.style.display = 'none'; document.body.appendChild(dxfI);
   const swiI = document.createElement('input'); swiI.type = 'file'; swiI.id = 'swiFile'; swiI.accept = '.csv,.txt'; swiI.multiple = true; swiI.style.display = 'none'; document.body.appendChild(swiI);
   b.onclick = () => { p.style.display = p.style.display === 'none' ? 'block' : 'none'; renderFloorsPanel(); };
+  const finishCadImport = (geo, file) => {
+    if (!geo) { alert('Could not read usable geometry from that drawing. From DraftSight, Save As DWG (R2010+) or ASCII DXF and try again.'); return; }
+    const nm = (prompt('Name for this floor:', file.name.replace(/\.(dxf|dwg)$/i, '')) || '').trim() || file.name;
+    const f = addFloor(nm, geo.w, geo.d, geo.walls);
+    let msg = 'Imported "' + nm + '": ' + geo.w.toFixed(1) + ' × ' + geo.d.toFixed(1) + ' m, ' + geo.walls.length + ' wall segments (scale ' + geo.unitFactor + ' m/unit).';
+    if (geo.tables.length && confirm(msg + '\n\nDetected ' + geo.tables.length + ' table-sized rectangles. Create a station at each one?')) {
+      geo.tables.slice(0, 40).forEach((t2, i) => addStation('Table ' + (i + 1), f.x + t2.x, f.z + t2.z));
+      renderTimes(); saveLayout(); renderFloorsPanel();
+    } else if (!geo.tables.length) alert(msg + '\nNo table-sized rectangles detected; add stations with ＋ Add station or import standard-work CSVs.');
+  };
   dxfI.onchange = () => {
     const file = dxfI.files && dxfI.files[0]; dxfI.value = ''; if (!file) return;
     const rd = new FileReader();
-    rd.onload = () => {
-      const geo = parseDXF(String(rd.result || ''));
-      if (!geo) { alert('Could not read usable geometry from that DXF. Export from DraftSight as ASCII DXF (R12 or newer) and try again.'); return; }
-      const nm = (prompt('Name for this floor:', file.name.replace(/\.dxf$/i, '')) || '').trim() || file.name;
-      const f = addFloor(nm, geo.w, geo.d, geo.walls);
-      let msg = 'Imported "' + nm + '": ' + geo.w.toFixed(1) + ' × ' + geo.d.toFixed(1) + ' m, ' + geo.walls.length + ' wall segments (scale ' + geo.unitFactor + ' m/unit).';
-      if (geo.tables.length && confirm(msg + '\n\nDetected ' + geo.tables.length + ' table-sized rectangles. Create a station at each one?')) {
-        geo.tables.slice(0, 40).forEach((t2, i) => addStation('Table ' + (i + 1), f.x + t2.x, f.z + t2.z));
-        renderTimes(); saveLayout(); renderFloorsPanel();
-      } else if (!geo.tables.length) alert(msg + '\nNo table-sized rectangles detected; add stations with ＋ Add station or import standard-work CSVs.');
-    };
-    rd.readAsText(file);
+    if (/\.dwg$/i.test(file.name)) {
+      rd.onload = () => {
+        parseDWG(rd.result)
+          .then(geo => finishCadImport(geo, file))
+          .catch(e => alert('DWG import failed: ' + (e.message || e) + '\n\nFallback: in DraftSight use Save As > DXF and import that.'));
+      };
+      rd.readAsArrayBuffer(file);
+    } else {
+      rd.onload = () => finishCadImport(parseDXF(String(rd.result || '')), file);
+      rd.readAsText(file);
+    }
   };
   swiI.onchange = () => { const files = [...(swiI.files || [])]; swiI.value = ''; if (files.length) importSWIFiles(files); };
 })();
