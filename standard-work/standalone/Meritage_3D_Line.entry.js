@@ -4831,8 +4831,11 @@ function renderFloorsPanel() {
    orbits behind it. Esc or ✕ exits.
    ============================================================ */
 let kioskOn = false, kioskTimer = null, kioskRaf = 0;
+let kioskPreviewT0 = null;                     // when set, the screen replays the day on a fast simulated clock (demo/testing)
+const KIOSK_PREVIEW_RATE = 7;                  // simulated minutes per real second (a 7-hour day plays in ~1 minute)
 function kioskNowMin() {   // minutes since the Planner day start (test override supported)
   if (typeof window !== 'undefined' && typeof window.__M3D_KIOSK_NOW === 'number') return window.__M3D_KIOSK_NOW;
+  if (kioskPreviewT0 != null) return (performance.now() - kioskPreviewT0) / 1000 * KIOSK_PREVIEW_RATE;
   const d = new Date();
   return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60 - planStart;
 }
@@ -4879,15 +4882,18 @@ function renderKiosk() {
   const ov = document.getElementById('kioskOverlay'); if (!ov || !kioskOn) return;
   const LINES = [['meritage', 'MERITAGE', '#1d3a66'], ['sola', 'SOLA', '#236043'], ['canyon', 'CANYON CREW', '#9a5b1f']];
   const d = new Date();
-  let html = `<div class="kkclock"><div class="kkt">${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div><div class="kkd">${d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })} · plan starts ${planClock(0)}</div></div>`;
-  html += `<button class="kkexit" title="Exit floor screen">✕</button><div class="kkrow">`;
+  const nowMin = kioskNowMin();
+  const preview = kioskPreviewT0 != null;
+  const clockTxt = preview ? planClock(nowMin) : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  let html = `<div class="kkclock"><div class="kkt">${clockTxt}${preview ? ' <span class="kkprevbadge">PREVIEW</span>' : ''}</div><div class="kkd">${d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })} · plan starts ${planClock(0)}</div></div>`;
+  html += `<div class="kkrow">`;
   LINES.forEach(([key, label, color]) => {
     const s = kioskLineState(key);
     html += `<div class="kkcard"><div class="kkhd" style="background:${color}">${label}</div>`;
     if (!s.rows.length) {
       html += `<div class="kkbody"><div class="kknone">No plan entered for today.<br><span>Set it in the Planner.</span></div></div>`;
     } else if (s.finished) {
-      html += `<div class="kkbody"><div class="kkdone2">✓ Day's plan complete</div><div class="kkmeta">${s.total} unit${s.total === 1 ? '' : 's'} · planned finish ${planClock(s.dayEnd)}</div></div>`;
+      html += `<div class="kkbody"><div class="kkdone2">✓ Day's plan complete</div><div class="kkmeta">${s.total} unit${s.total === 1 ? '' : 's'} · plan ran ${planClock(0)} to ${planClock(s.dayEnd)}${preview ? '' : ', and it is now ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>${preview ? '' : `<div class="kkmeta" style="color:#8a95a1">Outside the planned window. Adjust the start time in the Planner, or use ▶ Preview the day.</div>`}</div>`;
     } else {
       html += `<div class="kkbody">`;
       if (s.current) {
@@ -4908,15 +4914,27 @@ function renderKiosk() {
     html += `</div>`;
   });
   html += `</div>`;
-  ov.innerHTML = html;
-  const x = ov.querySelector('.kkexit'); if (x) x.onclick = exitKiosk;
+  const dyn = ov.querySelector('#kkdyn'); if (dyn) dyn.innerHTML = html;
+  const pv = ov.querySelector('.kkprev'); if (pv) pv.textContent = preview ? '■ Stop preview' : '▶ Preview the day';
 }
 function enterKiosk() {
   if (kioskOn) return;
   kioskOn = true;
   document.body.classList.add('kioskmode');
   ['times', 'idlePanel', 'helpPanel', 'taskPanel', 'plannerPanel', 'taktPanel', 'floorsPanel'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
-  const ov = document.getElementById('kioskOverlay'); if (ov) ov.style.display = 'block';
+  const ov = document.getElementById('kioskOverlay');
+  if (ov) {   // static chrome built once (so buttons never vanish mid-click during refreshes)
+    ov.style.display = 'block';
+    ov.innerHTML = '<div id="kkdyn"></div>';
+    const x = document.createElement('button'); x.className = 'kkexit'; x.title = 'Exit floor screen'; x.textContent = '✕'; x.onclick = exitKiosk; ov.appendChild(x);
+    const pv = document.createElement('button'); pv.className = 'kkprev'; pv.textContent = '▶ Preview the day'; ov.appendChild(pv);
+    pv.onclick = () => {
+      kioskPreviewT0 = (kioskPreviewT0 == null) ? performance.now() : null;
+      clearInterval(kioskTimer);
+      kioskTimer = setInterval(renderKiosk, kioskPreviewT0 != null ? 1000 : 5000);
+      renderKiosk();
+    };
+  }
   const c = new THREE.Vector3((DECK.x0 + DECK.x1) / 2, 0, (DECK.z0 + DECK.z1) / 2).applyMatrix4(level2.matrixWorld);
   controls.target.copy(c);
   camera.position.set(c.x + 16, c.y + 15, c.z + 22);
@@ -4929,6 +4947,7 @@ function enterKiosk() {
 function exitKiosk() {
   if (!kioskOn) return;
   kioskOn = false;
+  kioskPreviewT0 = null;
   document.body.classList.remove('kioskmode');
   const ov = document.getElementById('kioskOverlay'); if (ov) ov.style.display = 'none';
   controls.autoRotate = false;
@@ -4944,6 +4963,8 @@ function exitKiosk() {
   #kioskOverlay .kkt{font-size:56px;font-weight:800;line-height:1}
   #kioskOverlay .kkd{font-size:16px;color:#44525f;margin-top:4px}
   #kioskOverlay .kkexit{position:absolute;top:18px;right:18px;pointer-events:auto;width:40px;height:40px;border-radius:10px;border:1px solid #cfd6de;background:rgba(255,255,255,.9);color:#5a6672;font-size:17px;cursor:pointer}
+  #kioskOverlay .kkprev{position:absolute;top:18px;right:70px;pointer-events:auto;height:40px;padding:0 16px;border-radius:10px;border:1px solid #cfd6de;background:rgba(255,255,255,.9);color:#1d3a66;font-size:14px;font-weight:700;cursor:pointer}
+  #kioskOverlay .kkprevbadge{font-size:14px;font-weight:800;color:#fff;background:#c0552c;border-radius:8px;padding:3px 10px;vertical-align:middle;letter-spacing:.06em}
   #kioskOverlay .kkrow{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(3,1fr);gap:18px;padding:0 24px 22px}
   #kioskOverlay .kkcard{background:rgba(255,255,255,.96);border-radius:16px;overflow:hidden;box-shadow:0 10px 30px rgba(15,25,40,.25)}
   #kioskOverlay .kkhd{color:#fff;font-weight:800;font-size:19px;letter-spacing:.04em;padding:10px 18px}
