@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PublicClientApplication } from '@azure/msal-browser';   // TUUCI shared data (Phase 1): sign in with the company M365 account
-import { LibreDwg, Dwg_File_Type, createModule as dwgCreateModule } from '@mlightcad/libredwg-web';   // DWG import (LibreDWG wasm; the binary ships gzipped inside this file)
+import { LibreDwg, Dwg_File_Type, Dwg_Object_Type, createModule as dwgCreateModule } from '@mlightcad/libredwg-web';   // DWG import (LibreDWG wasm; the binary ships gzipped inside this file)
 
 // Capture the pristine page HTML before the 3D scene mutates the DOM, so we can
 // bake the current layouts into a fresh self-contained copy of this app.
@@ -4732,28 +4732,77 @@ async function dwgEngine() {
   __dwgEngine = LibreDwg.createByWasmInstance(inst);
   return __dwgEngine;
 }
-async function parseDWG(arrayBuffer) {
+async function parseDWG(arrayBuffer, onProgress) {
   const L = await dwgEngine();
   const ptr = L.dwg_read_data(arrayBuffer, Dwg_File_Type.DWG);
   if (ptr == null || ptr === 0) throw new Error('LibreDWG could not read that file (is it a valid DWG?).');
-  let db;
-  try { db = L.convert(ptr); }
-  finally { try { if (typeof L.dwg_free === 'function') L.dwg_free(ptr); } catch (e) {} }
-  const segs = [], polys = [];
-  ((db && db.entities) || []).forEach(e => {
-    if (e.type === 'LINE' && e.startPoint && e.endPoint) {
-      segs.push([e.startPoint.x, e.startPoint.y, e.endPoint.x, e.endPoint.y]);
-    } else if ((e.type === 'LWPOLYLINE' || e.type === 'POLYLINE') && Array.isArray(e.vertices)) {
-      const pts = e.vertices.filter(v => typeof v.x === 'number' && typeof v.y === 'number').map(v => [v.x, v.y]);
-      if (pts.length < 2) return;
-      let closed = e.closed === true || ((e.flag || 0) & 1) === 1;
-      const a = pts[0], b = pts[pts.length - 1];
-      if (!closed && pts.length > 2 && Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-6) { closed = true; pts.pop(); }
-      polys.push({ pts, closed });
+  try {
+    const lowLevel = ['dwg_model_space_object', 'get_first_owned_entity', 'get_next_owned_entity', 'dwg_object_get_fixedtype', 'dwg_object_to_entity_tio', 'dwg_dynapi_entity_data', 'dwg_ptr_to_point2d_array']
+      .every(fn => typeof L[fn] === 'function');
+    const segs = [], polys = [];
+    let units = null;
+    try { const u = L.dwg_dynapi_header_value(ptr, 'INSUNITS'); if (typeof u === 'number') units = u; } catch (e) {}
+    if (lowLevel) {
+      // walk model-space entities ONE AT A TIME (yields every 1024 so big plant
+      // drawings can't freeze or out-of-memory the tab the way a full-database
+      // conversion can) and keep only the wall/table geometry we need
+      const T_LINE = Dwg_Object_Type.DWG_TYPE_LINE, T_LWP = Dwg_Object_Type.DWG_TYPE_LWPOLYLINE;
+      const ms = L.dwg_model_space_object(ptr);
+      if (!ms) throw new Error('No model space found in the drawing.');
+      const CAP = 150000;
+      let cur = L.get_first_owned_entity(ms), count = 0;
+      while (cur && count < CAP) {
+        count++;
+        const ft = L.dwg_object_get_fixedtype(cur);
+        if (ft === T_LINE || ft === T_LWP) {
+          const tio = L.dwg_object_to_entity_tio(cur);
+          if (tio) {
+            if (ft === T_LINE) {
+              const a = L.dwg_dynapi_entity_data(tio, 'start'), b = L.dwg_dynapi_entity_data(tio, 'end');
+              if (a && b && typeof a.x === 'number' && typeof b.x === 'number') segs.push([a.x, a.y, b.x, b.y]);
+            } else {
+              const n = L.dwg_dynapi_entity_data(tio, 'num_points') || 0;
+              if (n >= 2 && n < 20000) {
+                const pp = L.dwg_dynapi_entity_data(tio, 'points');
+                const raw = pp ? L.dwg_ptr_to_point2d_array(pp, n) : [];
+                const pts = [];
+                (raw || []).forEach(v => { if (v && typeof v.x === 'number' && typeof v.y === 'number') pts.push([v.x, v.y]); });
+                if (pts.length >= 2) {
+                  const flag = L.dwg_dynapi_entity_data(tio, 'flag') || 0;
+                  let closed = !!(flag & 512) || !!(flag & 1);
+                  const p0 = pts[0], pn = pts[pts.length - 1];
+                  if (!closed && pts.length > 2 && Math.hypot(p0[0] - pn[0], p0[1] - pn[1]) < 1e-9) { closed = true; pts.pop(); }
+                  polys.push({ pts, closed });
+                }
+              }
+            }
+          }
+        }
+        if ((count & 1023) === 0) { if (onProgress) onProgress(count); await new Promise(r => setTimeout(r, 0)); }
+        cur = L.get_next_owned_entity(ms, cur);
+      }
+      if (count >= CAP) console.warn('DWG import: stopped after', CAP, 'entities (drawing is larger; walls may be partial)');
+    } else {
+      // older engine: fall back to the full-database conversion
+      const db = L.convert(ptr);
+      ((db && db.entities) || []).forEach(e => {
+        if (e.type === 'LINE' && e.startPoint && e.endPoint) segs.push([e.startPoint.x, e.startPoint.y, e.endPoint.x, e.endPoint.y]);
+        else if ((e.type === 'LWPOLYLINE' || e.type === 'POLYLINE') && Array.isArray(e.vertices)) {
+          const pts = e.vertices.filter(v => typeof v.x === 'number' && typeof v.y === 'number').map(v => [v.x, v.y]);
+          if (pts.length < 2) return;
+          let closed = e.closed === true || ((e.flag || 0) & 1) === 1;
+          const a = pts[0], b = pts[pts.length - 1];
+          if (!closed && pts.length > 2 && Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-6) { closed = true; pts.pop(); }
+          polys.push({ pts, closed });
+        }
+      });
+      if (units == null && db && db.header) units = db.header.INSUNITS != null ? db.header.INSUNITS : db.header.insunits;
     }
-  });
-  const units = db && db.header ? (db.header.INSUNITS != null ? db.header.INSUNITS : db.header.insunits) : null;
-  return finishFloorGeo(segs, polys, units);
+    if (!segs.length && !polys.length) throw new Error('No line/polyline geometry found in model space. If the drawing keeps everything inside blocks, explode them in DraftSight (or export DXF) and try again.');
+    return finishFloorGeo(segs, polys, units);
+  } finally {
+    try { if (typeof L.dwg_free === 'function') L.dwg_free(ptr); } catch (e) {}
+  }
 }
 // ---- standard-work CSV → a station carrying every parsed step ----
 function parseCSVText(text) {
@@ -4886,15 +4935,31 @@ function renderFloorsPanel() {
       renderTimes(); saveLayout(); renderFloorsPanel();
     } else if (!geo.tables.length) alert(msg + '\nNo table-sized rectangles detected; add stations with ＋ Add station or import standard-work CSVs.');
   };
+  const cadBusy = (txt) => {   // small status pill so a big import never looks like a hang
+    let el = document.getElementById('cadBusy');
+    if (txt == null) { if (el) el.remove(); return; }
+    if (!el) {
+      el = document.createElement('div'); el.id = 'cadBusy';
+      el.style.cssText = 'position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:90;background:#15263a;color:#fff;font:13px/1.4 Arial,sans-serif;padding:9px 18px;border-radius:10px;box-shadow:0 8px 22px rgba(10,20,35,.4)';
+      document.body.appendChild(el);
+    }
+    el.textContent = txt;
+  };
   dxfI.onchange = () => {
     const file = dxfI.files && dxfI.files[0]; dxfI.value = ''; if (!file) return;
     const rd = new FileReader();
     if (/\.dwg$/i.test(file.name)) {
+      if (file.size > 60 * 1024 * 1024 && !confirm('This DWG is ' + (file.size / 1048576).toFixed(0) + ' MB. Very large drawings can take a while to import. Continue?')) return;
+      cadBusy('Reading ' + file.name + '…');
       rd.onload = () => {
-        parseDWG(rd.result)
-          .then(geo => finishCadImport(geo, file))
-          .catch(e => alert('DWG import failed: ' + (e.message || e) + '\n\nFallback: in DraftSight use Save As > DXF and import that.'));
+        cadBusy('Unpacking DWG engine (first time only)…');
+        setTimeout(() => {
+          parseDWG(rd.result, n => cadBusy('Importing ' + file.name + '… ' + n.toLocaleString() + ' entities scanned'))
+            .then(geo => { cadBusy(null); finishCadImport(geo, file); })
+            .catch(e => { cadBusy(null); alert('DWG import failed: ' + (e.message || e) + '\n\nFallback: in DraftSight use Save As > DXF and import that.'); });
+        }, 30);
       };
+      rd.onerror = () => { cadBusy(null); alert('Could not read the file.'); };
       rd.readAsArrayBuffer(file);
     } else {
       rd.onload = () => finishCadImport(parseDXF(String(rd.result || '')), file);
