@@ -4304,6 +4304,7 @@ function addPanelX(panel, onClose) {
     layoutsBtn: 'Save, load, share, or bake in layouts',
     cloudBtn: 'Shared data status: local-only until IT configures the TUUCI SharePoint store',
     floorsBtn: 'Add or remove floor plans: import a CAD drawing (DXF) as a new floor, import standard-work CSVs as stations',
+    floorscreen: 'Floor screen: a wall-display mode showing what each line should be building right now, from the day\'s plan',
     cam: 'Angled 3-quarter camera view', top: 'Straight-down plan view',
     btn2d: 'Flat 2D layout view', cadBtn: 'Overlay the CAD floor plan 1:1 to compare against the model',
     layoutSel: 'Switch between saved layouts', saveLayout: 'Save the current layout under a name',
@@ -4819,4 +4820,152 @@ function renderFloorsPanel() {
     rd.readAsText(file);
   };
   swiI.onchange = () => { const files = [...(swiI.files || [])]; swiI.value = ''; if (files.length) importSWIFiles(files); };
+})();
+
+/* ============================================================
+   FLOOR SCREEN (kiosk): a wall-display mode for the plant floor.
+   Zero per-unit input: it reads the day's Planner sequence and the wall
+   clock and shows, per line, what SHOULD be happening right now: what's
+   building, unit x of y, what's next and when, expected units done by
+   now, the bottleneck, and who helps whom. The live 3D floor slowly
+   orbits behind it. Esc or ✕ exits.
+   ============================================================ */
+let kioskOn = false, kioskTimer = null, kioskRaf = 0;
+function kioskNowMin() {   // minutes since the Planner day start (test override supported)
+  if (typeof window !== 'undefined' && typeof window.__M3D_KIOSK_NOW === 'number') return window.__M3D_KIOSK_NOW;
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60 - planStart;
+}
+function lineBottleneckKiosk(line) {
+  if (line === 'meritage') { const bn = bottleneckInfo(); return { name: bn.name, time: bn.time }; }
+  const ids = orderedLine(line).filter(id => isPrimary(id));
+  if (!ids.length) return null;
+  let best = null;
+  ids.forEach(id => { const v = opLoad(id); if (!best || v > best.time) best = { name: getAny(id).title, time: v }; });
+  return best;
+}
+function lineHelpKiosk(line) {
+  if (typeof helpArrows === 'undefined') return [];
+  return helpArrows.filter(a => arrowOn(a) && stLineOf(a.from) === line && (a.helpMin || 0) > 0)
+    .map(a => `${(getAny(a.from) || {}).title || a.from} helps ${(getAny(a.to) || {}).title || a.to}`);
+}
+function kioskLineState(key) {
+  const lp = (typeof lineProducts !== 'undefined' && lineProducts) ? lineProducts[key] : null;
+  const list = (lp && lp.list) || [];
+  const orders = (dayPlan[key] || []).filter(o => list[o.p] && o.q > 0);
+  const now = kioskNowMin();
+  let cum = 0, current = null, next = null, shouldDone = 0, total = 0, dayEnd = 0;
+  const rows = orders.map(o => {
+    const prod = list[o.p], m = productMetrics(key, prod);
+    const start = cum, mins = o.q * m.pace; cum += mins; total += o.q;
+    return { name: prod.name, q: o.q, pace: m.pace, start, end: cum };
+  });
+  dayEnd = cum;
+  for (const r of rows) {
+    if (now >= r.end) { shouldDone += r.q; continue; }
+    if (now >= r.start && now < r.end) {
+      const unitIdx = Math.floor((now - r.start) / r.pace);
+      shouldDone += unitIdx;
+      current = { name: r.name, unit: unitIdx + 1, q: r.q, doneAt: planClock(r.end), unitFrac: ((now - r.start) % r.pace) / r.pace };
+    } else if (!next && now < r.start) {
+      next = { name: r.name, q: r.q, at: planClock(r.start) };
+    }
+  }
+  if (!current && rows.length && now < rows[0].start) next = next || { name: rows[0].name, q: rows[0].q, at: planClock(rows[0].start) };
+  const finished = rows.length && now >= dayEnd;
+  return { rows, current, next, shouldDone, total, finished, dayEnd };
+}
+function renderKiosk() {
+  const ov = document.getElementById('kioskOverlay'); if (!ov || !kioskOn) return;
+  const LINES = [['meritage', 'MERITAGE', '#1d3a66'], ['sola', 'SOLA', '#236043'], ['canyon', 'CANYON CREW', '#9a5b1f']];
+  const d = new Date();
+  let html = `<div class="kkclock"><div class="kkt">${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div><div class="kkd">${d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })} · plan starts ${planClock(0)}</div></div>`;
+  html += `<button class="kkexit" title="Exit floor screen">✕</button><div class="kkrow">`;
+  LINES.forEach(([key, label, color]) => {
+    const s = kioskLineState(key);
+    html += `<div class="kkcard"><div class="kkhd" style="background:${color}">${label}</div>`;
+    if (!s.rows.length) {
+      html += `<div class="kkbody"><div class="kknone">No plan entered for today.<br><span>Set it in the Planner.</span></div></div>`;
+    } else if (s.finished) {
+      html += `<div class="kkbody"><div class="kkdone2">✓ Day's plan complete</div><div class="kkmeta">${s.total} unit${s.total === 1 ? '' : 's'} · planned finish ${planClock(s.dayEnd)}</div></div>`;
+    } else {
+      html += `<div class="kkbody">`;
+      if (s.current) {
+        html += `<div class="kklbl">NOW BUILDING</div>
+          <div class="kkprod">${(s.current.name || '').replace(/</g, '&lt;')}</div>
+          <div class="kkunit">unit <b>${s.current.unit}</b> of ${s.current.q} · batch done <b>${s.current.doneAt}</b></div>
+          <div class="kkbar"><i style="width:${(s.current.unitFrac * 100).toFixed(1)}%"></i></div>`;
+      } else if (s.next) {
+        html += `<div class="kklbl">STARTS ${s.next.at}</div><div class="kkprod">${(s.next.name || '').replace(/</g, '&lt;')}</div><div class="kkunit">${s.next.q} unit${s.next.q === 1 ? '' : 's'} queued</div>`;
+      }
+      if (s.current && s.next) html += `<div class="kknext">next: <b>${(s.next.name || '').replace(/</g, '&lt;')}</b> ×${s.next.q} @ ${s.next.at}</div>`;
+      html += `<div class="kkshould">should be done by now: <b>${s.shouldDone}</b> / ${s.total}</div>`;
+      const bn = lineBottleneckKiosk(key);
+      const helps = lineHelpKiosk(key);
+      if (bn) html += `<div class="kkbn">constraint: <b>${(bn.name || '').replace(/</g, '&lt;')}</b> (${bn.time.toFixed(0)} min)${helps.length ? ' · ' + helps.map(h => h.replace(/</g, '&lt;')).join(' · ') : ''}</div>`;
+      html += `</div>`;
+    }
+    html += `</div>`;
+  });
+  html += `</div>`;
+  ov.innerHTML = html;
+  const x = ov.querySelector('.kkexit'); if (x) x.onclick = exitKiosk;
+}
+function enterKiosk() {
+  if (kioskOn) return;
+  kioskOn = true;
+  document.body.classList.add('kioskmode');
+  ['times', 'idlePanel', 'helpPanel', 'taskPanel', 'plannerPanel', 'taktPanel', 'floorsPanel'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  const ov = document.getElementById('kioskOverlay'); if (ov) ov.style.display = 'block';
+  const c = new THREE.Vector3((DECK.x0 + DECK.x1) / 2, 0, (DECK.z0 + DECK.z1) / 2).applyMatrix4(level2.matrixWorld);
+  controls.target.copy(c);
+  camera.position.set(c.x + 16, c.y + 15, c.z + 22);
+  controls.autoRotate = true; controls.autoRotateSpeed = 0.5;
+  const spin = () => { if (!kioskOn) return; controls.update(); kioskRaf = requestAnimationFrame(spin); };
+  spin();
+  renderKiosk();
+  kioskTimer = setInterval(renderKiosk, 5000);
+}
+function exitKiosk() {
+  if (!kioskOn) return;
+  kioskOn = false;
+  document.body.classList.remove('kioskmode');
+  const ov = document.getElementById('kioskOverlay'); if (ov) ov.style.display = 'none';
+  controls.autoRotate = false;
+  cancelAnimationFrame(kioskRaf);
+  clearInterval(kioskTimer); kioskTimer = null;
+}
+(function kioskCss() {
+  const s = document.createElement('style'); s.textContent = `
+  body.kioskmode header{display:none}
+  body.kioskmode .readouts, body.kioskmode .rstack{display:none}
+  #kioskOverlay{position:absolute;inset:0;z-index:40;pointer-events:none;font-family:"Inter","Segoe UI",Arial,sans-serif}
+  #kioskOverlay .kkclock{position:absolute;top:22px;left:28px;color:#15263a;text-shadow:0 1px 2px rgba(255,255,255,.7)}
+  #kioskOverlay .kkt{font-size:56px;font-weight:800;line-height:1}
+  #kioskOverlay .kkd{font-size:16px;color:#44525f;margin-top:4px}
+  #kioskOverlay .kkexit{position:absolute;top:18px;right:18px;pointer-events:auto;width:40px;height:40px;border-radius:10px;border:1px solid #cfd6de;background:rgba(255,255,255,.9);color:#5a6672;font-size:17px;cursor:pointer}
+  #kioskOverlay .kkrow{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(3,1fr);gap:18px;padding:0 24px 22px}
+  #kioskOverlay .kkcard{background:rgba(255,255,255,.96);border-radius:16px;overflow:hidden;box-shadow:0 10px 30px rgba(15,25,40,.25)}
+  #kioskOverlay .kkhd{color:#fff;font-weight:800;font-size:19px;letter-spacing:.04em;padding:10px 18px}
+  #kioskOverlay .kkbody{padding:12px 18px 14px}
+  #kioskOverlay .kklbl{font-size:12px;font-weight:800;letter-spacing:.09em;color:#2f7d52}
+  #kioskOverlay .kkprod{font-size:26px;font-weight:800;color:#15263a;line-height:1.15;margin:2px 0}
+  #kioskOverlay .kkunit{font-size:15px;color:#44525f}
+  #kioskOverlay .kkunit b{color:#15263a}
+  #kioskOverlay .kkbar{height:10px;background:#e7ecf2;border-radius:5px;overflow:hidden;margin:8px 0 2px}
+  #kioskOverlay .kkbar > i{display:block;height:100%;background:linear-gradient(90deg,#7ba6e0,#2f6df6)}
+  #kioskOverlay .kknext{font-size:14px;color:#44525f;margin-top:7px;border-top:1px solid #eef1f5;padding-top:7px}
+  #kioskOverlay .kkshould{font-size:15px;color:#15263a;margin-top:6px}
+  #kioskOverlay .kkshould b{font-size:19px}
+  #kioskOverlay .kkbn{font-size:12.5px;color:#7a4a20;background:#fdf6ec;border:1px solid #eadfc8;border-radius:8px;padding:5px 9px;margin-top:8px}
+  #kioskOverlay .kknone{font-size:17px;color:#8a95a1;padding:14px 0 10px}
+  #kioskOverlay .kknone span{font-size:13px}
+  #kioskOverlay .kkdone2{font-size:23px;font-weight:800;color:#2f7d52;margin:8px 0 4px}
+  #kioskOverlay .kkmeta{font-size:14px;color:#44525f;margin-bottom:6px}`;
+  document.head.appendChild(s);
+})();
+(() => {
+  const b = document.getElementById('floorscreen'); if (!b) return;
+  b.onclick = enterKiosk;
+  window.addEventListener('keydown', e => { if (e.key === 'Escape' && kioskOn) exitKiosk(); });
 })();
