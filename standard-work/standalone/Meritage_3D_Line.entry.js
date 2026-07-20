@@ -4600,12 +4600,13 @@ function restoreFloors(list) {
     const num = parseInt(String(f.id).replace(/\D/g, '')) || 0; if (num > floorSeq) floorSeq = num;
     customFloors.push(f); buildFloorGroup(f);
   });
+  refreshFloorViewSel();
 }
 function addFloor(name, w, d, walls) {
   const { x, z } = floorNextOrigin(w, d);
   const f = { id: 'fl' + (++floorSeq), name: name || ('Floor ' + floorSeq), x, z, w: +w.toFixed(2), d: +d.toFixed(2), walls: walls || [] };
   customFloors.push(f); buildFloorGroup(f);
-  saveLayout(); renderFloorsPanel();
+  saveLayout(); renderFloorsPanel(); refreshFloorViewSel();
   flyToFloor(f);
   return f;
 }
@@ -4614,13 +4615,35 @@ function removeFloor(id) {
   [...extraStations].forEach(sid => { const nd = nodes[sid]; if (nd && floorAt(nd.x, nd.z) === f) deleteStation(sid); });
   if (floorGroups[id]) { level2.remove(floorGroups[id]); delete floorGroups[id]; }
   customFloors = customFloors.filter(x => x.id !== id);
-  saveLayout(); renderFloorsPanel();
+  saveLayout(); renderFloorsPanel(); refreshFloorViewSel();
+  flyToMezzanine();   // don't leave the camera stranded over a floor that no longer exists
 }
 function flyToFloor(f) {
   const c = new THREE.Vector3(f.x + f.w / 2, 0, f.z + f.d / 2).applyMatrix4(level2.matrixWorld);
   controls.target.copy(c);
   camera.position.set(c.x + f.w * 0.35, c.y + Math.max(f.w, f.d) * 0.9 + 8, c.z + f.d * 1.1);
   camera.lookAt(c);
+}
+function flyToMezzanine() {   // the standard Angle view of the original floor
+  if (typeof is2D !== 'undefined' && is2D && typeof set2D === 'function') set2D(false);
+  camera.position.set(7, 30, 52); controls.target.set(7, FLOOR2 + 0.8, 0);
+}
+// quick "which floor am I looking at" selector in the View group (only shown once floors exist)
+function refreshFloorViewSel() {
+  const gv = document.getElementById('grpView'); if (!gv) return;
+  let sel = document.getElementById('floorViewSel');
+  if (!customFloors.length) { if (sel) sel.remove(); return; }
+  if (!sel) {
+    sel = document.createElement('select'); sel.id = 'floorViewSel';
+    sel.title = 'Fly the camera to a floor';
+    sel.style.cssText = 'font-size:12px;padding:4px';
+    gv.appendChild(sel);
+    sel.onchange = () => {
+      if (sel.value === '') flyToMezzanine();
+      else { const f = customFloors.find(x => x.id === sel.value); if (f) flyToFloor(f); }
+    };
+  }
+  sel.innerHTML = '<option value="">🏠 Mezzanine</option>' + customFloors.map(f => `<option value="${f.id}">🏗 ${(f.name || f.id).replace(/</g, '&lt;')}</option>`).join('');
 }
 // next free spot for an imported station on a floor: simple grid inside the slab
 function floorSlot(f) {
@@ -4761,6 +4784,9 @@ function renderFloorsPanel() {
   const p = document.getElementById('floorsPanel'); if (!p || p.style.display === 'none') return;
   let html = `<b style="font-size:13px">🏗 Floor plans</b>
     <div style="color:#5a6672;margin:2px 0 8px">Import a CAD drawing (DXF from DraftSight) as a new floor, then import standard-work CSVs as stations with their steps.</div>`;
+  html += `<div style="display:flex;align-items:center;gap:6px;border-top:1px solid #eef1f5;padding:6px 0">
+    <b style="flex:1">🏠 Mezzanine</b><span style="color:#5a6672">the original floor</span>
+    <button id="flGoMezz" style="padding:2px 8px">✈ Go</button></div>`;
   if (!customFloors.length) html += `<div style="color:#8a8f98;margin:6px 0">No imported floors yet, just the mezzanine.</div>`;
   customFloors.forEach(f => {
     const n = extraStations.filter(id => nodes[id] && floorAt(nodes[id].x, nodes[id].z) === f).length;
@@ -4778,6 +4804,7 @@ function renderFloorsPanel() {
     <button id="flClose" style="padding:6px;background:#f2f6fb;color:#1d3a66;border:1px solid #c9d2dd;font-weight:700">Done</button>
   </div>`;
   p.innerHTML = html;
+  const gm = p.querySelector('#flGoMezz'); if (gm) gm.onclick = flyToMezzanine;
   p.querySelectorAll('.flGo').forEach(b => b.onclick = e => { const f = customFloors.find(x => x.id === e.target.dataset.id); if (f) flyToFloor(f); });
   p.querySelectorAll('.flDel').forEach(b => b.onclick = e => {
     const f = customFloors.find(x => x.id === e.target.dataset.id);
