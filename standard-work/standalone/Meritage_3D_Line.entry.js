@@ -1284,6 +1284,9 @@ let helpArrows = [];                  // [{from, fromIdx, to, helpMin}] — adde
 let dayPlan = { meritage: [], sola: [], canyon: [] };   // Planner: per line, an ordered list of {p: productIndex, q: quantity} builds for the day
 let planStart = 7 * 60;                                  // Planner day start, minutes from midnight (clock display)
 let plDrag = null;                                       // Planner drag-to-reorder: { line, i } of the order being dragged
+let defaultLayoutName = null;                            // named layout the app opens on for fresh machines (Layouts menu: default on open)
+const floorGroups = {};                                  // imported floors: floor id -> THREE.Group (runtime only; declared early because layout restore runs early)
+let floorSeq = 0;
 const helpGroup = new THREE.Group(); level2.add(helpGroup);
 const HELP_COL = 0x8f3fbf;
 
@@ -3069,7 +3072,7 @@ function setStationRot(id, rot) {
 }
 // Build the working-layout object from the LIVE scene (not from storage).
 function buildWorkingLayout() {
-  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0, a.prod || '']); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__cover = Object.fromEntries(ST.map(s => [s.id, s.cover || ''])); o.__plan = JSON.parse(JSON.stringify(dayPlan)); o.__planStart = planStart; o.__floors = JSON.parse(JSON.stringify(customFloors)); o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); o.__wps3 = cart3Waypoints.map(w => [w.x, w.z]); o.__rwps3 = returnWps3.map(w => [w.x, w.z]); o.__ends = [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null); o.__fwps = prodWps.map(l => l.map(w => [w.x, w.z])); o.__fstart = prodStart.slice(); o.__dayMin = dayMin; o.__products = JSON.parse(JSON.stringify(lineProducts)); o.__baseSteps = JSON.parse(JSON.stringify(baseSteps)); o.__boxZone = [boxZone.x, boxZone.z, boxZone.w, boxZone.d]; o.__names = Object.fromEntries(ST.map(s2 => [s2.id, s2.title])); return o;
+  const o = {}; Object.keys(POS).forEach(id => { if (POS[id]) o[id] = POS[id]; }); o.__wps = cartWaypoints.map(w => [w.x, w.z]); o.__wps2 = cart2Waypoints.map(w => [w.x, w.z]); o.__help = helpArrows.map(a => [a.from, a.to, a.helpMin || 0, a.fromIdx || 0, a.prod || '']); o.__rot = {}; Object.keys(nodes).forEach(id => { o.__rot[id] = nodes[id].rot || 0; }); o.__steps = Object.fromEntries(ST.map(s => [s.id, s.steps.map(st => [st.name, st.t])])); o.__ppl = Object.fromEntries(ST.map(s => [s.id, s.ppl || 1])); o.__cover = Object.fromEntries(ST.map(s => [s.id, s.cover || ''])); o.__plan = JSON.parse(JSON.stringify(dayPlan)); o.__planStart = planStart; o.__floors = JSON.parse(JSON.stringify(customFloors)); o.__defaultLayout = defaultLayoutName || ''; try { if (defaultLayoutName) localStorage.setItem('m3d_default_layout', defaultLayoutName); } catch (e2) {} o.__access = accessPts.map(a => [a.x, a.z]); o.__elev = [EL[0], EL[1]]; o.__racks = racks.map(r => [r.x, r.z, r.g.rotation.y || 0]); o.__extras = extraSnap(); o.__flow = flowArrows.map(a => [a.from, a.to]); o.__areas = areas.map(a => [a.kind, +a.x.toFixed(2), +a.z.toFixed(2), a.rot || 0]); o.__rwps = returnWps.map(w => [w.x, w.z]); o.__rwps2 = returnWps2.map(w => [w.x, w.z]); o.__wps3 = cart3Waypoints.map(w => [w.x, w.z]); o.__rwps3 = returnWps3.map(w => [w.x, w.z]); o.__ends = [retEnd, retEnd2, retEnd3].map(e => e ? [e.x, e.z] : null); o.__fwps = prodWps.map(l => l.map(w => [w.x, w.z])); o.__fstart = prodStart.slice(); o.__dayMin = dayMin; o.__products = JSON.parse(JSON.stringify(lineProducts)); o.__baseSteps = JSON.parse(JSON.stringify(baseSteps)); o.__boxZone = [boxZone.x, boxZone.z, boxZone.w, boxZone.d]; o.__names = Object.fromEntries(ST.map(s2 => [s2.id, s2.title])); return o;
 }
 // In-memory mirror so the layout survives even when localStorage is blocked
 // (Safari / file:// often refuses to persist) — bake reads THIS, never storage.
@@ -3115,11 +3118,26 @@ window.addEventListener('keydown', e => {
   }
 });
 function applyWorkingLayout(o) {   // apply a working-layout object to the LIVE scene (shared by load + import)
-  if (!o) return; if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); if (Array.isArray(o.__floors)) restoreFloors(o.__floors); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } if (Array.isArray(o.__ends)) { const e = o.__ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; } if (Array.isArray(o.__fwps)) prodWps = [0, 1, 2].map(i => (o.__fwps[i] || []).map(a => ({ x: a[0], z: a[1] }))); if (Array.isArray(o.__fstart)) prodStart = [0, 1, 2].map(i => o.__fstart[i] || null); if (typeof o.__dayMin === 'number' && o.__dayMin > 0) dayMin = o.__dayMin; if (o.__products && o.__products.meritage) mergeProducts(o.__products); if (o.__baseSteps) baseSteps = o.__baseSteps; refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0, prod: a[4] || null })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__cover) { ST.forEach(s => { s.cover = o.__cover[s.id] || null; }); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; } }); } ST.forEach(s => { rebuildCrew(s.id); placeStation(s.id); }); renderTimes(); if (o.__plan && typeof o.__plan === 'object') { dayPlan = { meritage: o.__plan.meritage || [], sola: o.__plan.sola || [], canyon: o.__plan.canyon || [] }; } if (typeof o.__planStart === 'number') planStart = o.__planStart; if (typeof renderPlanner === 'function') renderPlanner(); if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } extraStations.forEach(applyLineAccent); if (typeof refreshProdFlow === 'function') refreshProdFlow(); if (typeof applyLineFocus === 'function') applyLineFocus();
+  if (!o) return; if (typeof o.__defaultLayout === 'string') { defaultLayoutName = o.__defaultLayout || null; try { refreshDefLayoutBtn(); } catch (e2) {} } if (o.__names) Object.entries(o.__names).forEach(([id, nm]) => { const st2 = getAny(id); if (st2 && nm && st2.title !== nm) setStationTitle(id, nm); }); if (Array.isArray(o.__areas)) restoreAreas(o.__areas); if (Array.isArray(o.__floors)) restoreFloors(o.__floors); restoreExtras(o.__extras); if (Array.isArray(o.__boxZone)) { boxZone = { x: o.__boxZone[0], z: o.__boxZone[1], w: o.__boxZone[2], d: o.__boxZone[3] }; refreshBoxZone(); } if (Array.isArray(o.__rwps)) returnWps = o.__rwps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps2)) returnWps2 = o.__rwps2.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__rwps3)) returnWps3 = o.__rwps3.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps)) cartWaypoints = o.__wps.map(a => ({ x: a[0], z: a[1] })); if (Array.isArray(o.__wps2)) { cart2Waypoints = o.__wps2.map(a => ({ x: a[0], z: a[1] })); refreshCart2Feed(); } if (Array.isArray(o.__wps3)) { cart3Waypoints = o.__wps3.map(a => ({ x: a[0], z: a[1] })); } if (Array.isArray(o.__ends)) { const e = o.__ends; retEnd = e[0] ? { x: e[0][0], z: e[0][1] } : null; retEnd2 = e[1] ? { x: e[1][0], z: e[1][1] } : null; retEnd3 = e[2] ? { x: e[2][0], z: e[2][1] } : null; } if (Array.isArray(o.__fwps)) prodWps = [0, 1, 2].map(i => (o.__fwps[i] || []).map(a => ({ x: a[0], z: a[1] }))); if (Array.isArray(o.__fstart)) prodStart = [0, 1, 2].map(i => o.__fstart[i] || null); if (typeof o.__dayMin === 'number' && o.__dayMin > 0) dayMin = o.__dayMin; if (o.__products && o.__products.meritage) mergeProducts(o.__products); if (o.__baseSteps) baseSteps = o.__baseSteps; refreshCart3Feed(); if (Array.isArray(o.__help) && o.__help.length) { helpArrows = o.__help.map(a => ({ from: a[0], to: a[1], helpMin: a[2] || 0, fromIdx: a[3] || 0, prod: a[4] || null })); buildHelp(); } if (Array.isArray(o.__flow)) restoreFlow(o.__flow); Object.keys(o).forEach(id => { if (id !== '__wps' && id !== '__help' && id !== '__rot' && nodes[id]) setStationPos(id, o[id][0], o[id][1]); }); if (o.__rot) Object.keys(o.__rot).forEach(id => { if (nodes[id]) setStationRot(id, o.__rot[id]); }); if (o.__steps) { ST.forEach(s => { if (o.__steps[s.id]) { s.steps = o.__steps[s.id].map(a => ({ name: a[0], t: +a[1] || 0 })); recalc(s.id); } }); renderTimes(); } if (o.__cover) { ST.forEach(s => { s.cover = o.__cover[s.id] || null; }); } if (o.__ppl) { ST.forEach(s => { if (o.__ppl[s.id] != null) { s.ppl = o.__ppl[s.id]; } }); } ST.forEach(s => { rebuildCrew(s.id); placeStation(s.id); }); renderTimes(); if (o.__plan && typeof o.__plan === 'object') { dayPlan = { meritage: o.__plan.meritage || [], sola: o.__plan.sola || [], canyon: o.__plan.canyon || [] }; } if (typeof o.__planStart === 'number') planStart = o.__planStart; if (typeof renderPlanner === 'function') renderPlanner(); if (Array.isArray(o.__access)) { clearAccess(); o.__access.forEach(p => addAccess(p[0], p[1])); } if (Array.isArray(o.__elev)) moveElevator(o.__elev[0], o.__elev[1]); if (Array.isArray(o.__racks)) { clearRacks(); o.__racks.forEach(p => addRack(p[0], p[1], p[2])); } extraStations.forEach(applyLineAccent); if (typeof refreshProdFlow === 'function') refreshProdFlow(); if (typeof applyLineFocus === 'function') applyLineFocus();
 }
 let hadSavedLayout = false;   // true when ANY layout (localStorage or baked) was loaded — defaults must then keep their hands off
-function loadLayout() { try { let o = null; try { o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch (e) {} if (!o && window.__M3D_LAYOUT__) o = window.__M3D_LAYOUT__;   // baked-in working layout (travels with the file)
-  hadSavedLayout = !!o; applyWorkingLayout(o); } catch (e) {} }
+function loadLayout() { try {
+  let o = null, fromLS = false;
+  try { o = JSON.parse(localStorage.getItem(LAYOUT_KEY)); fromLS = !!o; } catch (e) {}
+  if (!o && window.__M3D_LAYOUT__) o = window.__M3D_LAYOUT__;   // baked-in working layout (travels with the file)
+  hadSavedLayout = !!o; applyWorkingLayout(o);
+  if (!fromLS) {   // nothing saved in THIS browser: open on the chosen default layout, if one is named and available.
+    setTimeout(() => {   // deferred one tick so the whole script (readLayouts etc.) has initialized
+      try {
+        let dn = defaultLayoutName;
+        try { dn = dn || localStorage.getItem('m3d_default_layout'); } catch (e2) {}
+        dn = dn || ((typeof window.__M3D_DEFAULT_LAYOUT__ === 'string' && window.__M3D_DEFAULT_LAYOUT__) || null);
+        const L = dn ? readLayouts()[dn] : null;
+        if (L) { defaultLayoutName = dn; applyLayout(L); refreshLayoutSel(dn); try { refreshDefLayoutBtn(); } catch (e2) {} }
+      } catch (e2) { console.warn('Default layout apply failed:', e2); }
+    }, 0);
+  }
+} catch (e) { console.warn('Layout restore failed:', e); } }
 
 // 1-yard grid on the deck
 function buildGrid() {
@@ -3889,6 +3907,7 @@ if (bakeBtn) bakeBtn.onclick = () => {
   const inject = LT + 'script id="m3dLayouts">' +
     'window.__M3D_LAYOUT__=' + enc(working) + ';' +
     'window.__M3D_LAYOUTS__=' + enc(named) + ';' +
+    'window.__M3D_DEFAULT_LAYOUT__=' + enc(defaultLayoutName || '') + ';' +
     LT + '/script>\n';
   const stripRe = new RegExp(LT + 'script id="m3dLayouts">[\\s\\S]*?' + LT + '/script>\\s*', 'i');
   let html = __ORIGINAL_HTML.replace(stripRe, '');         // drop any previously-baked layouts
@@ -4063,6 +4082,28 @@ function openReport() {
   if (gB) gB.appendChild(und); else area.parentNode.insertBefore(und, area.nextSibling);
   und.onclick = undoLayout;
   refreshUndoBtn();
+})();
+// ---- default layout on open: the Layouts-menu star button ----
+function refreshDefLayoutBtn() {
+  const b = document.getElementById('defLayoutBtn'); if (!b) return;
+  b.textContent = defaultLayoutName ? ('★ Default on open: ' + defaultLayoutName) : '☆ Set selected as default on open';
+}
+(() => {
+  const b = document.getElementById('defLayoutBtn'); if (!b) return;
+  b.onclick = () => {
+    const sel = layoutSel.value;
+    if (!sel) {
+      if (defaultLayoutName) { if (confirm('Clear the default ("' + defaultLayoutName + '")? The app will open on whatever was last worked on.')) { defaultLayoutName = null; try { localStorage.removeItem('m3d_default_layout'); } catch (e2) {} saveLayout(); } }
+      else alert('Pick a saved layout in the dropdown first, then click this to make it the default on open.');
+    } else if (defaultLayoutName === sel) {
+      if (confirm('"' + sel + '" is already the default on open. Clear it?')) { defaultLayoutName = null; try { localStorage.removeItem('m3d_default_layout'); } catch (e2) {} saveLayout(); }
+    } else {
+      defaultLayoutName = sel; saveLayout();
+      alert('"' + sel + '" is now the default on open.\n\nFresh machines and browsers (and copies made with "Save into app") will start on this layout. Your own working changes still persist as usual.');
+    }
+    refreshDefLayoutBtn();
+  };
+  refreshDefLayoutBtn();
 })();
 // ---- toolbar organization: Floor-tools reveal + Layouts dropdown ----
 (() => {
@@ -4304,6 +4345,7 @@ function addPanelX(panel, onClose) {
     floorTools: 'Show / hide the floor-editing tools (stations, carts, lanes, racks)',
     layoutsBtn: 'Save, load, share, or bake in layouts',
     cloudBtn: 'Shared data status: local-only until IT configures the TUUCI SharePoint store',
+    defLayoutBtn: 'Make the selected saved layout what the app opens on (fresh machines, shared copies)',
     floorsBtn: 'Add or remove floor plans: import a CAD drawing (DWG/DXF) as a new floor, import standard-work CSVs as stations',
     floorscreen: 'Floor screen: a wall-display mode showing what each line should be building right now, from the day\'s plan',
     cam: 'Angled 3-quarter camera view', top: 'Straight-down plan view',
@@ -4548,8 +4590,6 @@ function refreshCloudChip() {
    placed on it form their own independent line (flow arrows, help paths
    and animation all work), without touching the mezzanine lines.
    ============================================================ */
-const floorGroups = {};                       // floor id -> THREE.Group (runtime only)
-let floorSeq = 0;
 function floorNextOrigin(w, d) {              // place new floors in a row east of the mezzanine
   let x = 30;
   customFloors.forEach(f => { x = Math.max(x, f.x + f.w + 8); });
