@@ -1750,8 +1750,10 @@ var lineFocus = 'all';
 var viewFloorId = null;      // when set, the app shows ONLY that imported floor — its own space, no mezzanine anything
 const LINE_KEYS = ['meritage', 'sola', 'canyon'];
 function stLineOf(id) { const nd = nodes[id]; if (!nd) return 'meritage'; return nd.extra ? sectionOf(nd.x, nd.z) : 'meritage'; }
+function isFloorSec(sec) { const s = String(sec); return (typeof customFloors !== 'undefined') && customFloors.some(f => s === f.id || s.indexOf(f.id + ':') === 0); }
 function focusShows(sec) {
   if (typeof viewFloorId === 'string' && viewFloorId) { const s = String(sec); return s === viewFloorId || s.indexOf(viewFloorId + ':') === 0; }   // floor view: only that floor's lines exist
+  if (isFloorSec(sec)) return false;   // on the mezzanine, imported floors live in their OWN view — their stations don't show here
   return (typeof lineFocus === 'undefined' || !lineFocus || lineFocus === 'all' || lineFocus === sec);
 }
 function applyLineFocus() {
@@ -1769,6 +1771,8 @@ function applyLineFocus() {
   pathLine.visible = ed && m; wpGroup.visible = ed && m; returnLine.visible = ed && m; aisleMesh.visible = ed && aisleOn && m;
   wpGroup2.visible = ed && so; returnLine2.visible = ed && so; aisleMesh2.visible = ed && aisleOn && so; cart2Feed.visible = so;
   wpGroup3.visible = ed && ca; returnLine3.visible = ed && ca; aisleMesh3.visible = ed && aisleOn && ca; cart3Feed.visible = ca;
+  // imported-floor slabs: only visible in that floor's own view (never floating beside the mezzanine)
+  if (typeof floorGroups !== 'undefined') customFloors.forEach(f => { const g = floorGroups[f.id]; if (g) g.visible = (viewFloorId === f.id); });
   refreshProdFlow(); refreshEnds(); applyLabels();
 }
 function applyLabels() {
@@ -4792,6 +4796,7 @@ function buildFloorGroup(f) {
   }
   const lbl = makeMiniLabel(f.name, '#3f6f8f');
   lbl.position.set(f.x + f.w / 2, 3.2, f.z + f.d / 2); g.add(lbl);
+  g.visible = (viewFloorId === f.id);   // a floor slab only shows in its own view, never floating beside the mezzanine
   level2.add(g);
   floorGroups[f.id] = g;
 }
