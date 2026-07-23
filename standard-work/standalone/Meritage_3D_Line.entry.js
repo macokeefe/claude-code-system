@@ -1223,6 +1223,7 @@ function makeEndMarker(text, color) {
 }
 function refreshEnds() {
   while (endGroup.children.length) endGroup.remove(endGroup.children[0]);
+  if (typeof viewFloorId === 'string' && viewFloorId) { endGroup.visible = false; return; }   // mezzanine cart endpoints don't belong in a floor's view
   endGroup.visible = endpointsOn;
   if (!endpointsOn) return;
   // when an endpoint is still "at the elevator" (null), fan the markers into a
@@ -1527,8 +1528,9 @@ function prodPts(i) {
 function refreshProdFlow() {
   while (prodWpGroup.children.length) prodWpGroup.remove(prodWpGroup.children[0]);
   const ed = (typeof editing !== 'undefined') && editing;
+  const onFloor = (typeof viewFloorId === 'string' && viewFloorId);   // floor view: the mezzanine's furniture lanes + their markers don't belong here
   for (let i = 0; i < 3; i++) {
-    const pts = prodPts(i), has = !!(pts && pts.length >= 2);
+    const pts = prodPts(i), has = !onFloor && !!(pts && pts.length >= 2);
     // furniture-flow lanes are ALWAYS shown (they document the floor's product
     // flow); in Edit Layout the Lanes toggle can hide them with the cart lanes
     prodAisles[i].visible = has && prodLanesOn && (ed ? aisleOn : true) && focusShows(LINE_KEYS[i]);
@@ -3400,9 +3402,11 @@ function setEditing(on) {
     setPlay(false);
     if (!is2D) {                                             // in 2D the plan view stays exactly as-is
       savedView = { p: camera.position.clone(), t: controls.target.clone() };
-      camera.position.set((DECK.x0 + DECK.x1) / 2, FLOOR2 + 46, (DECK.z0 + DECK.z1) / 2 + 0.01);
-      controls.target.set((DECK.x0 + DECK.x1) / 2, FLOOR2, (DECK.z0 + DECK.z1) / 2);
-      camera.lookAt(controls.target);
+      if (!(typeof viewFloorId === 'string' && viewFloorId)) {   // on a floor: keep the view you already framed — don't yank back to the mezzanine
+        camera.position.set((DECK.x0 + DECK.x1) / 2, FLOOR2 + 46, (DECK.z0 + DECK.z1) / 2 + 0.01);
+        controls.target.set((DECK.x0 + DECK.x1) / 2, FLOOR2, (DECK.z0 + DECK.z1) / 2);
+        camera.lookAt(controls.target);
+      }
     }
   } else {
     dragId = null; measure.visible = false; measurePanel.innerHTML = '';
