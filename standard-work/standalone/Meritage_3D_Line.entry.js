@@ -416,7 +416,12 @@ function lineCyc() { let m = 0.1; ST.forEach(s => { if (isPrimary(s.id)) { const
 function availIdleOp(id, idx) { return Math.max(0, lineCyc() - opLoad(id) - helpFromOp(id, idx)); }   // spare min/chair a specific operator can give (own cycle + any covered work)
 // side-aware versions so help paths work on the Sola (added-station) side too
 function solaCyc() { let m = 0.1; extraStations.filter(id => sideOf(nodes[id].x, nodes[id].z) === 'other' && isPrimary(id)).forEach(id => { const e = opLoad(id); if (e > m) m = e; }); return m; }
-function cycOf(id) { return (typeof isExtra === 'function' && isExtra(id)) ? solaCyc() : lineCyc(); }
+function secCyc(sec) {   // pace of ONE line (max primary-crew load among ITS stations) — floor lines pace themselves, not off Sola's clock
+  let m = 0.1;
+  extraStations.filter(id => nodes[id] && sectionOf(nodes[id].x, nodes[id].z) === sec && isPrimary(id)).forEach(id => { const e = opLoad(id); if (e > m) m = e; });
+  return m;
+}
+function cycOf(id) { if (!(typeof isExtra === 'function' && isExtra(id))) return lineCyc(); const nd = nodes[id]; return secCyc(sectionOf(nd.x, nd.z)); }
 function availIdleAny(id, idx) { return Math.max(0, cycOf(id) - opLoad(id) - helpFromOp(id, idx)); }
 function schedule() {
   const seaT=effNet('sea'), armT=effNet('arm'), bakT=effNet('bak'), treT=effNet('tre'), conT=effNet('con');
@@ -1600,8 +1605,18 @@ const nInput = document.getElementById('n');
 nInput.value = N;
 nInput.onchange = e => { N = Math.max(1, Math.min(40, parseInt(e.target.value)||8)); schedule(); if (typeof buildSolaSched==='function') buildSolaSched(); T=0; Ts=0; setPlay(false); };
 const speed = document.getElementById('speed');
-document.getElementById('cam').onclick = () => { if (is2D) set2D(false); camera.position.set(7,30,52); controls.target.set(7,FLOOR2+0.8,0); };
-document.getElementById('top').onclick = () => { if (is2D) set2D(false); camera.position.set(4,FLOOR2+38,1); controls.target.set(4,FLOOR2,1); };
+document.getElementById('cam').onclick = () => {   // Angle view — of the floor you're on, not always the mezzanine
+  if (is2D) set2D(false);
+  const f = viewedFloor();
+  if (f) { const cx = f.x + f.w / 2, cz = f.z + f.d / 2; controls.target.set(cx, FLOOR2, cz); camera.position.set(cx, FLOOR2 + Math.max(f.w, f.d) * 0.9 + 8, cz + f.d * 1.05); }
+  else { camera.position.set(7,30,52); controls.target.set(7,FLOOR2+0.8,0); }
+};
+document.getElementById('top').onclick = () => {   // Top view — straight above the CURRENT floor's centre
+  if (is2D) set2D(false);
+  const f = viewedFloor();
+  if (f) { const cx = f.x + f.w / 2, cz = f.z + f.d / 2; controls.target.set(cx, FLOOR2, cz); camera.position.set(cx, FLOOR2 + Math.max(f.w, f.d) * 1.6 + 12, cz + 0.01); }
+  else { camera.position.set(4,FLOOR2+38,1); controls.target.set(4,FLOOR2,1); }
+};
 // ---- 2D plan view: a flat, floor-plan look that works in BOTH normal and edit
 // mode. Implemented as a telephoto overhead camera (5° fov from ~260 m up) so it
 // reads as orthographic while every click, drag, and control keeps working. ----
@@ -1614,8 +1629,10 @@ function set2D(on) {
     saved3D = { p: camera.position.clone(), t: controls.target.clone(), fov: camera.fov, fog: scene.fog };
     scene.fog = null;                                         // the plan camera is ~260 m up — fog would white the scene out
     camera.fov = 5; camera.updateProjectionMatrix();
-    camera.position.set(7.09, FLOOR2 + 260, 0.01);            // straight above the floor centre
-    controls.target.set(7.09, FLOOR2, 0);
+    const f2 = (typeof viewedFloor === 'function') ? viewedFloor() : null;   // plan view centres on the CURRENT floor
+    const px = f2 ? f2.x + f2.w / 2 : 7.09, pz = f2 ? f2.z + f2.d / 2 : 0;
+    camera.position.set(px, FLOOR2 + 260, pz + 0.01);         // straight above the floor centre
+    controls.target.set(px, FLOOR2, pz);
     controls.enableRotate = false;                            // pan + zoom only — it stays a plan
     camera.lookAt(controls.target);
   } else {
@@ -1922,7 +1939,7 @@ function solaUpdate() {
     const { ids, time, finish, N: sn } = sc; if (!ids.length) return;
     const sec = sectionOf(nodes[ids[0]].x, nodes[ids[0]].z);
     let done = 0; for (let u = 0; u < sn; u++) if (Ts >= finish[ids.length - 1][u]) done++;
-    shipped += done; if (shipSec[sec] != null) shipSec[sec] += done;
+    shipped += done; shipSec[sec] = (shipSec[sec] || 0) + done;   // every line counts, imported-floor lines included
     // each station: LED + WIP part growing while it works; operators bob while active
     ids.forEach((id, k) => {
       const nd = nodes[id]; if (!nd) return;
@@ -1965,10 +1982,16 @@ function solaUpdate() {
     }
   });
   solaShipBoxes.forEach(b => { if (b.visible) b.visible = false; });    // finished boxes travel the lane now instead of piling here
-  gShipSola = shipSec.sola; gShipCanyon = shipSec.canyon;               // the spawner turns these into traveling boxes
-  const el = document.getElementById('solaShip'); if (el) el.textContent = shipSec.sola;
-  const elc = document.getElementById('canyonShip'); if (elc) elc.textContent = shipSec.canyon;
+  gShipSola = shipSec.sola || 0; gShipCanyon = shipSec.canyon || 0;     // the spawner turns these into traveling boxes
+  shipBySec = shipSec;
+  const el = document.getElementById('solaShip'); if (el) el.textContent = shipSec.sola || 0;
+  const elc = document.getElementById('canyonShip'); if (elc) elc.textContent = shipSec.canyon || 0;
+  if (typeof viewFloorId === 'string' && viewFloorId) {                 // floor view: its cards track the shared clock live
+    const ck = document.getElementById('fcClock'); if (ck) ck.textContent = Math.round(Math.min(Ts, solaHorizon)) + ' min';
+    document.querySelectorAll('#floorCards .fcShip').forEach(sp => { const v = String(shipSec[sp.dataset.sec] || 0); if (sp.textContent !== v) sp.textContent = v; });
+  }
 }
+var shipBySec = {};   // shipped-so-far per section key on the Ts clock (floor lines included) — read by the floor KPI cards
 
 // build editable time rows
 const timeBox = document.getElementById('times');
@@ -2536,10 +2559,13 @@ function refreshRunSelectors() {
 let taktDemand = 10;   // units/day target for the takt line
 let chartLine = 'meritage';   // which line the Idle / Task / Help panels show
 function lineSel() {
-  return `<select class="lineSel" style="font-size:11px;padding:2px 4px;margin:0 0 7px">
-    <option value="meritage"${chartLine === 'meritage' ? ' selected' : ''}>Meritage</option>
-    <option value="sola"${chartLine === 'sola' ? ' selected' : ''}>Sola</option>
-    <option value="canyon"${chartLine === 'canyon' ? ' selected' : ''}>Canyon Crew</option></select>`;
+  const vf = (typeof viewedFloor === 'function') ? viewedFloor() : null;
+  const opts = vf                                              // floor view: these panels are about THIS floor's lines
+    ? floorSections(vf).map(sc => [sc.key, secDisplayName(sc.key)])
+    : [['meritage', 'Meritage'], ['sola', 'Sola'], ['canyon', 'Canyon Crew']];
+  if (!opts.some(o => o[0] === chartLine)) chartLine = opts[0][0];
+  return `<select class="lineSel" style="font-size:11px;padding:2px 4px;margin:0 0 7px">` +
+    opts.map(([k, n]) => `<option value="${k}"${chartLine === k ? ' selected' : ''}>${String(n).replace(/</g, '&lt;')}</option>`).join('') + `</select>`;
 }
 function wireLineSel(panel) {
   const s = panel.querySelector('.lineSel');
@@ -3012,11 +3038,19 @@ let tkOptShow = false, tkMaxHelp = 3;   // Takt board optimizer: proposal displa
 function renderTaktBoard() {
   const panel = document.getElementById('taktPanel');
   if (!panel || panel.style.display === 'none') return;
-  const LINES = [['meritage', 'MERITAGE', '#1d3a66'], ['sola', 'SOLA', '#236043'], ['canyon', 'CANYON CREW', '#9a5b1f']];
+  let LINES = [['meritage', 'MERITAGE', '#1d3a66'], ['sola', 'SOLA', '#236043'], ['canyon', 'CANYON CREW', '#9a5b1f']];
+  const vf = (typeof viewedFloor === 'function') ? viewedFloor() : null;
+  if (vf) LINES = floorSections(vf).map(sc => [sc.key, sc.label, sc.color]);   // floor view: the board is about THIS floor's lines
   const cols = LINES.map(([key, label, color]) => {
     const lp = (typeof lineProducts !== 'undefined' && lineProducts) ? lineProducts[key] : null;
-    const products = (lp && lp.list) ? lp.list.map((p, i) => ({ name: p.name, i, ...productMetrics(key, p) })) : [];
-    return { key, label, color, products, running: lp ? lp.active : -1 };
+    let products, running = lp ? lp.active : -1;
+    if (lp && lp.list) products = lp.list.map((p, i) => ({ name: p.name, i, ...productMetrics(key, p) }));
+    else {                                                     // a floor line has no product list yet: one base row from its stations
+      const dem = (vf && vf.demands && vf.demands[key]) || taktDemand || 10;
+      products = lineStationIds(key).length ? [{ name: 'Base (current steps)', i: 0, ...productMetrics(key, { name: 'Base', f: 1, demand: dem }) }] : [];
+      running = 0;
+    }
+    return { key, label, color, products, running };
   });
   let scaleMax = 1; cols.forEach(c => c.products.forEach(p => { scaleMax = Math.max(scaleMax, p.pace, p.takt); })); scaleMax *= 1.05;
   let html = `<h3>Takt board: pace &amp; capacity by product</h3>`;
@@ -3044,7 +3078,7 @@ function renderTaktBoard() {
           <span class="${over ? 'tkover' : 'tkok'}">${over ? ('⚠ over takt by ' + (p.pace - p.takt).toFixed(1) + 'm') : '✓ meets takt'}</span>
         </div>`;
       if (tkOptShow) {
-        const opt = optimizeHelpFor(c.key, (lineProducts[c.key] || { list: [] }).list[p.i], tkMaxHelp);
+        const opt = optimizeHelpFor(c.key, ((lineProducts[c.key] || { list: [] }).list[p.i]) || { name: 'Base', f: 1 }, tkMaxHelp);
         if (opt && opt.arrows.length && opt.pace < p.pace - 0.2) {
           const optW = Math.min(100, opt.pace / scaleMax * 100);
           const capNow = dayMinSafe() / Math.max(0.1, p.pace), capOpt = dayMinSafe() / Math.max(0.1, opt.pace);
@@ -3068,8 +3102,11 @@ function renderTaktBoard() {
   const dEl = document.getElementById('tkDay');
   if (dEl) dEl.onchange = e => { dayMin = Math.max(60, Math.min(16 * 60, (parseFloat(e.target.value) || 7) * 60)); if (typeof reflowAll === 'function') reflowAll(); renderTaktBoard(); };
   panel.querySelectorAll('.tkTarget').forEach(inp => inp.onchange = e => {
-    const lp = lineProducts[e.target.dataset.line], p = lp && lp.list[+e.target.dataset.i];
-    if (p) { p.demand = Math.max(1, parseFloat(e.target.value) || 10); saveLayout(); renderTaktBoard(); }
+    const key = e.target.dataset.line, v = Math.max(1, parseFloat(e.target.value) || 10);
+    const lp = lineProducts[key], p = lp && lp.list[+e.target.dataset.i];
+    if (p) { p.demand = v; saveLayout(); renderTaktBoard(); return; }
+    const fl = (typeof floorOfSec === 'function') ? floorOfSec(key) : null;   // floor line: its target/day lives on the floor and saves with it
+    if (fl) { fl.demands = fl.demands || {}; fl.demands[key] = v; saveLayout(); renderTaktBoard(); }
   });
   const oEl = document.getElementById('tkOpt');
   if (oEl) oEl.onclick = () => { tkOptShow = !tkOptShow; renderTaktBoard(); };
@@ -4205,6 +4242,7 @@ function setLed(mat, state, active){ (Array.isArray(mat)?mat:[mat]).forEach(m=>{
 
 function update(){
   if (!sch) return;
+  if (typeof viewFloorId === 'string' && viewFloorId) return;   // floor view: the mezzanine sim is out of sight — don't let it re-show its meshes
   ui.clock.textContent = Math.round(T) + ' min';
   // feeders
   const fmap = { con:'conT', arm:'armT', bak:'bakT', tre:'treT', sea:'seaT' };
@@ -4860,10 +4898,12 @@ function removeFloor(id) {
   saveLayout(); renderFloorsPanel(); refreshFloorViewSel();
   flyToMezzanine();   // don't leave the camera stranded over a floor that no longer exists
 }
+function viewedFloor() { return (typeof viewFloorId === 'string' && viewFloorId) ? (customFloors.find(x => x.id === viewFloorId) || null) : null; }
 function flyToFloor(f) {
+  if (typeof is2D !== 'undefined' && is2D && typeof set2D === 'function') set2D(false);
   const c = new THREE.Vector3(f.x + f.w / 2, 0, f.z + f.d / 2).applyMatrix4(level2.matrixWorld);
   controls.target.copy(c);
-  camera.position.set(c.x + f.w * 0.35, c.y + Math.max(f.w, f.d) * 0.9 + 8, c.z + f.d * 1.1);
+  camera.position.set(c.x, c.y + Math.max(f.w, f.d) * 0.9 + 8, c.z + f.d * 1.05);   // centred on the floor, angled from the south
   camera.lookAt(c);
   setViewFloor(f.id);
 }
@@ -4893,8 +4933,12 @@ function setViewFloor(fid) {
   }
   document.querySelectorAll('#stage > .readouts, #stage > .rstack:not(#floorCards)').forEach(el => { el.style.display = viewFloorId ? 'none' : ''; });
   const sel = document.getElementById('floorViewSel'); if (sel && sel.value !== (viewFloorId || '')) sel.value = viewFloorId || '';
+  chartLine = viewFloorId ? (floorSections(customFloors.find(x => x.id === viewFloorId) || { id: viewFloorId })[0] || {}).key || 'meritage' : 'meritage';
   try { applyLineFocus(); } catch (e) {}                     // re-shows this floor's stations, crew, labels; hides everything else
   try { renderFloorCards(); } catch (e) {}
+  try { renderTimes(); } catch (e) {}                        // every open panel re-scopes to the floor (or back to the mezzanine)
+  try { renderIdle(); renderHelpPanel(); renderTaskChart(); } catch (e) {}
+  try { if (typeof renderTaktBoard === 'function') renderTaktBoard(); } catch (e) {}
 }
 function renderFloorCards() {                  // per-line KPI cards for the floor being viewed (mirrors the mezzanine cards)
   let host = document.getElementById('floorCards');
@@ -4904,19 +4948,22 @@ function renderFloorCards() {                  // per-line KPI cards for the flo
     host = document.createElement('div'); host.className = 'rstack'; host.id = 'floorCards';
     const st = document.getElementById('stage'); if (!st) return; st.appendChild(host);
   }
-  let html = '';
+  let html = '', first = true;
   floorSections(f).forEach(sc => {
     const ids = extraStations.filter(id => nodes[id] && sectionOf(nodes[id].x, nodes[id].z) === sc.key);
     let labor = 0, cyc = 0, bot = '—';
     ids.forEach(id => { labor += (nodes[id].s.t || 0); if (isPrimary(id)) { const e = opLoad(id); if (e > cyc) { cyc = e; bot = nodes[id].s.title; } } });
     const cap = cyc > 0 ? dayMinSafe() / cyc : 0;
     html += `<div class="readouts right"><div class="rdttl" style="color:${sc.color}">${sc.label}</div>
+      ${first ? `<div class="rd"><div class="k">Clock</div><div class="v" id="fcClock">${Math.round(Ts)} min</div></div>` : ''}
+      <div class="rd"><div class="k">Shipped</div><div class="v"><span class="fcShip" data-sec="${sc.key}">${(typeof shipBySec !== 'undefined' && shipBySec[sc.key]) || 0}</span><small> / ${N}</small></div></div>
       <div class="rd"><div class="k">Stations</div><div class="v">${ids.length}</div></div>
       <div class="rd"><div class="k">Cycle</div><div class="v">${labor > 0 ? labor.toFixed(1).replace(/\.0$/, '') : '—'}<small> min/unit</small></div></div>
       <div class="rd"><div class="k">Current pace</div><div class="v">${cyc > 0 ? cyc.toFixed(1).replace(/\.0$/, '') : '—'}<small> min</small></div></div>
       <div class="rd"><div class="k">Capacity</div><div class="v">${cap > 0 ? cap.toFixed(1) : '—'}<small> /day</small></div></div>
       <div class="rd"><div class="k">Bottleneck</div><div class="v" style="font-size:13px;line-height:2.1">${bot} ${cyc > 0 ? '(' + cyc.toFixed(1).replace(/\.0$/, '') + ')' : ''}</div></div>
     </div>`;
+    first = false;
   });
   if (host.innerHTML !== html) host.innerHTML = html;
 }
