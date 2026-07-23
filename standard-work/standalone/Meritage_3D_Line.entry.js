@@ -3383,10 +3383,12 @@ function setEditing(on) {
   if (typeof applyLineFocus === 'function') applyLineFocus();   // re-apply the line focus over the edit-mode visibilities
   if (!on) { helpArming = false; armSource = null; const hb = document.getElementById('helparrow'); if (hb) hb.classList.remove('on'); if (typeof setFlowArming === 'function') setFlowArming(false); }
   if (on) {
-    // keep zoom + pan in edit mode, but disable rotate and free the left button for dragging stations
-    controls.enabled = true; controls.enableRotate = false; controls.enableZoom = true; controls.enablePan = true;
-    controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };   // drag empty floor to pan; grabbing a station disables pan for that drag
-    controls.touches = { ONE: null, TWO: THREE.TOUCH.DOLLY_PAN };
+    // edit mode: you can still ORBIT the camera (left-drag empty floor) — grabbing
+    // a station disables the camera for that drag so the table moves instead. Pan
+    // is on right-drag (and two-finger); zoom on scroll/middle.
+    controls.enabled = true; controls.enableRotate = true; controls.enableZoom = true; controls.enablePan = true;
+    controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
   } else {
     controls.enabled = true; controls.enableRotate = !is2D; controls.enableZoom = true; controls.enablePan = true;
     controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
