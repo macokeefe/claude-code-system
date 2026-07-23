@@ -2042,11 +2042,59 @@ function plX(pl, z) {
 const SOLA_BX = z => plX(SECTION_LINES[1], z);               // CAD section line 2 (x≈4.91 below z=0.99, 5.18 above)
 const CANYON_BX = z => plX(SECTION_LINES[2], z);             // CAD section line 3 (jagged) — Canyon Crew's space is line 3 → line 4; the strip east of line 4 is staging but strays parked there still FILE as Canyon
 // ---- imported floor plans: extra floors that live beside the mezzanine ----
-let customFloors = [];       // [{id, name, x, z, w, d, walls:[[x1,z1,x2,z2],...]}] — positions/sizes in meters, x/z = floor origin corner (level2 coords)
+let customFloors = [];       // [{id, name, x, z, w, d, walls:[[x1,z1,x2,z2],...], divs:[{pts:[[lx,lz],...]}], lineNames:[...]}] — positions/sizes in meters, x/z = floor origin corner (level2 coords)
 function floorAt(x, z) { return customFloors.find(f => x >= f.x - 0.5 && x <= f.x + f.w + 0.5 && z >= f.z - 0.5 && z <= f.z + f.d + 0.5) || null; }
 const sideOf = (x, z = 0) => (x < SOLA_BX(z) ? 'meritage' : 'other');
 const CANYON_X = 17.6;                                       // legacy constant (kept for default placements)
-const sectionOf = (x, z = 0) => { const f = floorAt(x, z); if (f) return f.id; return x < SOLA_BX(z) ? 'meritage' : x < CANYON_BX(z) ? 'sola' : 'canyon'; };   // stations on an imported floor belong to THAT floor, not the mezzanine lines
+// ---- floor line zones: drawn dividers slice an imported floor into named lines,
+// exactly like the CAD section lines slice the mezzanine into Meritage/Sola/Canyon.
+const ZONE_COLORS = ['#1d3a66', '#236043', '#9a5b1f', '#8f5390', '#3f8f8f', '#9c4f45', '#2f6df6', '#a8923a'];
+function divSide(div, lx, lz) {                              // which side of a drawn divider a point is on (0 / 1), like plX for SECTION_LINES
+  const pts = div.pts || []; if (pts.length < 2) return 0;
+  let minx = 1e9, maxx = -1e9, minz = 1e9, maxz = -1e9;
+  pts.forEach(p => { minx = Math.min(minx, p[0]); maxx = Math.max(maxx, p[0]); minz = Math.min(minz, p[1]); maxz = Math.max(maxz, p[1]); });
+  const ai = (maxz - minz) >= (maxx - minx) ? 1 : 0;         // dominant axis: mostly-vertical dividers split east/west, mostly-horizontal split north/south
+  const bi = 1 - ai, q = ai ? lz : lx, r = ai ? lx : lz;
+  const vs = [...pts].sort((a, b) => a[ai] - b[ai]);
+  let c;
+  if (q <= vs[0][ai]) c = vs[0][bi];
+  else if (q >= vs[vs.length - 1][ai]) c = vs[vs.length - 1][bi];   // beyond the drawn extent → the divider continues straight
+  else { c = vs[0][bi]; for (let i = 0; i + 1 < vs.length; i++) { const a = vs[i], b = vs[i + 1]; if (q >= a[ai] && q <= b[ai]) { const t = (b[ai] - a[ai]) > 1e-9 ? (q - a[ai]) / (b[ai] - a[ai]) : 0; c = a[bi] + t * (b[bi] - a[bi]); break; } } }
+  return r >= c ? 1 : 0;
+}
+function zoneIdxOf(f, x, z) {                                // which of the floor's lines a point belongs to: how many dividers it is past
+  const divs = f.divs || []; const lx = x - f.x, lz = z - f.z;
+  return divs.reduce((a, d) => a + divSide(d, lx, lz), 0);
+}
+const zoneKey = (f, i) => f.id + ':' + i;
+function floorOfSec(sec) { const id = String(sec).split(':')[0]; return customFloors.find(f => f.id === id) || null; }
+function floorLineName(f, i) { return (f.lineNames && f.lineNames[i]) || ('Line ' + (i + 1)); }
+function zoneColorFor(sec) {                                 // label/section color for a floor or floor-line key
+  const m = /^(.+):(\d+)$/.exec(String(sec));
+  if (m) return ZONE_COLORS[+m[2] % ZONE_COLORS.length];
+  return customFloors.some(f => f.id === sec) ? '#3f6f8f' : null;
+}
+function secDisplayName(sec) {                               // human name for ANY section key (mezzanine line, floor, or floor line)
+  if (sec === 'meritage') return 'Meritage'; if (sec === 'sola') return 'Sola'; if (sec === 'canyon') return 'Canyon Crew';
+  const f = floorOfSec(sec); if (!f) return String(sec);
+  const m = /:(\d+)$/.exec(String(sec));
+  return m ? f.name + ' · ' + floorLineName(f, +m[1]) : f.name;
+}
+function floorSections(f) {                                  // the Edit-times sections an imported floor contributes
+  if (!f.divs || !f.divs.length) return [{ key: f.id, label: (f.name || f.id).toUpperCase(), color: '#3f6f8f' }];
+  const n = f.divs.length + 1, out = [];
+  for (let i = 0; i < n; i++) out.push({ key: zoneKey(f, i), label: ((f.name || f.id) + ' · ' + floorLineName(f, i)).toUpperCase(), color: ZONE_COLORS[i % ZONE_COLORS.length] });
+  return out;
+}
+function zoneAnchor(f, idx) {                                // a representative open spot inside a floor line (for zone labels + new-station drops)
+  let sx = 0, sz = 0, n = 0;
+  for (let i = 1; i < 12; i++) for (let j = 1; j < 9; j++) {
+    const x = f.x + f.w * i / 12, z = f.z + f.d * j / 9;
+    if (zoneIdxOf(f, x, z) === idx) { sx += x; sz += z; n++; }
+  }
+  return n ? { x: sx / n, z: sz / n } : { x: f.x + f.w / 2, z: f.z + f.d / 2 };
+}
+const sectionOf = (x, z = 0) => { const f = floorAt(x, z); if (f) return (f.divs && f.divs.length) ? zoneKey(f, zoneIdxOf(f, x, z)) : f.id; return x < SOLA_BX(z) ? 'meritage' : x < CANYON_BX(z) ? 'sola' : 'canyon'; };   // stations on an imported floor belong to that floor's LINE (drawn dividers), or the floor itself if none are drawn
 const STA_COLORS = ['#1d3a66','#9a3b1f','#236043','#8f5390','#a8923a','#3f8f8f','#9c4f45','#c0552c','#2f6df6','#7a5b1f'];
 function addStation(name, x, z, id, t) {
   id = id || ('x' + (++extraSeq));
@@ -2103,7 +2151,7 @@ function applyLineAccent(id) {
     nd.benchFt = want;
     buildExtraCrew(id);                                        // crew re-seats at the new bench depth
   }
-  const c = SEC_LABEL_COL[sec] || '#1d3a66';
+  const c = SEC_LABEL_COL[sec] || zoneColorFor(sec) || '#1d3a66';
   if (nd.s.accent !== c) { nd.s.accent = c; setStationTitle(id, nd.s.title); }   // full label rebuild so the pill recolors
 }
 function recalcAny(id) {
@@ -2278,8 +2326,16 @@ function wireRows(host) {
 function addStationInSection(sec) {
   const name = (prompt('New station name:', 'New station') || '').trim(); if (!name) return;
   const n = extraStations.filter(id => sectionOf(nodes[id].x, nodes[id].z) === sec).length;
-  const x = sec === 'meritage' ? 1.5 : sec === 'sola' ? 8.5 : 15.0;   // drop in the middle of each line's CAD space
-  const z = Math.min(8.5, -7 + n * 2.5);
+  let x, z;
+  const ff = floorOfSec(sec);
+  if (ff) {                                                   // an imported floor (or one of its drawn lines): drop at that line's open middle, staggered
+    const m = /:(\d+)$/.exec(String(sec));
+    const a = m ? zoneAnchor(ff, +m[1]) : { x: ff.x + ff.w / 2, z: ff.z + ff.d / 2 };
+    x = a.x; z = Math.min(ff.z + ff.d - 1.5, a.z - 3 + n * 2.5);
+  } else {
+    x = sec === 'meritage' ? 1.5 : sec === 'sola' ? 8.5 : 15.0;   // drop in the middle of each line's CAD space
+    z = Math.min(8.5, -7 + n * 2.5);
+  }
   addStation(name, x, z);
   if (!editing) setEditing(true);                             // straight into edit mode so it can be dragged into place
   renderTimes(); saveLayout();
@@ -2290,6 +2346,11 @@ function renderTimes() {
     { key: 'sola',     label: 'SOLA',        color: '#236043', list: extraStations.filter(id => sectionOf(nodes[id].x, nodes[id].z) === 'sola').map(id => nodes[id].s) },
     { key: 'canyon',   label: 'CANYON CREW', color: '#9a5b1f', list: extraStations.filter(id => sectionOf(nodes[id].x, nodes[id].z) === 'canyon').map(id => nodes[id].s) },
   ];
+  customFloors.forEach(f => {                                 // imported floors: one section per drawn line (or one for the whole floor)
+    floorSections(f).forEach(sc => {
+      SECTIONS.push({ key: sc.key, label: sc.label, color: sc.color, list: extraStations.filter(id => sectionOf(nodes[id].x, nodes[id].z) === sc.key).map(id => nodes[id].s) });
+    });
+  });
   let html = '';
   SECTIONS.forEach(sec => {
     const secFac = (typeof prodF === 'function') ? prodF(sec.key) : 1;
@@ -3319,6 +3380,7 @@ flowBtn.onclick = () => {
 };
 const snap = v => Math.round(v / (YARD / 2)) * (YARD / 2);   // snap to 0.5 yd
 renderer.domElement.addEventListener('pointerdown', e => {
+  if (divDraw) return;                                 // drawing a floor-line divider: clicks add points, nothing gets grabbed
   if (!editing) return;
   if (cadOn && cadOverlay && (e.shiftKey || e.button === 2)) {   // Shift-drag (or right-drag) moves the CAD overlay to align it
     const p = deckPoint(e); if (p) { cadDragging = { sx: p.x, sz: p.z, ox: cadOverlay.g.position.x, oz: cadOverlay.g.position.z }; controls.enabled = false; e.preventDefault(); return; }
@@ -3401,14 +3463,26 @@ renderer.domElement.addEventListener('pointermove', e => {
     return;
   }
   if (!dragId) return;
-  let x = Math.max(FLOOR_X0 + 1.4, Math.min(FLOOR_X1 - 1.4, cx));        // stations can sit ANYWHERE on the floor — side strips included
-  const z = Math.max(FLOOR_Z0 + 1.4, Math.min(FLOOR_Z1 - 1.4, cz));
-  if (dragFenceR && !e.shiftKey) {                                        // fenced inside its line at the CAD boundary for THIS z (the lines jog)
-    const bS = SOLA_BX(z), bC = CANYON_BX(z);
-    if (dragFenceR === 'meritage') x = Math.min(x, bS - 0.35);
-    else if (dragFenceR === 'sola') x = Math.max(bS + 0.35, Math.min(bC - 0.35, x));
-    else x = Math.max(bC + 0.35, x);
-  } else if (e.shiftKey) dragFenceR = null;                               // once you cross with Shift, the fence re-arms on the next grab
+  let x, z;
+  const homeFloor = floorAt(nodes[dragId].x, nodes[dragId].z);            // a station on an imported floor stays ON that floor…
+  if (e.shiftKey) {                                                       // …unless Shift is held: roam anywhere — mezzanine or any floor
+    dragFenceR = null;                                                    // once you cross with Shift, the fence re-arms on the next grab
+    let X0 = FLOOR_X0 + 1.4, X1 = FLOOR_X1 - 1.4, Z0 = FLOOR_Z0 + 1.4, Z1 = FLOOR_Z1 - 1.4;
+    customFloors.forEach(f => { X0 = Math.min(X0, f.x + 1); X1 = Math.max(X1, f.x + f.w - 1); Z0 = Math.min(Z0, f.z + 1); Z1 = Math.max(Z1, f.z + f.d - 1); });
+    x = Math.max(X0, Math.min(X1, snap(p.x))); z = Math.max(Z0, Math.min(Z1, snap(p.z)));
+  } else if (homeFloor) {
+    x = Math.max(homeFloor.x + 1.0, Math.min(homeFloor.x + homeFloor.w - 1.0, snap(p.x)));
+    z = Math.max(homeFloor.z + 1.0, Math.min(homeFloor.z + homeFloor.d - 1.0, snap(p.z)));
+  } else {
+    x = Math.max(FLOOR_X0 + 1.4, Math.min(FLOOR_X1 - 1.4, cx));           // stations can sit ANYWHERE on the mezzanine floor — side strips included
+    z = Math.max(FLOOR_Z0 + 1.4, Math.min(FLOOR_Z1 - 1.4, cz));
+    if (dragFenceR && (dragFenceR === 'meritage' || dragFenceR === 'sola' || dragFenceR === 'canyon')) {   // fenced inside its line at the CAD boundary for THIS z (the lines jog)
+      const bS = SOLA_BX(z), bC = CANYON_BX(z);
+      if (dragFenceR === 'meritage') x = Math.min(x, bS - 0.35);
+      else if (dragFenceR === 'sola') x = Math.max(bS + 0.35, Math.min(bC - 0.35, x));
+      else x = Math.max(bC + 0.35, x);
+    }
+  }
   setStationPos(dragId, x, z);
   refreshMeasure(); refreshPath(); if (dragId === 'cart2') refreshCart2Feed(); if (dragId === 'cart3') refreshCart3Feed(); refreshProdFlow();
   if (cadOn) rebuildMyMarks();   // keep the teal "mine" markers on the bench as it moves
@@ -4624,11 +4698,128 @@ function buildFloorGroup(f) {
     lg.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
     g.add(new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0x4b5560 })));
   }
+  // drawn line dividers: bright dashed lines on the slab, one name label per line area
+  (f.divs || []).forEach(dv => {
+    const pts3 = (dv.pts || []).map(p => new THREE.Vector3(f.x + p[0], 0.06, f.z + p[1]));
+    if (pts3.length < 2) return;
+    const lg = new THREE.BufferGeometry().setFromPoints(pts3);
+    const ln = new THREE.Line(lg, new THREE.LineDashedMaterial({ color: 0xc0552c, dashSize: 0.45, gapSize: 0.28, linewidth: 2 }));
+    ln.computeLineDistances(); g.add(ln);
+  });
+  if (f.divs && f.divs.length) {
+    for (let i = 0; i <= f.divs.length; i++) {
+      const a = zoneAnchor(f, i);
+      const zl = makeMiniLabel(floorLineName(f, i), ZONE_COLORS[i % ZONE_COLORS.length]);
+      zl.position.set(a.x, 2.1, a.z); g.add(zl);
+    }
+  }
   const lbl = makeMiniLabel(f.name, '#3f6f8f');
   lbl.position.set(f.x + f.w / 2, 3.2, f.z + f.d / 2); g.add(lbl);
   level2.add(g);
   floorGroups[f.id] = g;
 }
+function rebuildFloor(f) {                                    // dividers or names changed → redraw the slab group
+  if (floorGroups[f.id]) { level2.remove(floorGroups[f.id]); delete floorGroups[f.id]; }
+  buildFloorGroup(f);
+}
+// ---- floor lines: add/remove drawn dividers, rename the resulting lines ----
+function refileFloorStations(f) {                             // stations keep their line color/section current after a divider change
+  extraStations.forEach(id => { const nd = nodes[id]; if (nd && floorAt(nd.x, nd.z) === f) applyLineAccent(id); });
+}
+function addFloorDivider(f, pts, newName) {
+  if (!f || !Array.isArray(pts) || pts.length < 2) return;
+  f.divs = f.divs || [];
+  if (!f.lineNames || !f.lineNames.length) f.lineNames = ['Line 1'];
+  // the new divider splits ONE existing line in two: the one its midpoint sits in.
+  // Side 0 keeps the old name, side 1 becomes the new line.
+  const mid = pts[Math.floor(pts.length / 2)];
+  const oldIdx = zoneIdxOf(f, f.x + mid[0], f.z + mid[1]);
+  f.divs.push({ pts: pts.map(p => [+p[0].toFixed(2), +p[1].toFixed(2)]) });
+  while (f.lineNames.length < f.divs.length) f.lineNames.push('Line ' + (f.lineNames.length + 1));
+  f.lineNames.splice(Math.min(oldIdx + 1, f.lineNames.length), 0, newName || ('Line ' + (f.divs.length + 1)));
+  f.lineNames.length = f.divs.length + 1;
+  rebuildFloor(f); refileFloorStations(f);
+  saveLayout(); renderTimes(); renderFloorsPanel();
+}
+function removeFloorDivider(f, di) {
+  if (!f || !f.divs || !f.divs[di]) return;
+  const mid = f.divs[di].pts[Math.floor(f.divs[di].pts.length / 2)];
+  f.divs.splice(di, 1);
+  const keepIdx = zoneIdxOf(f, f.x + mid[0], f.z + mid[1]);   // the two lines the divider separated merge; keep the lower side's name
+  if (f.lineNames) { f.lineNames.splice(Math.min(keepIdx + 1, f.lineNames.length - 1), 1); f.lineNames.length = f.divs.length + 1; }
+  if (!f.divs.length) delete f.divs;
+  rebuildFloor(f); refileFloorStations(f);
+  saveLayout(); renderTimes(); renderFloorsPanel();
+}
+function renameFloorLine(f, i, name) {
+  if (!f) return; f.lineNames = f.lineNames || [];
+  while (f.lineNames.length < ((f.divs || []).length + 1)) f.lineNames.push('Line ' + (f.lineNames.length + 1));
+  f.lineNames[i] = (name || '').trim() || f.lineNames[i];
+  rebuildFloor(f); saveLayout(); renderTimes(); renderFloorsPanel();
+}
+// ---- draw mode: click points across the floor to place a divider ----
+var divDraw = null;                                           // {f, pts:[[lx,lz],...]} while drawing (var: referenced by early pointer handlers)
+let divPrev = null;                                           // live preview group
+function divHint(txt) {
+  let el = document.getElementById('divHint');
+  if (!txt) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('div'); el.id = 'divHint';
+    el.style.cssText = 'position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:90;background:#15263a;color:#fff;font:13px/1.5 Arial,sans-serif;padding:9px 16px;border-radius:10px;box-shadow:0 8px 22px rgba(10,20,35,.4);display:flex;gap:10px;align-items:center';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<span>${txt}</span><button id="divFin" style="padding:3px 10px;border-radius:6px;border:0;background:#2f7d52;color:#fff;font-weight:700;cursor:pointer">✓ Finish</button><button id="divCan" style="padding:3px 10px;border-radius:6px;border:0;background:#c0552c;color:#fff;font-weight:700;cursor:pointer">✕ Cancel</button>`;
+  const bf = document.getElementById('divFin'); if (bf) bf.onclick = finishDivDraw;
+  const bc = document.getElementById('divCan'); if (bc) bc.onclick = cancelDivDraw;
+}
+function refreshDivPrev() {
+  if (divPrev) { level2.remove(divPrev); divPrev = null; }
+  if (!divDraw || !divDraw.pts.length) return;
+  const f = divDraw.f;
+  divPrev = new THREE.Group();
+  divDraw.pts.forEach(p => {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 10), new THREE.MeshBasicMaterial({ color: 0xc0552c }));
+    m.position.set(f.x + p[0], 0.25, f.z + p[1]); divPrev.add(m);
+  });
+  if (divDraw.pts.length >= 2) {
+    const lg = new THREE.BufferGeometry().setFromPoints(divDraw.pts.map(p => new THREE.Vector3(f.x + p[0], 0.12, f.z + p[1])));
+    divPrev.add(new THREE.Line(lg, new THREE.LineBasicMaterial({ color: 0xc0552c })));
+  }
+  level2.add(divPrev);
+}
+function startDivDraw(f) {
+  divDraw = { f, pts: [] };
+  flyToFloor(f);
+  const p = document.getElementById('floorsPanel'); if (p) p.style.display = 'none';   // panel out of the way while drawing
+  divHint('Drawing a line divider on “' + (f.name || f.id) + '”: click points across the floor (drag orbits the camera). Double-click or ✓ Finish when the divider is done. Esc cancels.');
+}
+function cancelDivDraw() { divDraw = null; divHint(null); refreshDivPrev(); }
+function finishDivDraw() {
+  if (!divDraw) return;
+  const d = divDraw;
+  d.pts = d.pts.filter((p, i, a) => !i || Math.hypot(p[0] - a[i - 1][0], p[1] - a[i - 1][1]) > 0.25);   // a finishing double-click adds a duplicate point — drop it
+  if (d.pts.length < 2) { cancelDivDraw(); return; }
+  divDraw = null; divHint(null); refreshDivPrev();
+  const nm = (prompt('Name for the NEW line (the area on the far side of the divider):', 'Line ' + (((d.f.divs || []).length) + 2)) || '').trim();
+  addFloorDivider(d.f, d.pts, nm || undefined);
+  const p = document.getElementById('floorsPanel'); if (p) { p.style.display = 'block'; renderFloorsPanel(); }
+}
+(() => {                                                      // canvas wiring for divider drawing: a "click" = press+release within 6 px
+  let down = null;
+  renderer.domElement.addEventListener('pointerdown', e => { if (divDraw) down = [e.clientX, e.clientY]; });
+  renderer.domElement.addEventListener('pointerup', e => {
+    if (!divDraw || !down) { down = null; return; }
+    const moved = Math.hypot(e.clientX - down[0], e.clientY - down[1]); down = null;
+    if (moved > 6) return;                                     // that was an orbit-drag, not a point
+    const p = deckPoint(e); if (!p) return;
+    const f = divDraw.f;
+    if (p.x < f.x - 2 || p.x > f.x + f.w + 2 || p.z < f.z - 2 || p.z > f.z + f.d + 2) return;   // clicks well off this floor don't count
+    divDraw.pts.push([Math.max(0, Math.min(f.w, p.x - f.x)), Math.max(0, Math.min(f.d, p.z - f.z))]);
+    refreshDivPrev();
+  });
+  renderer.domElement.addEventListener('dblclick', e => { if (divDraw) { e.preventDefault(); finishDivDraw(); } });
+  window.addEventListener('keydown', e => { if (divDraw && e.key === 'Escape') cancelDivDraw(); });
+})();
 function clearFloors() {
   Object.values(floorGroups).forEach(g => level2.remove(g));
   for (const k of Object.keys(floorGroups)) delete floorGroups[k];
@@ -4918,7 +5109,7 @@ function importSWIFiles(files) {
 function renderFloorsPanel() {
   const p = document.getElementById('floorsPanel'); if (!p || p.style.display === 'none') return;
   let html = `<b style="font-size:13px">🏗 Floor plans</b>
-    <div style="color:#5a6672;margin:2px 0 8px">Import a CAD drawing (DWG or DXF from DraftSight) as a new floor, then import standard-work CSVs as stations with their steps.</div>`;
+    <div style="color:#5a6672;margin:2px 0 8px">Import a CAD drawing (DWG or DXF from DraftSight) or add a blank floor, then draw dividers to split it into named lines. Whichever side of a divider a station sits on decides the line it belongs to.</div>`;
   html += `<div style="display:flex;align-items:center;gap:6px;border-top:1px solid #eef1f5;padding:6px 0">
     <b style="flex:1">🏠 Mezzanine</b><span style="color:#5a6672">the original floor</span>
     <button id="flGoMezz" style="padding:2px 8px">✈ Go</button></div>`;
@@ -4931,6 +5122,21 @@ function renderFloorsPanel() {
       <button class="flGo" data-id="${f.id}" style="padding:2px 8px">✈ Go</button>
       <button class="flDel" data-id="${f.id}" style="padding:2px 8px;color:#c0552c">✕</button>
     </div>`;
+    // this floor's lines: drawn dividers split it into named lines; a station's side of the divider decides its line
+    const nd2 = (f.divs || []).length;
+    html += `<div style="margin:0 0 6px 14px">`;
+    if (nd2) {
+      for (let i = 0; i <= nd2; i++) {
+        const cnt = extraStations.filter(id => nodes[id] && sectionOf(nodes[id].x, nodes[id].z) === zoneKey(f, i)).length;
+        html += `<div style="display:flex;align-items:center;gap:6px;padding:2px 0">
+          <span style="width:10px;height:10px;border-radius:3px;background:${ZONE_COLORS[i % ZONE_COLORS.length]}"></span>
+          <input class="flLnName" data-id="${f.id}" data-i="${i}" value="${floorLineName(f, i).replace(/"/g, '&quot;')}" style="flex:1;padding:2px 6px;border:1px solid #d8dee6;border-radius:5px;font-size:12px"/>
+          <span style="color:#5a6672">${cnt} station${cnt === 1 ? '' : 's'}</span>
+          ${i < nd2 ? `<button class="flDivDel" data-id="${f.id}" data-i="${i}" title="Remove the divider below this line (merges the two lines)" style="padding:1px 7px;color:#c0552c">┄✕</button>` : '<span style="width:30px"></span>'}
+        </div>`;
+      }
+    }
+    html += `<button class="flAddLn" data-id="${f.id}" style="padding:3px 10px;margin-top:2px">＋ Add line (draw a divider on the floor)</button></div>`;
   });
   html += `<div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">
     <button id="flAddDxf" style="padding:6px">⬆ Import CAD floor (.dwg / .dxf)</button>
@@ -4944,6 +5150,21 @@ function renderFloorsPanel() {
   p.querySelectorAll('.flDel').forEach(b => b.onclick = e => {
     const f = customFloors.find(x => x.id === e.target.dataset.id);
     if (f && confirm('Remove floor "' + f.name + '" and its stations?')) removeFloor(f.id);
+  });
+  p.querySelectorAll('.flAddLn').forEach(b => b.onclick = e => {
+    const f = customFloors.find(x => x.id === e.target.dataset.id); if (f) startDivDraw(f);
+  });
+  p.querySelectorAll('.flLnName').forEach(inp => inp.onchange = e => {
+    const f = customFloors.find(x => x.id === e.target.dataset.id); if (f) renameFloorLine(f, +e.target.dataset.i, e.target.value);
+  });
+  p.querySelectorAll('.flDivDel').forEach(b => b.onclick = e => {
+    const f = customFloors.find(x => x.id === e.target.dataset.id); if (!f || !f.divs) return;
+    const li = +e.target.dataset.i;                            // the divider between line li and line li+1
+    const di = f.divs.findIndex(dv => {
+      const mid = dv.pts[Math.floor(dv.pts.length / 2)];
+      return f.divs.reduce((a, o) => a + (o === dv ? 0 : divSide(o, mid[0], mid[1])), 0) === li;
+    });
+    if (di >= 0 && confirm('Merge “' + floorLineName(f, li) + '” and “' + floorLineName(f, li + 1) + '” into one line?')) removeFloorDivider(f, di);
   });
   const dxfI = document.getElementById('dxfFile'), swiI = document.getElementById('swiFile');
   const g1 = document.getElementById('flAddDxf'); if (g1 && dxfI) g1.onclick = () => dxfI.click();
