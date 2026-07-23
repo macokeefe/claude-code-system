@@ -1730,9 +1730,13 @@ let extraSeq = 0;
    Crew from the 👁 selector and every other line's tables, crew, carts, lanes,
    arrows and boxes disappear. 'all' shows the whole floor. ---- */
 var lineFocus = 'all';
+var viewFloorId = null;      // when set, the app shows ONLY that imported floor — its own space, no mezzanine anything
 const LINE_KEYS = ['meritage', 'sola', 'canyon'];
 function stLineOf(id) { const nd = nodes[id]; if (!nd) return 'meritage'; return nd.extra ? sectionOf(nd.x, nd.z) : 'meritage'; }
-function focusShows(sec) { return (typeof lineFocus === 'undefined' || !lineFocus || lineFocus === 'all' || lineFocus === sec); }
+function focusShows(sec) {
+  if (typeof viewFloorId === 'string' && viewFloorId) { const s = String(sec); return s === viewFloorId || s.indexOf(viewFloorId + ':') === 0; }   // floor view: only that floor's lines exist
+  return (typeof lineFocus === 'undefined' || !lineFocus || lineFocus === 'all' || lineFocus === sec);
+}
 function applyLineFocus() {
   [...ST.map(s2 => s2.id), ...extraStations].forEach(id => {
     const nd = nodes[id]; if (!nd) return;
@@ -1780,6 +1784,7 @@ function renderSolaData() {
   };
   fill('sola', 'sola');
   fill('canyon', 'canyon');
+  try { if (typeof renderFloorCards === 'function') renderFloorCards(); } catch (e) {}   // floor view: its per-line cards track the same refreshes
   buildSolaSched();
 }
 // Sola flow-shop simulation (its own clock Ts): units flow through the Sola
@@ -2351,8 +2356,11 @@ function renderTimes() {
       SECTIONS.push({ key: sc.key, label: sc.label, color: sc.color, list: extraStations.filter(id => sectionOf(nodes[id].x, nodes[id].z) === sc.key).map(id => nodes[id].s) });
     });
   });
+  const SHOWN = (typeof viewFloorId === 'string' && viewFloorId)   // floor view: the times table shows ONLY that floor's lines
+    ? SECTIONS.filter(s => s.key === viewFloorId || String(s.key).indexOf(viewFloorId + ':') === 0)
+    : SECTIONS;
   let html = '';
-  SECTIONS.forEach(sec => {
+  SHOWN.forEach(sec => {
     const secFac = (typeof prodF === 'function') ? prodF(sec.key) : 1;
     const tot = sec.list.reduce((a, s) => a + (s.t || 0) * secFac, 0);
     const lp = (typeof lineProducts !== 'undefined' && lineProducts) ? lineProducts[sec.key] : null;
@@ -3245,8 +3253,10 @@ const editBtn = document.getElementById('edit');
 document.getElementById('addStation').onclick = () => {
   const name = (prompt('New station name:', 'New station') || '').trim();
   if (!name) return;
-  const n = extraStations.length;
-  const x = 16, z = -5 + n * 2.5;                               // drop in the open area on the OTHER (right) side; drag it anywhere
+  let x, z;
+  const vf = viewFloorId ? customFloors.find(ff => ff.id === viewFloorId) : null;
+  if (vf) { const s = floorSlot(vf); x = s.x; z = s.z; }         // looking at an imported floor → the station lands on THAT floor
+  else { const n = extraStations.length; x = 16; z = -5 + n * 2.5; }   // mezzanine: drop in the open area on the OTHER (right) side; drag it anywhere
   addStation(name, x, z);
   if (!editing) setEditing(true);                               // enter edit mode so you can drag it where you want
   renderTimes();                                               // show it in the side's steps table
@@ -3293,7 +3303,7 @@ function setEditing(on) {
   editing = on;
   editBtn.textContent = on ? '✓ Done editing' : '✥ Edit layout';
   editBtn.classList.toggle('on', on);
-  grid.visible = on;
+  grid.visible = on && !viewFloorId;   // the yard grid belongs to the mezzanine — not to an imported floor's own space
   pathLine.visible = on; wpGroup.visible = on; wpGroup2.visible = on; wpGroup3.visible = on; prodWpGroup.visible = on;
   aisleMesh.visible = on && aisleOn; aisleMesh2.visible = on && aisleOn; aisleMesh3.visible = on && aisleOn;   // blue 5' lanes: only in edit mode, and only if the Lanes toggle is on
   returnLine.visible = on; returnLine2.visible = on; returnLine3.visible = on; // amber dashed = return leg back to the elevator
@@ -4759,7 +4769,7 @@ function renameFloorLine(f, i, name) {
 }
 // ---- draw mode: click points across the floor to place a divider ----
 var divDraw = null;                                           // {f, pts:[[lx,lz],...]} while drawing (var: referenced by early pointer handlers)
-let divPrev = null;                                           // live preview group
+var divPrev = null;                                           // live preview group (var: setViewFloor may run before this line executes)
 function divHint(txt) {
   let el = document.getElementById('divHint');
   if (!txt) { if (el) el.remove(); return; }
@@ -4855,10 +4865,60 @@ function flyToFloor(f) {
   controls.target.copy(c);
   camera.position.set(c.x + f.w * 0.35, c.y + Math.max(f.w, f.d) * 0.9 + 8, c.z + f.d * 1.1);
   camera.lookAt(c);
+  setViewFloor(f.id);
 }
 function flyToMezzanine() {   // the standard Angle view of the original floor
   if (typeof is2D !== 'undefined' && is2D && typeof set2D === 'function') set2D(false);
   camera.position.set(7, 30, 52); controls.target.set(7, FLOOR2 + 0.8, 0);
+  setViewFloor(null);
+}
+/* ---- floor view: an imported floor is its OWN space. Flying to it hides the
+   whole mezzanine (deck, stations, crew, carts, lanes, KPI cards) and shows
+   per-line KPI cards for THAT floor instead. Flying home restores it all. ---- */
+var floorViewHidden = [];                      // [obj, previousVisible] — what the sweep hid, so it can be restored exactly (var: callable from early handlers)
+function setViewFloor(fid) {
+  viewFloorId = fid || null;
+  floorViewHidden.forEach(([o, v]) => { o.visible = v; });
+  floorViewHidden = [];
+  if (viewFloorId) {
+    const f = customFloors.find(x => x.id === viewFloorId);
+    const keep = new Set([helpGroup, flowGroup]);            // arrows self-filter per frame via focusShows
+    if (f && floorGroups[f.id]) keep.add(floorGroups[f.id]);
+    if (divPrev) keep.add(divPrev);
+    level2.children.forEach(o => { if (!keep.has(o)) { floorViewHidden.push([o, o.visible]); o.visible = false; } });
+    scene.children.forEach(o => {                            // ground-floor warehouse too: racks, lanes, columns, elevator, grid…
+      if (o === level2 || o === floor || o.isLight) return;  // …but keep the concrete ground and the lights
+      floorViewHidden.push([o, o.visible]); o.visible = false;
+    });
+  }
+  document.querySelectorAll('#stage > .readouts, #stage > .rstack:not(#floorCards)').forEach(el => { el.style.display = viewFloorId ? 'none' : ''; });
+  const sel = document.getElementById('floorViewSel'); if (sel && sel.value !== (viewFloorId || '')) sel.value = viewFloorId || '';
+  try { applyLineFocus(); } catch (e) {}                     // re-shows this floor's stations, crew, labels; hides everything else
+  try { renderFloorCards(); } catch (e) {}
+}
+function renderFloorCards() {                  // per-line KPI cards for the floor being viewed (mirrors the mezzanine cards)
+  let host = document.getElementById('floorCards');
+  const f = viewFloorId ? customFloors.find(x => x.id === viewFloorId) : null;
+  if (!f) { if (host) host.remove(); return; }
+  if (!host) {
+    host = document.createElement('div'); host.className = 'rstack'; host.id = 'floorCards';
+    const st = document.getElementById('stage'); if (!st) return; st.appendChild(host);
+  }
+  let html = '';
+  floorSections(f).forEach(sc => {
+    const ids = extraStations.filter(id => nodes[id] && sectionOf(nodes[id].x, nodes[id].z) === sc.key);
+    let labor = 0, cyc = 0, bot = '—';
+    ids.forEach(id => { labor += (nodes[id].s.t || 0); if (isPrimary(id)) { const e = opLoad(id); if (e > cyc) { cyc = e; bot = nodes[id].s.title; } } });
+    const cap = cyc > 0 ? dayMinSafe() / cyc : 0;
+    html += `<div class="readouts right"><div class="rdttl" style="color:${sc.color}">${sc.label}</div>
+      <div class="rd"><div class="k">Stations</div><div class="v">${ids.length}</div></div>
+      <div class="rd"><div class="k">Cycle</div><div class="v">${labor > 0 ? labor.toFixed(1).replace(/\.0$/, '') : '—'}<small> min/unit</small></div></div>
+      <div class="rd"><div class="k">Current pace</div><div class="v">${cyc > 0 ? cyc.toFixed(1).replace(/\.0$/, '') : '—'}<small> min</small></div></div>
+      <div class="rd"><div class="k">Capacity</div><div class="v">${cap > 0 ? cap.toFixed(1) : '—'}<small> /day</small></div></div>
+      <div class="rd"><div class="k">Bottleneck</div><div class="v" style="font-size:13px;line-height:2.1">${bot} ${cyc > 0 ? '(' + cyc.toFixed(1).replace(/\.0$/, '') + ')' : ''}</div></div>
+    </div>`;
+  });
+  if (host.innerHTML !== html) host.innerHTML = html;
 }
 // quick "which floor am I looking at" selector in the View group (only shown once floors exist)
 function refreshFloorViewSel() {
@@ -4876,6 +4936,10 @@ function refreshFloorViewSel() {
     };
   }
   sel.innerHTML = '<option value="">🏠 Mezzanine</option>' + customFloors.map(f => `<option value="${f.id}">🏗 ${(f.name || f.id).replace(/</g, '&lt;')}</option>`).join('');
+  if (viewFloorId) {                                          // floors changed under an active floor view: re-apply (or exit) the isolation
+    if (!customFloors.some(f => f.id === viewFloorId)) setViewFloor(null);
+    else { sel.value = viewFloorId; setViewFloor(viewFloorId); }
+  }
 }
 // next free spot for an imported station on a floor: simple grid inside the slab
 function floorSlot(f) {
