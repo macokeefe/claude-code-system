@@ -2023,6 +2023,10 @@ const stepsHost2 = { innerHTML: '', querySelectorAll: () => [] };   // legacy sh
   #times .sdelsta:hover{background:#c0552c;color:#fff}
   #times .smv{flex:none;width:34px;border:1px solid #cfd6de;border-radius:6px;background:#fff;font-size:11px;color:#3c4a5a;padding:1px 0;cursor:pointer}
   #times .smv:hover{border-color:#1d3a66}
+  #times .sgrab{flex:none;cursor:grab;color:#9aa4b0;font-size:13px;padding:0 2px;user-select:none}
+  #times .sgrab:hover{color:#1d3a66}
+  #times .strow.dragging{opacity:.4}
+  #times .stblock.dragover{outline:2px dashed #2f6df6;outline-offset:2px;background:#f4f8ff}
   #times .addInSec{display:block;width:100%;margin:6px 0 2px;background:#f2f6fb;border:1.5px dashed #9db4cf;color:#1d3a66;border-radius:8px;padding:7px;font-size:12px;font-weight:700;cursor:pointer}
   #times .addInSec:hover{background:#e3edf8}
   #times .secempty{font-size:11px;color:#8a93a0;margin:4px 2px}
@@ -2188,6 +2192,20 @@ function recalcAny(id) {
   if (isExtra(id)) { nodes[id].t = s.t; const nd = nodes[id]; if (nd.label && nd.label.userData.redraw) nd.label.userData.redraw(s.t ? +s.t.toFixed(2) + ' min' : '—', s.accent); }
 }
 
+// move one step (minutes and all) from one station to another — used by the
+// ⇄ selects AND by dragging a step row's ⠿ grip onto another station block
+function moveStep(src, si, dst) {
+  if (!dst || src === dst) { renderTimes(); return; }
+  const ss = getAny(src), ds = getAny(dst); if (!ss || !ds || !ss.steps || !ss.steps[si]) { renderTimes(); return; }
+  const st = ss.steps.splice(si, 1)[0];
+  if (!ss.steps.length) ss.steps.push({ name: ss.sub || 'Step', t: 0 });
+  (ds.steps = ds.steps || []).push(st);
+  recalcAny(src); recalcAny(dst);
+  if (isExtra(src) && isExtra(dst)) { renderTimes(); saveLayout(); }
+  else { renderTimes(); schedule(); T = 0; setPlay(false); saveLayout(); }   // a core Meritage station changed → re-pace
+  if (typeof buildSolaSched === 'function') buildSolaSched();
+  try { renderIdle(); renderHelpPanel(); renderTaskChart(); } catch (e2) {}
+}
 // every other station on the same line — the targets a step can move to
 function moveTargets(id) {
   const line = stLineOf(id);
@@ -2203,12 +2221,13 @@ function rowsHtml(list, accent, fac) {
     const smv = tgt.length ? `<select class="smv" data-id="${s.id}" title="Move this step to another station on this line"><option value="">⇄</option>${tgt.map(t => `<option value="${t.id}">→ ${(t.title || t.id).replace(/</g, '&lt;')}</option>`).join('')}</select>` : '';
     const ppl = Math.max(1, s.ppl || 1), st_t = (s.t || 0) * fac, cyc = (st_t / ppl);
     const canRemove = nodes[s.id] && nodes[s.id].extra;
-    html += `<div class="stblock" style="border-left-color:${accent || '#1d3a66'}">
+    html += `<div class="stblock" data-sta="${s.id}" style="border-left-color:${accent || '#1d3a66'}">
       <div class="sttitle"><input class="stnm" data-id="${s.id}" value="${(s.title || '').replace(/"/g, '&quot;')}" title="Station name — click to rename"/>${s.bot ? ' <b style="color:#c0552c">◄</b>' : ''}
         <span class="sttot">${cyc.toFixed(1).replace(/\.0$/, '')} min/unit</span><span class="tw" id="walk_${s.id}"></span>
         ${canRemove ? `<button class="sdelsta" data-id="${s.id}" title="Remove this station (its table disappears from the floor)">🗑 remove</button>` : ''}</div>`;
     (s.steps || []).forEach((st, si) => {
-      html += `<div class="strow">
+      html += `<div class="strow" data-id="${s.id}" data-si="${si}">
+        <span class="sgrab" draggable="true" data-id="${s.id}" data-si="${si}" title="Drag this step onto another station">⠿</span>
         <input class="sname" data-id="${s.id}" data-si="${si}" value="${(st.name || '').replace(/"/g, '&quot;')}" title="Step name — click to edit"/>
         <input class="stime" type="number" step="0.25" min="0" data-id="${s.id}" data-si="${si}" value="${+((+st.t || 0) * fac).toFixed(2)}" title="Minutes for this step"/>
         <span class="su">min</span>
@@ -2334,16 +2353,26 @@ function wireRows(host) {
     recalcAny(id); afterEdit(id);
   });
   host.querySelectorAll('select.smv').forEach(sel => sel.onchange = e => {
-    const src = e.target.dataset.id, si = +e.target.dataset.si, dst = e.target.value;
-    if (!dst) return;
-    const ss = getAny(src), ds = getAny(dst); if (!ss || !ds || !ss.steps || !ss.steps[si]) { renderTimes(); return; }
-    const st = ss.steps.splice(si, 1)[0];                       // move the step, minutes and all
-    if (!ss.steps.length) ss.steps.push({ name: ss.sub || 'Step', t: 0 });
-    (ds.steps = ds.steps || []).push(st);
-    recalcAny(src); recalcAny(dst);
-    if (isExtra(src) && isExtra(dst)) { renderTimes(); saveLayout(); }
-    else { renderTimes(); schedule(); T = 0; setPlay(false); saveLayout(); }   // a core Meritage station changed → re-pace
-    try { renderIdle(); renderHelpPanel(); renderTaskChart(); } catch (e2) {}
+    const dst = e.target.value; if (!dst) return;
+    moveStep(e.target.dataset.id, +e.target.dataset.si, dst);
+  });
+  // drag a step by its ⠿ grip onto ANY station block to move it there
+  host.querySelectorAll('.sgrab').forEach(g => {
+    g.ondragstart = e => {
+      e.dataTransfer.setData('text/plain', g.dataset.id + '|' + g.dataset.si);
+      e.dataTransfer.effectAllowed = 'move';
+      const row = g.closest('.strow'); if (row) row.classList.add('dragging');
+    };
+    g.ondragend = () => host.querySelectorAll('.strow.dragging,.stblock.dragover').forEach(el => el.classList.remove('dragging', 'dragover'));
+  });
+  host.querySelectorAll('.stblock').forEach(blk => {
+    blk.ondragover = e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; blk.classList.add('dragover'); };
+    blk.ondragleave = () => blk.classList.remove('dragover');
+    blk.ondrop = e => {
+      e.preventDefault(); blk.classList.remove('dragover');
+      const d = (e.dataTransfer.getData('text/plain') || '').split('|');
+      if (d.length === 2) moveStep(d[0], +d[1], blk.dataset.sta);
+    };
   });
   host.querySelectorAll('button.sdelsta').forEach(b => b.onclick = e => {
     const id = e.target.dataset.id, nd = nodes[id];
@@ -5189,21 +5218,49 @@ function parseSWICSV(text) {
   return steps;
 }
 function importSWIFiles(files) {
-  const f = customFloors[customFloors.length - 1] || null;
-  let made = 0, report = [];
+  const f = (typeof viewedFloor === 'function' && viewedFloor()) || customFloors[customFloors.length - 1] || null;
+  // the floor's existing tables, in working order: line by line, then west to east
+  const floorTables = () => !f ? [] : extraStations
+    .filter(id => nodes[id] && floorAt(nodes[id].x, nodes[id].z) === f)
+    .sort((a, b) => (zoneIdxOf(f, nodes[a].x, nodes[a].z) - zoneIdxOf(f, nodes[b].x, nodes[b].z)) || (nodes[a].x - nodes[b].x) || (nodes[a].z - nodes[b].z));
+  let made = 0, split = false, report = [];
   const doOne = (file) => new Promise(res => {
     const rd = new FileReader();
     rd.onload = () => {
       const steps = parseSWICSV(String(rd.result || ''));
       if (!steps.length) { report.push(file.name + ': no steps found'); return res(); }
-      const nm = file.name.replace(/\.(csv|txt)$/i, '').replace(/[_-]+/g, ' ').trim().slice(0, 40) || 'Imported SWI';
-      const spot = f ? floorSlot(f) : { x: 27 + (made % 3) * 3.2, z: -6 + Math.floor(made / 3) * 3.2 };
-      addStation(nm, spot.x, spot.z);
-      const id = extraStations[extraStations.length - 1], nd = nodes[id];
-      nd.s.steps = steps.map(s2 => ({ name: s2.name, t: s2.t }));
-      recalcAny(id);
-      made++;
-      report.push(file.name + ': ' + steps.length + ' steps, ' + nd.s.steps.reduce((a2, s2) => a2 + s2.t, 0).toFixed(1) + ' min');
+      const tables = floorTables();
+      if (tables.length >= 2) {
+        // the floor already has tables → BALANCE the standard work across them:
+        // contiguous chunks of steps, each table carrying about the same minutes
+        const k = tables.length, total = steps.reduce((a2, s2) => a2 + s2.t, 0);
+        const buckets = tables.map(() => []);
+        let acc = 0, ci = 0;
+        steps.forEach(s2 => {
+          let idx = Math.min(k - 1, Math.floor((acc + s2.t / 2) / Math.max(0.1, total) * k));
+          if (idx < ci) idx = ci; ci = idx;                    // keep the split contiguous, in order
+          buckets[idx].push(s2); acc += s2.t;
+        });
+        tables.forEach((id, i) => {
+          if (!buckets[i].length) return;
+          const s2 = getAny(id);
+          const placeholder = s2.steps && s2.steps.length === 1 && !(+s2.steps[0].t);   // a fresh table's empty 0-min step gets replaced
+          s2.steps = (placeholder ? [] : (s2.steps || [])).concat(buckets[i].map(x2 => ({ name: x2.name, t: x2.t })));
+          recalcAny(id);
+        });
+        split = true;
+        report.push(file.name + ': ' + steps.length + ' steps split across ' + k + ' tables (~' + (total / k).toFixed(1) + ' min each)');
+      } else {
+        // no tables yet (or just one) → one new station carrying the whole sheet, like before
+        const nm = file.name.replace(/\.(csv|txt)$/i, '').replace(/[_-]+/g, ' ').trim().slice(0, 40) || 'Imported SWI';
+        const spot = f ? floorSlot(f) : { x: 27 + (made % 3) * 3.2, z: -6 + Math.floor(made / 3) * 3.2 };
+        addStation(nm, spot.x, spot.z);
+        const id = extraStations[extraStations.length - 1], nd = nodes[id];
+        nd.s.steps = steps.map(s2 => ({ name: s2.name, t: s2.t }));
+        recalcAny(id);
+        made++;
+        report.push(file.name + ': ' + steps.length + ' steps, ' + nd.s.steps.reduce((a2, s2) => a2 + s2.t, 0).toFixed(1) + ' min');
+      }
       res();
     };
     rd.onerror = () => { report.push(file.name + ': could not read'); res(); };
@@ -5213,7 +5270,10 @@ function importSWIFiles(files) {
     for (const file of files) await doOne(file);
     renderTimes(); saveLayout(); renderFloorsPanel();
     if (typeof buildSolaSched === 'function') buildSolaSched();
-    alert('Standard-work import:\n' + report.join('\n') + (f ? '\n\nStations placed on "' + f.name + '".' : '\n\nStations placed near the staging area (no imported floor yet).') + '\nOpen Edit times to review the steps.');
+    alert('Standard-work import:\n' + report.join('\n')
+      + (split ? '\n\nSteps were balanced across "' + f.name + '"’s tables. Open Edit times and drag any step (⠿ grip) onto another station to rebalance.'
+               : (f ? '\n\nStations placed on "' + f.name + '". Add more tables first if you want the steps split across them.' : '\n\nStations placed near the staging area (no imported floor yet).'))
+      + '\nOpen Edit times to review the steps.');
   })();
 }
 // ---- Floors panel ----
