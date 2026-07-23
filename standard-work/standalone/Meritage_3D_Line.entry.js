@@ -468,6 +468,7 @@ const mount = document.getElementById('view');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xe9edf1);
 scene.fog = new THREE.Fog(0xe9edf1, 60, 140);
+scene.background = new THREE.Color(0xe9edf1);   // match the fog so there's never a hard seam between the concrete floor and the void beyond it
 const camera = new THREE.PerspectiveCamera(44, mount.clientWidth / mount.clientHeight, 0.1, 300);
 camera.position.set(7, 30, 52);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -488,8 +489,11 @@ for (const [k, v] of Object.entries({ left: -40, right: 40, top: 40, bottom: -40
 scene.add(sun);
 const fill = new THREE.DirectionalLight(0xeef2f8, 0.3); fill.position.set(-18, 14, -10); scene.add(fill);
 
-const floor = new THREE.Mesh(new THREE.PlaneGeometry(130, 90),
-  new THREE.MeshStandardMaterial({ map: concreteTexture(), roughness: 0.55, metalness: 0.06 }));
+// big enough that imported floors (placed east of the mezzanine) always sit on
+// the same concrete — no bare-background patch under or beside them
+const floorTex = concreteTexture(); floorTex.repeat.set(18, 13);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(300, 210),
+  new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.55, metalness: 0.06 }));
 floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
 
 const addLane = (w, d, x, z) => { const m = bx(w, 0.012, d, MAT.tape); m.position.set(x, 0.006, z); scene.add(m); };
