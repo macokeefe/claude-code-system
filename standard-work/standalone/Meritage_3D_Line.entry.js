@@ -3397,7 +3397,7 @@ function setEditing(on) {
     controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
   }
   measurePanel.style.display = on ? 'block' : 'none';
-  document.getElementById('editHint').style.display = on ? 'block' : 'none';
+  { const eh = document.getElementById('editHint'); if (eh) eh.style.display = 'none'; }   // the edit banner was removed for a cleaner look
   if (on) {
     setPlay(false);
     if (!is2D) {                                             // in 2D the plan view stays exactly as-is
