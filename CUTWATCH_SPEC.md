@@ -47,14 +47,29 @@ available time = for each shift worked: (shift length − 45 min breaks)
 ```
 - Standard shifts: 1st 7:00a–3:00p, 2nd 3:00p–1:00a. Editable per day per shift in ⚙.
 - Reference result for the file above: 4h 51m of 23h 45m over 3 shifts = **20.5%**.
-- Eastman only counts days that actually have camera footage (`videoDaysOnly`).
+- `videoDaysOnly` (both machines, default OFF) optionally limits the numbers to
+  days that have camera footage — for tagging sessions. Off means all data.
 
-**Data loading is REPLACE, never accumulate.** Each load reads the newest report
-and that becomes the whole picture for that machine. Nothing is stored or merged.
-This is deliberate: accumulation caused numbers to silently double (a long,
-painful bug — two stacked imports read as 196 jobs / 45% instead of 100 / 20.5%).
+**Data loading: read every log in the folder, collapse on each row's own source
+key.** A machine's set is rebuilt from the files on disk on every open — nothing
+is ever stored and re-merged. That distinction is what matters: the doubling bug
+(two stacked imports read as 196 jobs / 45% instead of 100 / 20.5%) came from
+*accumulating into a saved file*, not from reading several reports. Overlapping
+"last 100 jobs" exports are normal and collapse correctly because each row
+carries `k`, an identity taken from the report's own text.
+
+A **Data** switch chooses the active set, and it governs every tab:
+- `All logs in the folder` (default) — every report combined, overlaps counted once
+- `Newest log only` — just the most recent pull
+
 Only human work (cause tags, splits, shift edits) is persisted, in
 `cutwatch_tags.json`.
+
+**Never hide data silently.** Two switches used to do this and it cost a lot of
+trust: only the newest log was loaded, and days without camera footage were
+filtered out of the math with no visible control. Both are now explicit
+switches in the Data bar, and the video filter defaults to OFF. If a rule can
+remove rows from the numbers, the user must be able to see it and turn it off.
 
 ## 2. How videos are pulled
 
