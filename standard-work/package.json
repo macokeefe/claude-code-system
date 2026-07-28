@@ -1,0 +1,23 @@
+{
+  "name": "standard-work",
+  "version": "1.0.0",
+  "description": "Labor time tracking and standard work documentation for furniture manufacturing",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "npm install && cd client && npm install && npm run build",
+    "start": "node server/index.js",
+    "dev": "concurrently \"node server/index.js\" \"cd client && npm run dev\"",
+    "seed": "node seed/seed.js",
+    "build:standalone": "cd client && vite build --config vite.standalone.config.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.0",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.0",
+    "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

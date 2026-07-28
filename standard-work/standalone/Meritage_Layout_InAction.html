@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Meritage — Our Layout in Action</title>
+<style>
+  body{margin:0;background:#0e1116;color:#e7ecf1;font-family:"Inter","Segoe UI",Arial,sans-serif;padding:20px}
+  .wrap{max-width:980px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 2px;color:#fff}
+  .sub{color:#9aa7b4;font-size:13px;margin:0 0 14px}
+  .bar{display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:#161b22;border:1px solid #232b35;border-radius:10px;padding:12px 14px;margin-bottom:14px}
+  button{background:#1f6feb;color:#fff;border:0;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer}
+  button.sec{background:#262d36}
+  .stat{font-variant-numeric:tabular-nums}
+  .stat b{font-size:20px;color:#fff} .stat .l{font-size:10px;color:#9aa7b4;text-transform:uppercase;letter-spacing:.05em}
+  input[type=range]{width:160px}
+  svg{width:100%;height:auto;display:block;background:#11161d;border:1px solid #232b35;border-radius:12px}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:#9aa7b4;margin-top:10px}
+  .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  .note{font-size:12px;color:#8b97a4;margin-top:10px;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Meritage 3-Seater — our layout, in action</h1>
+  <p class="sub">Set how many chairs to build. Each operator <b>starts the next chair the moment they finish</b> their current one. <b>Full Assembly only starts a chair once its kit is ready</b> (Seat frame + an Arm or Back frame). Watch the line fill up and units ship.</p>
+
+  <div class="bar">
+    <button id="play">▶ Play</button>
+    <button id="reset" class="sec">↺ Reset</button>
+    <div>Chairs <input id="chairs" type="number" min="1" max="60" value="8" style="width:64px;background:#0e1116;color:#e7ecf1;border:1px solid #2c3540;border-radius:6px;padding:6px 8px"></div>
+    <div>Speed <input id="speed" type="range" min="2" max="40" value="14"><span id="spd" class="stat" style="font-size:12px;color:#9aa7b4"> </span></div>
+    <div class="spacer" style="flex:1"></div>
+    <div class="stat"><b id="clock">0</b><div class="l">min elapsed</div></div>
+    <div class="stat"><b id="units">0</b><div class="l">shipped</div></div>
+    <div class="stat"><b id="rate">8.9</b><div class="l">/day (steady)</div></div>
+  </div>
+  <div id="done" style="color:#2ea043;font-weight:700;font-size:13px;min-height:18px;margin:-6px 0 10px"></div>
+
+  <svg id="floor" viewBox="0 0 720 500"></svg>
+
+  <div class="legend">
+    <span><i style="background:#1f6feb"></i>Working</span>
+    <span><i style="background:#d29922"></i>Seat frame (bottleneck)</span>
+    <span><i style="background:#3d4a5a"></i>Done — part waiting for the kit</span>
+    <span><i style="background:#b3261e"></i>Full Assembly waiting (kit not ready)</span>
+    <span><i style="background:#2ea043"></i>Packing</span>
+    <span>✎ edit the <b style="color:#e7ecf1">min</b> under any box (Full assembly = assemble time, Furniture = packing time)</span>
+  </div>
+  <p class="note"><b>What to watch:</b> Full Assembly's box stays <b>red "Waiting"</b> until the start condition is met — <b>Seat frame AND (an Arm or Back frame)</b>. Arms finish at 32 and Back frame at 43.5, but <b>Seat frame is last at 47</b>, so the kit isn't ready until 47 — that's when Full Assembly turns blue and begins. Meanwhile the fast feeders sit <b>"done — waiting"</b>. Then Full Assembly assembles (~29) and flips to <b>packing</b> (~18). Steady-state: one unit every 47 min ≈ <b>9/day</b> (Seat frame paces it; split it 2-up to clear the 42-min takt).</p>
+</div>
+
+<script>
+"use strict";
+var SVGNS='http://www.w3.org/2000/svg';
+var BUILD=47, ASM=29, PACK=18, TOTAL=BUILD+ASM+PACK; // kit ready at 47, then assemble 29, pack 18
+var BOXW=128, BOXH=58;
+// stations: x,y = top-left
+var STN=[
+ {id:'cart',name:'Cart / Supply',people:0,x:296,y:14,kind:'cart'},
+ {id:'con', name:'Connectors', people:1, busy:19.25, x:36, y:120, kind:'feed'},
+ {id:'arm', name:'Arms',       people:2, busy:32,    x:196,y:120, kind:'feed'},
+ {id:'bak', name:'Back frame', people:1, busy:43.5,  x:356,y:120, kind:'feed'},
+ {id:'tre', name:'Trellis',    people:1, busy:22.5,  x:516,y:120, kind:'feed'},
+ {id:'sea', name:'Seat frame', people:1, busy:47,    x:36, y:250, kind:'feed', bottleneck:true},
+ {id:'fa',  name:'Full assembly',people:2,busy:47,   x:296,y:250, kind:'fa'},
+ {id:'fur', name:'Furniture',  people:0, busy:0,     x:296,y:390, kind:'fur'},
+];
+var byId={}; STN.forEach(function(s){byId[s.id]=s;});
+var ARROWS=[
+ ['cart','con','feed'],['cart','arm','feed'],['cart','bak','feed'],['cart','tre','feed'],['cart','sea','feed'],
+ ['con','fa','flow'],['arm','fa','flow'],['bak','fa','flow'],['tre','fa','flow'],['sea','fa','flow'],
+ ['fa','fur','flow'],
+];
+function cx(s){return s.x+BOXW/2;} function cy(s){return s.y+BOXH/2;}
+function edge(s,tx,ty){var X=cx(s),Y=cy(s),dx=tx-X,dy=ty-Y;if(!dx&&!dy)return[X,Y];var k=Math.min(Math.abs(dx)<1e-6?1e9:(BOXW/2)/Math.abs(dx),Math.abs(dy)<1e-6?1e9:(BOXH/2)/Math.abs(dy));return[X+dx*k,Y+dy*k];}
+
+var svg=document.getElementById('floor');
+function E(tag,attr){var e=document.createElementNS(SVGNS,tag);for(var k in attr)e.setAttribute(k,attr[k]);return e;}
+// defs (arrowheads)
+var defs=E('defs',{});
+defs.innerHTML='<marker id="ah" markerWidth="6" markerHeight="6" refX="4.5" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 Z" fill="#3d6fb0"/></marker>'+
+ '<marker id="ahf" markerWidth="6" markerHeight="6" refX="4.5" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 Z" fill="#2a323c"/></marker>';
+svg.appendChild(defs);
+
+// arrows
+var arrowEls={};
+ARROWS.forEach(function(a){
+ var s=byId[a[0]],t=byId[a[1]];var p1=edge(s,cx(t),cy(t)),p2=edge(t,cx(s),cy(s));
+ var ln=E('line',{x1:p1[0],y1:p1[1],x2:p2[0],y2:p2[1],stroke:'#2a323c','stroke-width':2,'marker-end':'url(#ahf)'});
+ if(a[2]==='feed')ln.setAttribute('stroke-dasharray','4 3');
+ svg.appendChild(ln); arrowEls[a[0]+'>'+a[1]]=ln;
+});
+
+// editable time box under a station (foreignObject input)
+function addTimeBox(s, get, set){
+ var fo=E('foreignObject',{x:s.x, y:s.y+BOXH+3, width:BOXW, height:26});
+ var div=document.createElement('div'); div.setAttribute('xmlns','http://www.w3.org/1999/xhtml');
+ div.style.cssText='display:flex;align-items:center;gap:4px;font-family:Inter,Arial,sans-serif';
+ var inp=document.createElement('input'); inp.type='number'; inp.step='0.25'; inp.min='0.25'; inp.value=get();
+ inp.style.cssText='width:58px;background:#0e1116;color:#e7ecf1;border:1px solid #2c3540;border-radius:5px;padding:3px 5px;font-size:11px';
+ inp.onchange=function(){ var v=parseFloat(this.value); if(!(v>0))v=0.25; set(v); this.value=v; schedule(); t=0; last=0; frame(); };
+ var lab=document.createElement('span'); lab.textContent='min'; lab.style.cssText='color:#8b97a4;font-size:10px';
+ div.appendChild(inp); div.appendChild(lab); fo.appendChild(div); svg.appendChild(fo);
+}
+
+// boxes
+var ui={};
+STN.forEach(function(s){
+ var g=E('g',{});
+ var bg=E('rect',{x:s.x,y:s.y,width:BOXW,height:BOXH,rx:9,fill:'#1a212a',stroke:'#2c3540','stroke-width':1.5});
+ g.appendChild(bg);
+ // fill (grows up from bottom)
+ var fill=E('rect',{x:s.x,y:s.y+BOXH,width:BOXW,height:0,rx:9,fill:'#1f6feb',opacity:0.85});
+ g.appendChild(fill);
+ // header
+ g.appendChild(E('rect',{x:s.x,y:s.y,width:BOXW,height:18,rx:9,fill:'#222b35'}));
+ var nm=E('text',{x:s.x+8,y:s.y+13,'font-size':11,'font-weight':700,fill:'#e7ecf1'});nm.textContent=s.name;g.appendChild(nm);
+ if(s.people){var pp=E('text',{x:s.x+BOXW-8,y:s.y+13,'text-anchor':'end','font-size':10.5,'font-weight':700,fill:'#9fb6d6'});pp.textContent=s.people+'\u{1F464}';g.appendChild(pp);}
+ var st=E('text',{x:s.x+BOXW/2,y:s.y+40,'text-anchor':'middle','font-size':11,'font-weight':700,fill:'#cdd6df'});g.appendChild(st);
+ svg.appendChild(g);
+ ui[s.id]={bg:bg,fill:fill,status:st};
+ if(s.kind==='feed') addTimeBox(s, function(){return s.busy;}, function(v){s.busy=v;});
+ else if(s.id==='fa') addTimeBox(s, function(){return ASM;}, function(v){ASM=v;});
+ else if(s.id==='fur') addTimeBox(s, function(){return PACK;}, function(v){PACK=v;});
+});
+
+var t=0, playing=false, speed=14, units=0, N=8;
+var faStart=[], faEnd=[];
+function schedule(){
+ faStart=[]; faEnd=[]; var prevEnd=0;
+ for(var u=0;u<N;u++){
+   var seatEnd=(u+1)*byId.sea.busy, armEnd=(u+1)*byId.arm.busy, backEnd=(u+1)*byId.bak.busy;
+   var kit=Math.max(seatEnd, Math.min(armEnd,backEnd));   // Seat AND (Arm or Back)
+   var st=Math.max(kit, prevEnd);
+   faStart[u]=st; faEnd[u]=st+ASM+PACK; prevEnd=faEnd[u];
+ }
+}
+schedule();
+document.getElementById('rate').textContent=(420/BUILD).toFixed(1);
+function setFill(id,frac,color){var s=byId[id],f=ui[id].fill;var h=Math.max(0,Math.min(1,frac))*BOXH;f.setAttribute('y',s.y+BOXH-h);f.setAttribute('height',h);f.setAttribute('fill',color);}
+function arrow(srcId,active){['fa'].forEach(function(){});var ln=arrowEls[srcId+'>fa'];if(ln){ln.setAttribute('stroke',active?'#3d6fb0':'#2a323c');ln.setAttribute('marker-end',active?'url(#ah)':'url(#ahf)');}}
+
+function frame(){
+ var T=t;
+ // feeders: each builds chair after chair (starts the next when done)
+ ['con','arm','bak','tre','sea'].forEach(function(id){
+  var s=byId[id], unit=Math.floor(T/s.busy);
+  if(unit>=N){ setFill(id,1,'#3d4a5a'); ui[id].status.textContent='✓ all '+N+' built'; ui[id].bg.setAttribute('stroke','#2c3540'); arrow(id,true); }
+  else { var fr=(T-unit*s.busy)/s.busy; setFill(id,fr, s.bottleneck?'#d29922':'#1f6feb'); ui[id].status.textContent='Chair '+(unit+1)+' · '+Math.round(fr*100)+'%'; ui[id].bg.setAttribute('stroke', s.bottleneck?'#d29922':'#2c3540'); arrow(id,false); }
+ });
+ // full assembly: process each chair's kit when ready, back to back
+ var fa=arrowEls['fa>fur'], cur=-1;
+ for(var u=0;u<N;u++){ if(T>=faStart[u] && T<faEnd[u]){ cur=u; break; } }
+ if(cur>=0){
+  var local=T-faStart[cur];
+  if(local<ASM){ setFill('fa',local/ASM,'#1f6feb'); ui.fa.status.textContent='Chair '+(cur+1)+' · assembling '+Math.round(local/ASM*100)+'%'; ui.fa.bg.setAttribute('stroke','#2c3540'); fa.setAttribute('stroke','#2a323c'); fa.setAttribute('marker-end','url(#ahf)'); }
+  else { setFill('fa',(local-ASM)/PACK,'#2ea043'); ui.fa.status.textContent='Chair '+(cur+1)+' · packing '+Math.round((local-ASM)/PACK*100)+'%'; ui.fa.bg.setAttribute('stroke','#2c3540'); fa.setAttribute('stroke','#2ea043'); fa.setAttribute('marker-end','url(#ah)'); }
+ } else {
+  var allDone = N>0 && T>=faEnd[N-1];
+  setFill('fa',0, allDone?'#1d3a2a':'#30363d');
+  ui.fa.status.textContent = allDone ? '✓ done' : 'Waiting for kit (Seat frame + an Arm)';
+  ui.fa.bg.setAttribute('stroke', allDone?'#2c3540':'#b3261e');
+  fa.setAttribute('stroke','#2a323c'); fa.setAttribute('marker-end','url(#ahf)');
+ }
+ // shipped count
+ var shipped=0; for(var k=0;k<N;k++) if(T>=faEnd[k]) shipped++;
+ setFill('fur', (cur>=0 && (T-faStart[cur])>=ASM) ? ((T-faStart[cur]-ASM)/PACK) : 0, '#1d3a2a');
+ ui.fur.status.textContent= shipped+' / '+N+' shipped';
+ document.getElementById('clock').textContent=Math.round(T);
+ document.getElementById('units').textContent=shipped;
+ var cyc=Math.max(byId.con.busy,byId.arm.busy,byId.bak.busy,byId.tre.busy,byId.sea.busy, ASM+PACK);
+ document.getElementById('rate').textContent=(420/cyc).toFixed(1);
+ if(N>0 && T>=faEnd[N-1]){ playing=false; document.getElementById('play').textContent='▶ Play';
+   var mins=faEnd[N-1]; document.getElementById('done').textContent='✓ Batch done: '+N+' chairs in '+Math.round(mins)+' min ('+(mins/60).toFixed(1)+' h) · steady pace ~'+(420/byId.sea.busy).toFixed(1)+'/day';
+ } else document.getElementById('done').textContent='';
+}
+var last=0;
+function loop(ts){
+ if(!playing)return;
+ if(!last)last=ts; var dt=(ts-last)/1000; last=ts;
+ t+=dt*speed;
+ if(N>0 && t>faEnd[N-1]) t=faEnd[N-1];
+ frame();
+ if(playing) requestAnimationFrame(loop);
+}
+document.getElementById('play').onclick=function(){ if(N>0 && t>=faEnd[N-1]){t=0;} playing=!playing; this.textContent=playing?'⏸ Pause':'▶ Play'; if(playing){last=0;requestAnimationFrame(loop);} };
+document.getElementById('reset').onclick=function(){ t=0;units=0;last=0;frame(); };
+document.getElementById('chairs').onchange=function(){ N=Math.max(1,Math.min(60,parseInt(this.value,10)||1)); t=0; schedule(); frame(); };
+document.getElementById('speed').oninput=function(){ speed=+this.value; document.getElementById('spd').textContent=' '+speed+' min/s'; };
+document.getElementById('spd').textContent=' 14 min/s';
+frame();
+</script>
+</body>
+</html>

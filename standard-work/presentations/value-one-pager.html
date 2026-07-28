@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Putting the Standard-Work Data to Work</title>
+<style>
+  :root{--ink:#13212e;--muted:#5e6e7d;--line:#e3e9f0;--soft:#f5f8fc;--blue:#1a56b0;--green:#1c7c3c;--amber:#c9791f;}
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);margin:0;background:#eef2f7}
+  .page{max-width:850px;margin:24px auto;background:#fff;padding:44px 52px;box-shadow:0 1px 6px rgba(0,0,0,.1)}
+  h1{font-size:27px;margin:0 0 4px;letter-spacing:-.3px}
+  .tag{color:var(--muted);font-size:14px;margin:0 0 18px}
+  .intro{font-size:16px;line-height:1.5;border-left:3px solid var(--blue);padding:2px 0 2px 14px;color:var(--ink);margin:0 0 22px}
+  .item{display:grid;grid-template-columns:30px 1fr;gap:12px;padding:15px 0;border-top:1px solid var(--line)}
+  .n{width:28px;height:28px;border-radius:50%;background:var(--blue);color:#fff;font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center}
+  h2{font-size:17px;margin:2px 0 6px}
+  p{font-size:14.5px;line-height:1.5;margin:5px 0}
+  .data{background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:13.5px;margin:7px 0;color:var(--ink)}
+  .data b{color:var(--blue)}
+  .do{font-size:14.5px}
+  .do b{color:var(--green)}
+  .k{font-weight:700}
+  .foot{margin-top:24px;border-top:2px solid var(--ink);padding-top:12px;font-size:14.5px}
+  .foot .big{font-weight:800;color:var(--green)}
+  .src{color:var(--muted);font-size:12px;margin-top:14px}
+  @media print{body{background:#fff}.page{box-shadow:none;margin:0;max-width:none;padding:28px 32px}}
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Putting the Standard-Work Data to Work</h1>
+  <p class="tag">Sola Lounge · how the times I collected turn into decisions · 2026-06-16</p>
+
+  <p class="intro">The data isn't a report — it's a tool for making line decisions (headcount, tooling, part quality)
+  from <span class="k">measured time</span> instead of guesswork. Five specific ways it pays off:</p>
+
+  <div class="item">
+    <div class="n">1</div>
+    <div>
+      <h2>Lock in what already works as a written standard</h2>
+      <div class="data">Trellis Seat Support: <b>30 min solo → ~15 min with two people.</b> Connector feeder kept ahead in a buffer → the line never waits on connectors.</div>
+      <p class="do"><b>Do:</b> Make it a posted rule — <b>two people on Trellis Seat Support on Sola-heavy days</b>, and keep the connector buffer stocked ahead. Protects the gains we already get by habit.</p>
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="n">2</div>
+    <div>
+      <h2>Point improvement effort at the step that actually sets the clock</h2>
+      <div class="data">One sofa = <b>~75 min</b> build / <b>130 min</b> labor. The two frame steps (Frame Sub-Assembly 19:00 + Frame Assembly 19:00 = <b>38 min</b>) are more than the rest of the critical path combined.</div>
+      <p class="do"><b>Do:</b> Build the two frame sub-pieces <b>in parallel</b> (they're independent → ~8.5 min, free) and add a <b>frame-alignment fixture</b>. Build time <b>~75 → ~60 min</b> with no wasted effort on steps that don't gate the line.</p>
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="n">3</div>
+    <div>
+      <h2>Expose the rework that shouldn't exist</h2>
+      <div class="data">Connector Pre-Assembly is ~11–13 min of <b>swapping wrong screws for correct ones</b> (1012943 → 40204) plus a re-orientation — every Sola, every config.</div>
+      <p class="do"><b>Do:</b> Take the numbers to purchasing — <b>if connectors arrive with the correct screws, this step nearly disappears</b> across the whole Sola family. Data turns a vague complaint into a costed supplier ask.</p>
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="n">4</div>
+    <div>
+      <h2>One source of truth for staffing &amp; throughput</h2>
+      <div class="data">Every step is timed, with dependencies, sizes, and shared steps mapped — so headcount, line balance, and units/shift come straight from the model.</div>
+      <p class="do"><b>Do:</b> Use it to answer "how many people / how many per shift" with a number, and reuse the <b>shared steps</b> (connectors, frame prep) so a fix on one config improves all three — and the same method extends to Meritage and the next product.</p>
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="n">5</div>
+    <div>
+      <h2>Keep it current and complete</h2>
+      <div class="data">Times already corrected (Trellis 51 → 30). One step on the Base config still blank; configs don't fully line up for a clean comparison yet.</div>
+      <p class="do"><b>Do:</b> Finish the last few entries and update times as the floor changes, so the data stays the trusted basis for decisions instead of going stale.</p>
+    </div>
+  </div>
+
+  <div class="foot">
+    Bottom line: <span class="big">measured time, not guesswork</span> — standards locked in, effort aimed at the real constraint, rework pushed back to the supplier, and one model that answers staffing for every config and product.
+  </div>
+  <p class="src">All figures from the Standard Work data (Sola Lounge, Right Arm, medium size), run through the build simulation. Estimates to confirm on the floor.</p>
+</div>
+</body>
+</html>

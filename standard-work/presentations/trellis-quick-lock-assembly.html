@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quick-Lock Trellis — Assembly Drawing</title>
+<style>
+  body{margin:0;background:#586069;font-family:Arial, "Helvetica Neue", sans-serif}
+  .sheet{max-width:1320px;margin:16px auto;background:#fff;box-shadow:0 2px 14px rgba(0,0,0,.45)}
+  svg{display:block;width:100%;height:auto}
+  @media print{body{background:#fff}.sheet{box-shadow:none;margin:0;max-width:none}}
+</style>
+</head>
+<body>
+<div class="sheet">
+<svg id="d" viewBox="0 0 1320 980" font-family="Arial, sans-serif"></svg>
+</div>
+<script>
+const NS="http://www.w3.org/2000/svg";
+const svg=document.getElementById("d");
+function E(tag,attrs,parent){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);(parent||svg).appendChild(e);return e;}
+function T(x,y,s,o={},parent){const e=E("text",{x,y,"font-size":o.fs||11,"font-weight":o.fw||"normal","text-anchor":o.ta||"start",fill:o.fill||"#111","letter-spacing":o.ls||0},parent);e.textContent=s;return e;}
+function L(x1,y1,x2,y2,o={},parent){return E("line",{x1,y1,x2,y2,stroke:o.s||"#111","stroke-width":o.w||1,"stroke-dasharray":o.d||"",fill:"none","marker-end":o.me||"","marker-start":o.ms||""},parent);}
+
+// ---- markers ----
+const defs=E("defs",{});
+function marker(id,path,fill){const m=E("marker",{id,markerWidth:12,markerHeight:12,refX:9,refY:4,orient:"auto"},defs);E("path",{d:path,fill},m);}
+marker("a","M0 1 L9 4 L0 7 Z","#111");
+const ms=E("marker",{id:"as",markerWidth:12,markerHeight:12,refX:0,refY:4,orient:"auto"},defs);E("path",{d:"M9 1 L0 4 L9 7 Z",fill:"#111"},ms);
+const ga=E("marker",{id:"ga",markerWidth:13,markerHeight:13,refX:9,refY:4.5,orient:"auto"},defs);E("path",{d:"M0 0 L10 4.5 L0 9 Z",fill:"#1c7c3c"},ga);
+
+// ---- isometric engine ----
+function mkIso(ox,oy,s){const c=Math.cos(Math.PI/6),h=0.5;
+  return (x,y,z)=>[ox+(x-y)*s*c, oy+(x+y)*s*h - z*s];}
+const PAL={
+ steel:{t:"#d3dae1",l:"#9ba7b3",r:"#74808d",e:"#3a434d"},
+ slat :{t:"#c6ced6",l:"#8f9ba7",r:"#6a7682",e:"#39424b"},
+ gold :{t:"#ecc878",l:"#d0a64d",r:"#a87f31",e:"#6d5019"},
+ stud :{t:"#dde3e8",l:"#b3bcc5",r:"#8b95a0",e:"#444c54"},
+ base :{t:"#eef1f4",l:"#d4dae1",r:"#bcc4cd",e:"#9aa3ad"}
+};
+function poly(pts,fill,o={},parent){E("polygon",{points:pts.map(p=>p.join(",")).join(" "),fill,stroke:o.s||"#2b333b","stroke-width":o.w||1,"stroke-linejoin":"round","fill-opacity":o.fo||1},parent);}
+// draw a box; faces: top, +y(front-left)=left, +x(front-right)=right
+function box(iso,x,y,z,dx,dy,dz,pal,g){
+  const P=(a,b,c)=>iso(a,b,c);
+  // right face (x+dx)
+  poly([P(x+dx,y,z),P(x+dx,y+dy,z),P(x+dx,y+dy,z+dz),P(x+dx,y,z+dz)],pal.r,{s:pal.e},g);
+  // left/front face (y+dy)
+  poly([P(x,y+dy,z),P(x+dx,y+dy,z),P(x+dx,y+dy,z+dz),P(x,y+dy,z+dz)],pal.l,{s:pal.e},g);
+  // top face
+  poly([P(x,y,z+dz),P(x+dx,y,z+dz),P(x+dx,y+dy,z+dz),P(x,y+dy,z+dz)],pal.t,{s:pal.e},g);
+}
+// puck / cam (octagon prism) centered at (cx,cy), base z, radius r, height hh
+function puck(iso,cx,cy,z,r,hh,pal,g,slot){
+  const N=10,top=[],bot=[];
+  for(let i=0;i<N;i++){const a=Math.PI*2*i/N;top.push(iso(cx+r*Math.cos(a),cy+r*Math.sin(a),z+hh));bot.push(iso(cx+r*Math.cos(a),cy+r*Math.sin(a),z));}
+  // side faces (only draw front-ish few for shading)
+  for(let i=0;i<N;i++){const j=(i+1)%N;const a=(i+0.5)/N;poly([bot[i],bot[j],top[j],top[i]], a>0.0&&a<0.6?pal.r:pal.l,{s:pal.e,w:0.7},g);}
+  poly(top,pal.t,{s:pal.e},g);
+  if(slot){const p1=iso(cx-r*0.7,cy,z+hh),p2=iso(cx+r*0.7,cy,z+hh);L(p1[0],p1[1],p2[0],p2[1],{s:pal.e,w:2},g);}
+}
+function balloon(x,y,n,lx,ly,parent){
+  L(lx,ly,x,y,{w:0.8},parent);E("circle",{cx:lx,cy:ly,r:2.4,fill:"#111"},parent);
+  E("circle",{cx:x,cy:y,r:12,fill:"#fff",stroke:"#111","stroke-width":1.3},parent);
+  T(x,y+4,n,{ta:"middle",fw:"bold",fs:13},parent);
+}
+
+/* ===== SHEET FRAME ===== */
+E("rect",{x:8,y:8,width:1304,height:964,fill:"none",stroke:"#111","stroke-width":2.5});
+E("rect",{x:18,y:18,width:1284,height:944,fill:"none",stroke:"#111","stroke-width":1});
+T(34,44,"QUICK-LOCK TRELLIS — SEAT SUPPORT  ·  ASSEMBLY & DETAIL",{fs:17,fw:"bold",ls:0.5});
+T(34,62,"Drop-in slats, captive 1/4-turn fastener, keyhole rails — no welding, fully serviceable",{fs:11,fill:"#555"});
+L(28,72,1292,72,{w:1});
+
+/* ===== HERO: EXPLODED JOINT ===== */
+T(40,100,"EXPLODED — ONE SLAT-TO-RAIL JOINT",{fs:13,fw:"bold"});
+const gE=E("g",{});
+const isoE=mkIso(300,430,30);
+// rail segment (along X)
+box(isoE,0,0,0, 6,2.6,1.0, PAL.steel,gE);
+// keyhole on rail top (dark): big hole + slot in +y
+(()=>{const cx=3,cy=1.0,z=1.0;const N=12,pts=[];for(let i=0;i<N;i++){const a=Math.PI*2*i/N;pts.push(isoE(cx+0.5*Math.cos(a),cy+0.5*Math.sin(a),z));}poly(pts,"#2c343c",{s:"#2c343c",w:0.5},gE);
+  poly([isoE(cx-0.22,cy,z),isoE(cx+0.22,cy,z),isoE(cx+0.22,cy+1.0,z),isoE(cx-0.22,cy+1.0,z)],"#2c343c",{s:"#2c343c",w:0.5},gE);})();
+// cam fastener exploded BELOW rail
+puck(isoE,3,1.0,-2.6,0.55,0.45,PAL.gold,gE,true);
+// stud exploded between (head + shank)
+box(isoE,2.75,0.75,1.7, 0.5,0.5,1.1, PAL.stud,gE);     // shank
+box(isoE,2.6,0.6,1.4, 0.8,0.8,0.3, PAL.stud,gE);        // head (wider, below shank)
+// slat exploded ABOVE
+box(isoE,2.3,-1.4,4.2, 1.4,4.0,1.3, PAL.slat,gE);
+// assembly path (dashed vertical, screen space) through centerline
+const cTop=isoE(3,1.0,9.0), cBot=isoE(3,1.0,-3.4);
+L(cTop[0],cTop[1],cBot[0],cBot[1],{d:"3 4",w:0.8,s:"#1c7c3c",me:"url(#ga)"},gE);
+T(cBot[0]+8,cBot[1]+4,"assembly direction",{fs:9,fill:"#1c7c3c"},gE);
+svg.appendChild(gE);
+// balloons
+balloon(120,150,"2", isoE(2.9,0.6,5.4)[0], isoE(2.9,0.6,5.4)[1],gE); // slat
+balloon(120,210,"4", isoE(3,1.0,2.2)[0], isoE(3,1.0,2.2)[1],gE);     // stud
+balloon(120,300,"1", isoE(0.6,2.0,0.6)[0], isoE(0.6,2.0,0.6)[1],gE); // rail
+balloon(120,370,"3", isoE(3,1.0,-2.3)[0], isoE(3,1.0,-2.3)[1],gE);   // cam
+
+/* ===== ENGAGED SECTION ===== */
+T(560,100,"JOINT — ENGAGED (section)",{fs:13,fw:"bold"});
+const gS=E("g",{});
+const ox=560,oy=300,sc=42;
+// rail section (hatched)
+E("rect",{x:ox,y:oy,width:300,height:34,fill:"url(#h)",stroke:"#111","stroke-width":1.4},gS);
+const hp=E("pattern",{id:"h",width:7,height:7,patternUnits:"userSpaceOnUse",patternTransform:"rotate(45)"},defs);E("line",{x1:0,y1:0,x2:0,y2:7,stroke:"#111","stroke-width":0.7},hp);
+T(ox+305,oy+20,"rail",{fs:10,fill:"#555"},gS);
+// slat above
+E("rect",{x:ox+120,y:oy-78,width:34,height:78,fill:"#c6ced6",stroke:"#111","stroke-width":1.4},gS);
+T(ox+158,oy-60,"slat",{fs:10,fill:"#555"},gS);
+// stud through rail, head captured beneath
+E("rect",{x:ox+131,y:oy,width:12,height:34,fill:"#8b95a0",stroke:"#111","stroke-width":1},gS);  // shank in slot
+E("rect",{x:ox+122,y:oy+34,width:30,height:11,fill:"#8b95a0",stroke:"#111","stroke-width":1.2},gS); // head under rail
+T(ox+158,oy+44,"stud head — retained under rail",{fs:9.5,fill:"#555"},gS);
+// cam locked below head, bar across
+puckSection(ox+137,oy+58,gS);
+function puckSection(cx,cy,g){E("ellipse",{cx,cy,rx:18,ry:9,fill:"#ecc878",stroke:"#6d5019","stroke-width":1.2},g);E("rect",{x:cx-22,y:cy-3,width:44,height:6,fill:"#a87f31",stroke:"#6d5019","stroke-width":1},g);T(cx+30,cy+4,"1/4-turn cam = LOCKED",{fs:9.5,fill:"#1c7c3c"},g);}
+// engagement note
+L(ox+137,oy+34,ox+137,oy+50,{w:0.7,me:"url(#a)"},gS);
+T(ox,oy-92,"Head passes the big hole, slat slides, head trapped under rail; cam turned 90° = captured.",{fs:10,fill:"#333"},gS);
+
+/* ===== BOM ===== */
+const bx=900,by=96; T(bx,by-6,"BILL OF MATERIALS",{fs:12,fw:"bold"});
+const rows=[["ITEM","DESCRIPTION","QTY"],
+["1","RAIL — FLAT BAR W/ KEYHOLE SLOTS (laser/punch)","2"],
+["2","SLAT — W/ 2 PRESS-IN SHOULDER STUDS","N (per size)"],
+["3","FASTENER — 1/4-TURN CAM (captive)","2 / slat"],
+["4","SHOULDER STUD — part of item 2","2 / slat"],
+["5","ASSY FIXTURE — locates rail spacing + pitch","1 (tooling)"]];
+const cw=[40,300,86], rh=22;
+rows.forEach((r,i)=>{let cx=bx;r.forEach((c,j)=>{E("rect",{x:cx,y:by+i*rh,width:cw[j],height:rh,fill:i==0?"#e9eef4":"#fff",stroke:"#111","stroke-width":0.8});T(cx+5,by+i*rh+15,c,{fs:9.5,fw:i==0?"bold":"normal"});cx+=cw[j];});});
+
+/* ===== ASSEMBLY SEQUENCE ===== */
+T(40,560,"ASSEMBLY SEQUENCE",{fs:13,fw:"bold"});
+L(28,572,1292,572,{w:0.8});
+const scenes=[
+ ["1","RAILS INTO FIXTURE","Fixture pins set rail spacing & slat pitch — no measuring."],
+ ["2","DROP SLATS IN","Studs (captive in slat) fall through the keyholes; nudge to seat."],
+ ["3","ONE 1/4-TURN / END","Driver runs the row: 2 quarter-turns per slat. No loose screws."],
+ ["4","LIFT OUT / SERVICE","Finished trellis lifts free. Broken slat = 1/4-turn release, swap."]
+];
+scenes.forEach((sc,i)=>{
+  const X=70+i*312, baseY=730; const g=E("g",{});
+  E("rect",{x:X-30,y:592,width:286,height:300,fill:"#fbfcfd",stroke:"#e1e7ee","stroke-width":1,rx:8},g);
+  T(X-18,614,sc[0]+" — "+sc[1],{fs:12,fw:"bold"},g);
+  const iso=mkIso(X+95,baseY,15);
+  // fixture base
+  box(iso,-1,-1,-0.6, 9,7,0.5, PAL.base,g);
+  // two rails along X
+  box(iso,0,0.4,0, 8,0.9,0.7, PAL.steel,g);
+  box(iso,0,5.0,0, 8,0.9,0.7, PAL.steel,g);
+  if(i===0){ // locating pins
+    [1,4,7].forEach(px=>{box(iso,px,0.6,0.7,0.3,0.3,0.7,PAL.stud,g);box(iso,px,5.2,0.7,0.3,0.3,0.7,PAL.stud,g);});
+    T(X-18,636,sc[2],{fs:9.5,fill:"#555"},g);
+  }
+  if(i>=1){ // slats across
+    [1,3,5,6.6].forEach(px=>{box(iso,px,0.2,0.7, 0.7,5.9,0.7, PAL.slat,g);});
+    if(i===1){[1,3,5,6.6].forEach(px=>{const p=iso(px+0.35,3,5.0);L(p[0],p[1]-4,p[0],p[1]+14,{w:1,s:"#1c7c3c",me:"url(#ga)"},g);});T(X-18,636,sc[2],{fs:9.5,fill:"#555"},g);}
+  }
+  if(i===2){ // cams + driver
+    [1,3,5,6.6].forEach(px=>{[0.85,5.45].forEach(py=>{const p=iso(px+0.35,py,1.45);E("circle",{cx:p[0],cy:p[1],r:3.4,fill:"#1c7c3c",stroke:"#0f5024","stroke-width":0.6},g);});});
+    // driver icon
+    const dp=iso(5.35,0.85,3.6);E("rect",{x:dp[0]-5,y:dp[1]-46,width:10,height:40,fill:"#333",rx:2},g);E("rect",{x:dp[0]-7,y:dp[1]-8,width:14,height:10,fill:"#c9791f",rx:2},g);E("path",{d:`M${dp[0]} ${dp[1]+2} l-3 -8 l6 0 z`,fill:"#777"},g);
+    E("path",{d:`M${dp[0]+12} ${dp[1]-30} a10 10 0 0 1 6 14`,fill:"none",stroke:"#1a56b0","stroke-width":1.4,"marker-end":"url(#a)"},g);
+    T(X-18,636,sc[2],{fs:9.5,fill:"#555"},g);
+  }
+  if(i===3){ // lift out
+    const p=iso(4,3,5.5);L(p[0],p[1]+6,p[0],p[1]-26,{w:1.6,s:"#1c7c3c",me:"url(#ga)"},g);
+    T(X-18,636,sc[2],{fs:9.5,fill:"#555"},g);
+    T(X-18,872,"≈ 2 sec / fastener vs ~30 sec / screw",{fs:10,fw:"bold",fill:"#1c7c3c"},g);
+  }
+});
+
+/* ===== ORTHO TOP (mini, dimensioned) — placed under hero ===== */
+// (kept compact at left, above sequence)
+/* ===== TITLE BLOCK ===== */
+const tx=900,ty=905;
+E("rect",{x:tx,y:ty,width:392,height:52,fill:"none",stroke:"#111","stroke-width":1.2});
+L(tx,ty+26,tx+392,ty+26,{w:0.8});L(tx+250,ty,tx+250,ty+26,{w:0.8});L(tx+150,ty+26,tx+150,ty+52,{w:0.8});L(tx+280,ty+26,tx+280,ty+52,{w:0.8});
+T(tx+8,ty+17,"QUICK-LOCK TRELLIS / SEAT SUPPORT",{fs:11,fw:"bold"});
+T(tx+258,ty+17,"SOLA LOUNGE",{fs:10});
+T(tx+8,ty+39,"DWG: concept",{fs:9});T(tx+8,ty+49,"all 3 Sola configs",{fs:8,fill:"#555"});
+T(tx+158,ty+39,"SCALE",{fs:8,fill:"#555"});T(tx+158,ty+49,"NTS",{fs:10});
+T(tx+288,ty+39,"REV",{fs:8,fill:"#555"});T(tx+288,ty+49,"B — concept",{fs:10});
+
+/* ===== NOTES + IMPACT ===== */
+const nx=40,ny=905;
+T(nx,ny+4,"NOTES:",{fs:11,fw:"bold"});
+T(nx+50,ny+4,"1. No welds — every slat removable.  2. 1 cam + 1 stud per slat end (replaces 4 screws).  3. Keyhole rails reuse existing flat bar.",{fs:9.5});
+T(nx+50,ny+18,"4. Fixture self-locates pitch & spacing.  5. Dims/hardware per engineering.  6. CONCEPT — not to scale.",{fs:9.5});
+E("rect",{x:nx,y:ny+28,width:560,height:30,fill:"#eef8f1",stroke:"#1c7c3c","stroke-width":1});
+T(nx+10,ny+48,"IMPACT:  Seat Support 32:30 → ~10–12 min  ·  ~20 min/sofa (~16% Sola labor)  ·  all 3 configs",{fs:11,fw:"bold",fill:"#1c7c3c"});
+</script>
+</body>
+</html>

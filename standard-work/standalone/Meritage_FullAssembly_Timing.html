@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Meritage — Full Assembly Timing</title>
+<style>
+  body{margin:0;background:#f1efe9;font-family:"Inter","Segoe UI",Arial,sans-serif;color:#1c2024;padding:26px}
+  .wrap{max-width:1180px;margin:0 auto}
+  h1{font-size:23px;color:#15263a;margin:0 0 2px}
+  .sub{color:#5d6b78;font-size:14px;margin:0 0 20px}
+  .card{background:#fff;border:1px solid #e4e2db;border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.05),0 8px 24px rgba(0,0,0,.05);padding:18px 20px;margin-bottom:20px}
+  h2{font-size:15px;color:#15263a;margin:0 0 12px;letter-spacing:.01em}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:#5d6b78;margin-top:8px}
+  .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  svg{width:100%;height:auto;display:block}
+  .note{font-size:12.5px;color:#5d6b78;margin:10px 2px 0;line-height:1.5}
+  .note b{color:#15263a}
+  .flow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px}
+  .fb{border:1px solid #cdd5dd;border-radius:8px;padding:8px 10px;background:#fafbfc;min-width:96px;text-align:center}
+  .fb .t{font-weight:700;color:#15263a}
+  .fb .p{font-size:11px;color:#6b7785}
+  .fb.fa{background:#fff4e6;border-color:#f0cf9b}
+  .fb.fg{background:#eaf7ef;border-color:#bfe3cd}
+  .arrow{color:#9aa3ad;font-size:16px}
+  .col{display:flex;flex-direction:column;gap:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Meritage 3-Seater — Full Assembly timing &amp; packing alternation</h1>
+  <p class="sub">My understanding, to confirm. Times in minutes. Feeders run in parallel; Full Assembly starts when Seat Frame + (one Arm/Back frame) are ready.</p>
+
+  <!-- FLOW -->
+  <div class="card">
+    <h2>The line (people per station)</h2>
+    <div class="flow">
+      <div class="fb"><div class="t">1 · Connectors</div><div class="p">1 person · 19.25</div></div>
+      <span class="arrow">→</span>
+      <div class="col">
+        <div class="fb"><div class="t">2 · Arms</div><div class="p">2 people · 64</div></div>
+        <div class="fb"><div class="t">3 · Back frame</div><div class="p">1 person · 43.5</div></div>
+        <div class="fb"><div class="t">4 · Trellis</div><div class="p">1 person · 22.5</div></div>
+        <div class="fb"><div class="t">5 · Seat frame</div><div class="p">1 person · 47</div></div>
+      </div>
+      <span class="arrow">→</span>
+      <div class="fb fa"><div class="t">6 · Full assembly</div><div class="p">2 people · ~58</div></div>
+      <span class="arrow">→</span>
+      <div class="fb fg"><div class="t">7 · Furniture / Pack</div><div class="p">0 dedicated · 18</div></div>
+    </div>
+    <div class="note">The Cart feeds 1–5. Stations 2–5 converge into Full Assembly; Full Assembly → Furniture (packing).</div>
+  </div>
+
+  <!-- GANTT: one unit -->
+  <div class="card">
+    <h2>One unit — when each feeder finishes &amp; when assembly can start</h2>
+    <svg viewBox="0 0 1160 300" preserveAspectRatio="xMidYMid meet">
+      <!-- scale: x = 150 + min*18 ; minutes 0..50 shown, then assembly -->
+      <!-- gridlines every 10 min -->
+      <!-- axis -->
+      <g font-size="11" fill="#9aa3ad">
+        <!-- vertical gridlines 0..80 step 10 -->
+        <line x1="150" y1="36" x2="150" y2="250" stroke="#e8e6df"/>
+        <text x="150" y="266" text-anchor="middle">0</text>
+        <line x1="270" y1="36" x2="270" y2="250" stroke="#eef0ea"/><text x="270" y="266" text-anchor="middle">10</text>
+        <line x1="390" y1="36" x2="390" y2="250" stroke="#eef0ea"/><text x="390" y="266" text-anchor="middle">20</text>
+        <line x1="510" y1="36" x2="510" y2="250" stroke="#eef0ea"/><text x="510" y="266" text-anchor="middle">30</text>
+        <line x1="630" y1="36" x2="630" y2="250" stroke="#eef0ea"/><text x="630" y="266" text-anchor="middle">40</text>
+        <line x1="750" y1="36" x2="750" y2="250" stroke="#eef0ea"/><text x="750" y="266" text-anchor="middle">50</text>
+        <line x1="870" y1="36" x2="870" y2="250" stroke="#eef0ea"/><text x="870" y="266" text-anchor="middle">60</text>
+        <line x1="990" y1="36" x2="990" y2="250" stroke="#eef0ea"/><text x="990" y="266" text-anchor="middle">70</text>
+        <line x1="1110" y1="36" x2="1110" y2="250" stroke="#eef0ea"/><text x="1110" y="266" text-anchor="middle">80</text>
+        <text x="630" y="290" text-anchor="middle" fill="#5d6b78">minutes into the build</text>
+      </g>
+      <!-- takt line @42 : x=150+42*12=654 -->
+      <line x1="654" y1="30" x2="654" y2="252" stroke="#1a56b0" stroke-width="1.4" stroke-dasharray="5 4"/>
+      <text x="654" y="26" text-anchor="middle" font-size="11" font-weight="700" fill="#1a56b0">takt 42</text>
+      <!-- kit ready @47 : x=150+47*12=714 -->
+      <line x1="714" y1="30" x2="714" y2="252" stroke="#2f7d52" stroke-width="2"/>
+      <text x="800" y="26" text-anchor="middle" font-size="11" font-weight="800" fill="#2f7d52">KIT READY @47 → assembly starts</text>
+
+      <!-- bars: scale 12px/min, x0=150 -->
+      <!-- Connectors 0-19.25 -->
+      <g font-size="12">
+        <text x="142" y="56" text-anchor="end" fill="#1c2024">Connectors</text>
+        <rect x="150" y="44" width="231" height="18" rx="3" fill="#9aa3ad"/><text x="388" y="57" fill="#6b7785" font-size="11">19.3</text>
+
+        <text x="142" y="86" text-anchor="end" fill="#1c2024">Trellis</text>
+        <rect x="150" y="74" width="270" height="18" rx="3" fill="#7a86c2"/><text x="427" y="87" fill="#6b7785" font-size="11">22.5</text>
+
+        <text x="142" y="116" text-anchor="end" fill="#1c2024">Arms (2 ppl)</text>
+        <rect x="150" y="104" width="384" height="18" rx="3" fill="#15263a"/><text x="541" y="117" fill="#6b7785" font-size="11">32</text>
+
+        <text x="142" y="146" text-anchor="end" fill="#1c2024">Back frame</text>
+        <rect x="150" y="134" width="522" height="18" rx="3" fill="#3f6d8e"/><text x="679" y="147" fill="#6b7785" font-size="11">43.5</text>
+
+        <text x="142" y="176" text-anchor="end" fill="#1c2024" font-weight="700">Seat frame</text>
+        <rect x="150" y="164" width="564" height="18" rx="3" fill="#b3502e"/><text x="722" y="177" fill="#b3502e" font-size="11" font-weight="700">47 ◄ last feeder</text>
+
+        <text x="142" y="206" text-anchor="end" fill="#1c2024" font-weight="700">Full assembly (2 ppl)</text>
+        <rect x="714" y="194" width="348" height="18" rx="3" fill="#c98a2e"/><text x="1070" y="207" fill="#6b7785" font-size="11">~29</text>
+      </g>
+    </svg>
+    <div class="legend">
+      <span><i style="background:#b3502e"></i>Seat frame = last required feeder (gates the start)</span>
+      <span><i style="background:#c98a2e"></i>Full assembly (runs straight through — kit is fully ready)</span>
+      <span><i style="background:#2f7d52"></i>Kit-ready line</span>
+    </div>
+    <div class="note">Because Seat frame (47) finishes <b>after</b> Arms (32), Back frame (43.5) and Trellis (22.5), the whole kit is ready at <b>t = 47</b> — so Full Assembly <b>never starves mid-build</b>. The real gap is <b>before</b> 47: the 2 Full-Assembly people have nothing to assemble yet.</div>
+  </div>
+
+  <!-- RHYTHM -->
+  <div class="card">
+    <h2>What the 2 Full-Assembly people do each ~47-min cycle</h2>
+    <svg viewBox="0 0 1160 130" preserveAspectRatio="xMidYMid meet">
+      <g font-size="12">
+        <text x="142" y="46" text-anchor="end" fill="#1c2024" font-weight="700">FA pair</text>
+        <!-- assemble 29: x 150..498 (29*12=348) -->
+        <rect x="150" y="34" width="348" height="26" rx="4" fill="#c98a2e"/>
+        <text x="324" y="51" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">Assemble unit  (~29)</text>
+        <!-- pack 18: 498..714 (18*12=216) -->
+        <rect x="498" y="34" width="216" height="26" rx="4" fill="#2f7d52"/>
+        <text x="606" y="51" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">Pack prev. unit (~18)</text>
+        <!-- bracket -->
+        <line x1="150" y1="72" x2="714" y2="72" stroke="#9aa3ad"/>
+        <line x1="150" y1="68" x2="150" y2="76" stroke="#9aa3ad"/><line x1="714" y1="68" x2="714" y2="76" stroke="#9aa3ad"/>
+        <text x="432" y="90" text-anchor="middle" fill="#5d6b78" font-size="12">one cycle ≈ 47 min  ·  ~0 idle</text>
+      </g>
+    </svg>
+    <div class="note"><b>Switch to packing the moment they hand off an assembled unit.</b> The next kit won't be ready for ~18 min (Seat frame is still building), and packing takes ~18 min — so it fills the gap almost perfectly: <b>assemble → pack → assemble</b>, triggered by the Seat-frame "done" signal.</div>
+    <div class="note"><b>Bottleneck = Seat frame at 47 min → ~9 units/day, just over the 42-min takt.</b> Packing already absorbs the FA pair's spare time, so to get under takt the cleaner move is a <b>third hand on Seat frame</b> (not more help at assembly).</div>
+  </div>
+
+  <p class="note" style="text-align:center">Confirm: (1) connector count per feeder, (2) where legs (#3+#9, 16 min) are done — those shift the start times.</p>
+</div>
+</body>
+</html>

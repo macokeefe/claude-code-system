@@ -1,0 +1,1152 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { api, formatTime, formatLong } from '@backend';
+import { simulateBuild } from '../../../shared/simulate.js';
+import { simulateLine } from '../../../shared/simulateLine.js';
+import { sizeLabel } from '../sizeLabel.js';
+
+// Status colors for the floor ring under each bench
+const RING = { idle: 0x8e98a6, active: 0x1fa84f, done: 0x1a56b0 };
+
+function shortName(s) {
+  const n = (s.tag_id ? s.tag_name : s.name) || '';
+  return n.length > 22 ? n.slice(0, 21) + '…' : n;
+}
+function fullName(s) { return (s.tag_id ? s.tag_name : s.name) || ''; }
+
+/* ---------- materials & textures (modeled on the real floor photos) ---------- */
+
+function concreteTexture() {
+  // Polished light-grey concrete: subtle variation only, no heavy staining —
+  // reads as a clean, modern plant in presentations.
+  const c = document.createElement('canvas'); c.width = c.height = 512;
+  const x = c.getContext('2d');
+  x.fillStyle = '#cdd1d4'; x.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 120; i++) {
+    const r = 20 + Math.random() * 80;
+    const g = 196 + Math.floor(Math.random() * 24);
+    x.fillStyle = `rgba(${g},${g},${g + 3},${0.03 + Math.random() * 0.05})`;
+    x.beginPath(); x.arc(Math.random() * 512, Math.random() * 512, r, 0, 7); x.fill();
+  }
+  // faint saw-cut control joints
+  x.strokeStyle = 'rgba(140,144,148,0.25)'; x.lineWidth = 1.5;
+  for (const p of [128, 256, 384]) {
+    x.beginPath(); x.moveTo(p, 0); x.lineTo(p, 512); x.stroke();
+    x.beginPath(); x.moveTo(0, p); x.lineTo(512, p); x.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(8, 8);
+  return t;
+}
+
+const MAT = {};
+function initMats() {
+  // Muted, premium palette — same real-floor elements, boardroom finish.
+  MAT.pine = new THREE.MeshStandardMaterial({ color: 0xc9a06c, roughness: 0.8 });        // bench lumber
+  MAT.benchTop = new THREE.MeshStandardMaterial({ color: 0xf4f1e9, roughness: 0.9 });    // white padded top
+  MAT.trimBlue = new THREE.MeshStandardMaterial({ color: 0x2e4a7a, roughness: 0.75 });   // single navy trim
+  MAT.trimRed = MAT.trimBlue;                                                            // no alternating colors
+  MAT.binYellow = new THREE.MeshStandardMaterial({ color: 0xd3aa3a, roughness: 0.7 });
+  MAT.binBlue = new THREE.MeshStandardMaterial({ color: 0x33598f, roughness: 0.7 });
+  MAT.cherry = new THREE.MeshStandardMaterial({ color: 0x8a5a32, roughness: 0.4, metalness: 0.3 }); // frame finish
+  MAT.chrome = new THREE.MeshStandardMaterial({ color: 0xdce0e4, roughness: 0.22, metalness: 0.9 });
+  MAT.mat = new THREE.MeshStandardMaterial({ color: 0x32363c, roughness: 0.95 });        // anti-fatigue mat
+  MAT.matEdge = new THREE.MeshStandardMaterial({ color: 0xc7b53e, roughness: 0.9 });
+  MAT.tape = new THREE.MeshStandardMaterial({ color: 0xd9c544, roughness: 0.85 });
+  MAT.column = new THREE.MeshStandardMaterial({ color: 0xf0f0ee, roughness: 0.85 });
+  MAT.rackPost = new THREE.MeshStandardMaterial({ color: 0x2b5fa8, roughness: 0.6, metalness: 0.2 }); // blue racking
+  MAT.rackBeam = new THREE.MeshStandardMaterial({ color: 0xd2762a, roughness: 0.6, metalness: 0.2 }); // orange beams
+  MAT.box = new THREE.MeshStandardMaterial({ color: 0xcbb08a, roughness: 0.95 });        // cardboard
+  MAT.boxWhite = new THREE.MeshStandardMaterial({ color: 0xf2f2ef, roughness: 0.9 });
+  MAT.hose = new THREE.MeshStandardMaterial({ color: 0xa83d33, roughness: 0.55 });
+  MAT.shirt = new THREE.MeshStandardMaterial({ color: 0x767d88, roughness: 0.9 });       // crew gray tee
+  MAT.pants = new THREE.MeshStandardMaterial({ color: 0x31363f, roughness: 0.9 });
+  MAT.skin = new THREE.MeshStandardMaterial({ color: 0xc89576, roughness: 0.8 });
+  MAT.steel = new THREE.MeshStandardMaterial({ color: 0x9aa0a8, roughness: 0.5, metalness: 0.6 });
+  MAT.brass = new THREE.MeshStandardMaterial({ color: 0xb89a3a, roughness: 0.35, metalness: 0.8 });
+}
+
+function makeStationLabel(idx, stepNames, timeStr) {
+  // Executive station sign: white card, navy header with STATION n and the
+  // station's total time, then up to three step lines in heavy dark type.
+  const W = 920, H = 380;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  x.fillStyle = 'rgba(10,16,26,0.18)'; x.beginPath(); x.roundRect(14, 20, W - 22, H - 26, 22); x.fill();
+  x.fillStyle = '#ffffff'; x.beginPath(); x.roundRect(8, 10, W - 26, H - 32, 22); x.fill();
+  x.fillStyle = '#1d3a66'; x.beginPath(); x.roundRect(8, 10, W - 26, 88, 22); x.fill();
+  x.fillStyle = '#1d3a66'; x.fillRect(8, 60, W - 26, 38); // square off header bottom
+  x.fillStyle = '#ffffff'; x.font = '900 58px Arial, sans-serif'; x.textAlign = 'left';
+  x.fillText(`STATION ${idx + 1}`, 36, 76);
+  x.textAlign = 'right'; x.font = '800 52px Arial, sans-serif';
+  x.fillText(timeStr, W - 44, 74);
+  // step list — bold, near-black, generous size
+  x.textAlign = 'left'; x.fillStyle = '#10151d';
+  const lines = stepNames.slice(0, 3).map(n => n.length > 24 ? n.slice(0, 23) + '…' : n);
+  if (stepNames.length > 3) lines[2] = `+ ${stepNames.length - 2} more steps`;
+  x.font = '800 58px Arial, sans-serif';
+  lines.forEach((ln, i) => x.fillText(ln, 40, 178 + i * 78));
+  const tex = new THREE.CanvasTexture(c); tex.anisotropy = 8;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  sp.scale.set(4.6, 1.9, 1);
+  sp.renderOrder = 999;
+  return sp;
+}
+
+/* Crew figure: gray tee, dark pants, like the photos. */
+function makeOperator() {
+  const g = new THREE.Group();
+  const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.55, 10), MAT.pants);
+  legs.position.y = 0.28; legs.castShadow = true;
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.21, 0.42, 4, 10), MAT.shirt);
+  torso.position.y = 0.85; torso.castShadow = true;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 14, 14), MAT.skin);
+  head.position.y = 1.32; head.castShadow = true;
+  g.add(legs, torso, head);
+  return g;
+}
+
+/* ------------- station-specific work-in-progress visuals ------------- */
+/* Each builder returns { g, update(prog) } — the actual operation on that
+   bench, revealed as the step progresses. Matched by step name keywords. */
+
+const bx = (w, h, d, mat) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.castShadow = true; return m; };
+const cy = (r, h, mat) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 10), mat); m.castShadow = true; return m; };
+const showCount = (arr, n) => arr.forEach((m, i) => { m.visible = i < n; });
+const frac = (arr, prog) => showCount(arr, prog >= 1 ? arr.length : Math.floor(prog * (arr.length + 0.999)));
+
+function clampFixture() {
+  const g = new THREE.Group();
+  const base = bx(0.34, 0.16, 0.3, MAT.pants); base.position.y = 0.08; g.add(base);
+  const screw = cy(0.025, 0.22, MAT.chrome); screw.position.y = 0.27; g.add(screw);
+  const handle = bx(0.18, 0.03, 0.03, MAT.steel); handle.position.y = 0.38; g.add(handle);
+  return g;
+}
+function barClamp(len) {
+  const g = new THREE.Group();
+  const bar = bx(len, 0.045, 0.045, MAT.steel); bar.position.y = 0.1; g.add(bar);
+  for (const x of [-len / 2 + 0.06, len / 2 - 0.06]) {
+    const pad = bx(0.07, 0.16, 0.1, MAT.rackPost); pad.position.set(x, 0.08, 0); g.add(pad);
+  }
+  return g;
+}
+function drillTool() {
+  const g = new THREE.Group();
+  const body = bx(0.2, 0.1, 0.07, MAT.binYellow); body.position.y = 0.05; g.add(body);
+  const grip = bx(0.05, 0.12, 0.06, MAT.pants); grip.position.set(-0.04, -0.04, 0); g.add(grip);
+  const bit = cy(0.013, 0.12, MAT.chrome); bit.rotation.z = Math.PI / 2; bit.position.set(0.15, 0.05, 0); g.add(bit);
+  return g;
+}
+function rail(len, mat = MAT.cherry) { return bx(len, 0.1, 0.1, mat); }
+
+/* full perimeter frame used by several stations */
+function fullFrame(L = 1.6, W = 1.0) {
+  const g = new THREE.Group();
+  const a = rail(L); a.position.z = -W / 2;
+  const b = rail(L); b.position.z = W / 2;
+  const c = rail(W); c.rotation.y = Math.PI / 2; c.position.x = -L / 2;
+  const d = rail(W); d.rotation.y = Math.PI / 2; d.position.x = L / 2;
+  g.add(a, b, c, d);
+  return g;
+}
+
+function visRivnut() {
+  const g = new THREE.Group();
+  const fixture = clampFixture(); fixture.position.set(-0.85, 0, -0.35); g.add(fixture);
+  const studs = [];
+  [-0.25, 0.05, 0.35].forEach((z, r) => {
+    const ext = rail(1.5); ext.position.set(0.1, 0.05, z); g.add(ext);
+    for (let i = 0; i < 4; i++) {
+      const stud = cy(0.024, 0.05, MAT.brass); stud.position.set(-0.5 + i * 0.34, 0.13, z);
+      stud.visible = false; g.add(stud); studs.push(stud);
+    }
+  });
+  return { g, update: p => frac(studs, p) };
+}
+function visConnectorPre() {
+  const g = new THREE.Group();
+  const fixture = clampFixture(); fixture.position.set(-0.85, 0, 0.3); g.add(fixture);
+  const bin = bx(0.34, 0.18, 0.4, MAT.binYellow); bin.position.set(-0.85, 0.09, -0.3); g.add(bin);
+  const conns = [];
+  for (let i = 0; i < 12; i++) {
+    const c2 = new THREE.Group();
+    const body = bx(0.16, 0.09, 0.09, MAT.cherry); c2.add(body);
+    const lug = bx(0.06, 0.13, 0.06, MAT.chrome); lug.position.y = 0.06; c2.add(lug);
+    c2.position.set(-0.35 + (i % 6) * 0.28, 0.05, i < 6 ? -0.22 : 0.22);
+    c2.visible = false; g.add(c2); conns.push(c2);
+  }
+  return { g, update: p => frac(conns, p) };
+}
+function visConnectorPlate() {
+  const g = new THREE.Group();
+  const leg = rail(1.3); leg.position.set(-0.1, 0.05, 0); g.add(leg);
+  const fixture = clampFixture(); fixture.position.set(-0.85, 0, 0); g.add(fixture);
+  const dr = drillTool(); dr.position.set(0.7, 0.02, 0.45); dr.rotation.y = -0.6; g.add(dr);
+  const plate = bx(0.3, 0.02, 0.22, MAT.chrome); plate.position.set(0.25, 0.12, 0); plate.visible = false; g.add(plate);
+  const screws = [];
+  for (const [dx, dz] of [[-0.1, -0.07], [0.1, -0.07], [-0.1, 0.07], [0.1, 0.07]]) {
+    const s = cy(0.014, 0.03, MAT.brass); s.position.set(0.25 + dx, 0.15, dz); s.visible = false; g.add(s); screws.push(s);
+  }
+  return { g, update: p => { plate.visible = p > 0.15; frac(screws, Math.max(0, (p - 0.3) / 0.7)); } };
+}
+function visAttachConnectors() {
+  const g = new THREE.Group();
+  const leg = rail(1.5); leg.position.set(0, 0.05, 0); g.add(leg);
+  const wr = bx(0.34, 0.025, 0.06, MAT.steel); wr.position.set(0.65, 0.02, 0.4); wr.rotation.y = 0.5; g.add(wr);
+  const conns = [];
+  for (let i = 0; i < 4; i++) {
+    const c2 = bx(0.13, 0.13, 0.16, MAT.cherry);
+    c2.position.set(-0.55 + i * 0.37, 0.05, 0.13); c2.visible = false; g.add(c2); conns.push(c2);
+  }
+  return { g, update: p => frac(conns, p) };
+}
+function visFrameSub() {
+  const g = new THREE.Group();
+  const rails = [];
+  // two L-shaped sections taking shape
+  const defs = [
+    [0.9, -0.6, -0.3, 0], [0.7, -0.95, 0.05, Math.PI / 2], [0.9, -0.6, 0.4, 0],
+    [0.9, 0.6, -0.3, 0], [0.7, 0.95, 0.05, Math.PI / 2], [0.9, 0.6, 0.4, 0],
+  ];
+  for (const [len, x, z, ry] of defs) {
+    const r = rail(len); r.position.set(x, 0.05, z); r.rotation.y = ry; r.visible = false; g.add(r); rails.push(r);
+  }
+  const cl1 = barClamp(1.1); cl1.position.set(-0.6, 0, 0.05); cl1.rotation.y = Math.PI / 2; g.add(cl1);
+  const cl2 = barClamp(1.1); cl2.position.set(0.6, 0, 0.05); cl2.rotation.y = Math.PI / 2; g.add(cl2);
+  return { g, update: p => frac(rails, p) };
+}
+function visFrameAssembly() {
+  const g = new THREE.Group();
+  const rails = [];
+  const L = 1.7, W = 1.05;
+  const defs = [[L, 0, -W / 2, 0], [L, 0, W / 2, 0], [W, -L / 2, 0, Math.PI / 2], [W, L / 2, 0, Math.PI / 2], [W, 0, 0, Math.PI / 2]];
+  for (const [len, x, z, ry] of defs) {
+    const r = rail(len); r.position.set(x, 0.05, z); r.rotation.y = ry; r.visible = false; g.add(r); rails.push(r);
+  }
+  const cl = barClamp(1.3); cl.position.set(-L / 2, 0, 0); cl.rotation.y = Math.PI / 2; g.add(cl);
+  return { g, update: p => frac(rails, p) };
+}
+function visMiddleLeg() {
+  const g = new THREE.Group();
+  const wr = bx(0.34, 0.025, 0.06, MAT.steel); wr.position.set(0.7, 0.02, 0.4); g.add(wr);
+  const parts = [];
+  const a = rail(0.8); a.position.set(-0.3, 0.05, -0.15); a.visible = false;
+  const b = rail(0.8); b.position.set(-0.3, 0.05, 0.2); b.visible = false;
+  const c = rail(0.6); c.rotation.y = Math.PI / 2; c.position.set(0.25, 0.05, 0.02); c.visible = false;
+  g.add(a, b, c); parts.push(a, b, c);
+  return { g, update: p => frac(parts, p) };
+}
+function visCornerCaps() {
+  const g = new THREE.Group();
+  const frame = fullFrame(); frame.position.y = 0.05; g.add(frame);
+  const paint = cy(0.06, 0.1, MAT.boxWhite); paint.position.set(0.75, 0.05, 0.42); g.add(paint);
+  const caps = [];
+  for (const [x, z] of [[-0.8, -0.5], [0.8, -0.5], [-0.8, 0.5], [0.8, 0.5]]) {
+    const cap = bx(0.13, 0.13, 0.13, MAT.pants); cap.position.set(x, 0.1, z); cap.visible = false; g.add(cap); caps.push(cap);
+  }
+  return { g, update: p => frac(caps, p) };
+}
+function visSeatSupport() {
+  const g = new THREE.Group();
+  const bars = [rail(1.6), rail(1.6)];
+  bars[0].position.set(0, 0.04, -0.45); bars[1].position.set(0, 0.04, 0.45);
+  bars.forEach(b => { b.scale.y = 0.6; g.add(b); });
+  const slats = [];
+  for (let i = 0; i < 7; i++) {
+    const s = bx(0.14, 0.05, 0.95, MAT.cherry);
+    s.position.set(-0.66 + i * 0.22, 0.07, 0); s.visible = false; g.add(s); slats.push(s);
+  }
+  return { g, update: p => frac(slats, p) };
+}
+function visFramePrep() {
+  const g = new THREE.Group();
+  const frame = fullFrame(); frame.position.y = 0.05; g.add(frame);
+  const dr = drillTool(); dr.position.set(-0.6, 0.1, 0); g.add(dr);
+  return { g, update: p => { dr.position.x = -0.6 + Math.min(1, p) * 1.2; } };
+}
+function visInstall() {
+  // seat-support panel lowering onto the finished frame
+  const g = new THREE.Group();
+  const frame = fullFrame(); frame.position.y = 0.05; g.add(frame);
+  const panel = new THREE.Group();
+  for (let i = 0; i < 6; i++) {
+    const s = bx(0.14, 0.04, 0.9, MAT.cherry);
+    s.position.x = -0.6 + i * 0.24; panel.add(s);
+  }
+  const pb1 = rail(1.5); pb1.scale.y = 0.5; pb1.position.z = -0.42; panel.add(pb1);
+  const pb2 = rail(1.5); pb2.scale.y = 0.5; pb2.position.z = 0.42; panel.add(pb2);
+  panel.position.y = 0.6; g.add(panel);
+  const dr = drillTool(); dr.position.set(0.85, 0.02, 0.45); g.add(dr);
+  return { g, update: p => { panel.position.y = 0.6 - Math.min(1, p) * 0.46; } };
+}
+function visPPE() {
+  const g = new THREE.Group();
+  const post = cy(0.03, 0.5, MAT.steel); post.position.y = 0.25; g.add(post);
+  const board = bx(0.7, 0.45, 0.03, MAT.boxWhite); board.position.y = 0.6; g.add(board);
+  const glasses = bx(0.3, 0.07, 0.04, MAT.trimBlue); glasses.position.set(-0.6, 0.06, 0.3); g.add(glasses);
+  return { g, update: () => {} };
+}
+function visGeneric() {
+  const g = new THREE.Group();
+  const frame = fullFrame(); frame.position.y = 0.05; frame.visible = false; g.add(frame);
+  return { g, update: p => { frame.visible = p > 0.05; const s = Math.max(0.05, Math.min(1, p)); frame.scale.set(s, 1, s); } };
+}
+
+/* Progressive sofa: the SAME product shown at increasing completeness across
+   the line — bare frame at station 1, finished cushioned sofa at station 8 —
+   matching the reference render. update(prog 0..1) reveals parts in order. */
+function makeSofaProduct() {
+  const g = new THREE.Group();
+  const W = 1.9, D = 0.95;
+  const cushion = new THREE.MeshStandardMaterial({ color: 0xcabfa6, roughness: 0.92 });
+  const parts = [];
+  const add = (mesh, from, grow = false) => { mesh.visible = false; mesh.userData.from = from; mesh.userData.grow = grow; parts.push(mesh); g.add(mesh); return mesh; };
+
+  // base perimeter frame (built first)
+  add(bx(W, 0.08, 0.08, MAT.cherry), 0.0).position.set(0, 0.34, -D / 2 + 0.06);
+  add(bx(W, 0.08, 0.08, MAT.cherry), 0.0).position.set(0, 0.34, D / 2 - 0.06);
+  add(bx(0.08, 0.08, D, MAT.cherry), 0.02).position.set(-W / 2 + 0.06, 0.34, 0);
+  add(bx(0.08, 0.08, D, MAT.cherry), 0.02).position.set(W / 2 - 0.06, 0.34, 0);
+  // legs
+  for (const [x, z] of [[-W / 2 + 0.12, -D / 2 + 0.12], [W / 2 - 0.12, -D / 2 + 0.12], [-W / 2 + 0.12, D / 2 - 0.12], [W / 2 - 0.12, D / 2 - 0.12]])
+    add(bx(0.09, 0.34, 0.09, MAT.cherry), 0.12).position.set(x, 0.17, z);
+  // arms (left/right): two posts + a top rail each
+  for (const sx of [-1, 1]) {
+    const x = sx * (W / 2 - 0.06);
+    add(bx(0.08, 0.34, 0.08, MAT.cherry), 0.24).position.set(x, 0.55, -D / 2 + 0.12);
+    add(bx(0.08, 0.34, 0.08, MAT.cherry), 0.24).position.set(x, 0.55, D / 2 - 0.12);
+    add(bx(0.11, 0.08, D - 0.08, MAT.cherry), 0.32).position.set(x, 0.72, 0);
+  }
+  // back frame: posts + top rail along the back edge
+  const bz = -D / 2 + 0.07;
+  add(bx(0.08, 0.5, 0.08, MAT.cherry), 0.42).position.set(-W / 2 + 0.16, 0.6, bz);
+  add(bx(0.08, 0.5, 0.08, MAT.cherry), 0.42).position.set(W / 2 - 0.16, 0.6, bz);
+  add(bx(W - 0.24, 0.09, 0.09, MAT.cherry), 0.48).position.set(0, 0.86, bz);
+  // seat deck — chrome cross bars
+  for (let i = 0; i < 7; i++) {
+    const bar = cy(0.02, D - 0.18, MAT.chrome); bar.rotation.x = Math.PI / 2;
+    add(bar, 0.55 + i * 0.012).position.set(-W / 2 + 0.2 + i * ((W - 0.4) / 6), 0.39, 0.04);
+  }
+  // back slats — chrome verticals
+  for (let i = 0; i < 6; i++) {
+    const s = cy(0.018, 0.46, MAT.chrome);
+    add(s, 0.66 + i * 0.012).position.set(-W / 2 + 0.28 + i * ((W - 0.56) / 5), 0.63, bz);
+  }
+  // cushions last (scale up in their slot)
+  add(bx(W - 0.32, 0.18, D - 0.26, cushion), 0.82, true).position.set(0, 0.49, 0.05);
+  add(bx(W - 0.36, 0.36, 0.18, cushion), 0.9, true).position.set(0, 0.66, bz + 0.17);
+
+  return {
+    g,
+    update(p) {
+      for (const m of parts) {
+        const on = p >= m.userData.from;
+        m.visible = on;
+        if (on && m.userData.grow) { const s = Math.max(0.05, Math.min(1, (p - m.userData.from) / 0.1)); m.scale.set(1, s, 1); }
+      }
+    },
+  };
+}
+
+/* Rolling parts cart (steel frame, bins, casters) — feeds the line. */
+function makePartsCart() {
+  const g = new THREE.Group();
+  for (const [x, z] of [[-0.46, -0.3], [0.46, -0.3], [-0.46, 0.3], [0.46, 0.3]]) {
+    const post = bx(0.05, 0.92, 0.05, MAT.steel); post.position.set(x, 0.5, z); g.add(post);
+  }
+  for (const y of [0.34, 0.78]) { const sh = bx(1.0, 0.04, 0.68, MAT.steel); sh.position.set(0, y, 0); g.add(sh); }
+  for (const y of [0.34, 0.78]) for (let i = 0; i < 3; i++) {
+    const bin = bx(0.28, 0.16, 0.52, i % 2 ? MAT.binBlue : MAT.binYellow); bin.position.set(-0.32 + i * 0.32, y + 0.1, 0); g.add(bin);
+  }
+  for (const [x, z] of [[-0.46, -0.3], [0.46, -0.3], [-0.46, 0.3], [0.46, 0.3]]) {
+    const c = cy(0.07, 0.05, MAT.pants); c.rotation.x = Math.PI / 2; c.position.set(x, 0.07, z); g.add(c);
+  }
+  const handle = bx(0.05, 0.05, 0.68, MAT.steel); handle.position.set(-0.52, 0.92, 0); g.add(handle);
+  return g;
+}
+
+function stationVisualFor(step) {
+  const n = ((step.tag_id ? step.tag_name : step.name) || '').toLowerCase();
+  if (n.includes('ppe')) return visPPE();
+  if (n.includes('rivet') || n.includes('rivnut')) return visRivnut();
+  if (n.includes('connector') && n.includes('pre')) return visConnectorPre();
+  if (n.includes('plate')) return visConnectorPlate();
+  if (n.includes('attach') && n.includes('connector')) return visAttachConnectors();
+  if (n.includes('frame sub')) return visFrameSub();
+  if (n.includes('frame connection') || n.includes('frame assembly')) return visFrameAssembly();
+  if (n.includes('middle leg')) return visMiddleLeg();
+  if (n.includes('corner cap') || n.includes('end cap')) return visCornerCaps();
+  if (n.includes('seat support') || n.includes('trellis') || n.includes('assemble frame')) return visSeatSupport();
+  if (n.includes('frame prep')) return visFramePrep();
+  if (n.includes('installation') && (n.includes('seat') || n.includes('leg'))) return visInstall();
+  return visGeneric();
+}
+
+/* Workbench like the photos: pine frame, white padded top, bins on the shelf.
+   Status = a slim andon LED strip along the front edge (no cartoon floor ring). */
+function makeBench() {
+  const st = new THREE.Group();
+  const top = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.14, 1.7), MAT.benchTop);
+  top.position.y = 0.96; top.castShadow = true; top.receiveShadow = true;
+  st.add(top);
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(2.72, 0.05, 1.72), MAT.trimBlue);
+  trim.position.y = 0.875; st.add(trim);
+  for (const [lx, lz] of [[-1.2, -0.7], [1.2, -0.7], [-1.2, 0.7], [1.2, 0.7]]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.95, 0.14), MAT.pine);
+    leg.position.set(lx, 0.47, lz); leg.castShadow = true; st.add(leg);
+  }
+  const shelf = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.07, 1.4), MAT.pine);
+  shelf.position.y = 0.42; shelf.castShadow = true; st.add(shelf);
+  for (let b = 0; b < 6; b++) {
+    const bin = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, 0.34), b % 3 === 2 ? MAT.binBlue : MAT.binYellow);
+    bin.position.set(-1.05 + b * 0.42, 0.57, 0.35); bin.castShadow = true; st.add(bin);
+  }
+  // anti-fatigue mat with yellow edges on the operator side
+  const mat = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.025, 1.15), MAT.mat);
+  mat.position.set(0, 0.013, 1.55); mat.receiveShadow = true; st.add(mat);
+  for (const dz of [-0.62, 0.62]) {
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.027, 0.09), MAT.matEdge);
+    edge.position.set(0, 0.014, 1.55 + dz); st.add(edge);
+  }
+  // andon LED strip on the front edge of the bench top
+  const led = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.055, 0.05),
+    new THREE.MeshStandardMaterial({ color: RING.idle, emissive: 0x000000, emissiveIntensity: 1.6, roughness: 0.4 }));
+  led.position.set(0, 1.045, 0.875);
+  st.add(led);
+  // overhead coiled air-hose drop
+  const hose = makeHose(); hose.position.set(0.95, 0, -0.45);
+  st.add(hose);
+  return { st, led: led.material };
+}
+
+/* Coiled red air hose dropping from overhead, like the photos. */
+function makeHose() {
+  const pts = [];
+  for (let i = 0; i <= 60; i++) {
+    const t = i / 60;
+    const y = 6.2 - t * 3.6;
+    const r = 0.16;
+    pts.push(new THREE.Vector3(Math.cos(t * 26) * r, y, Math.sin(t * 26) * r));
+  }
+  const curve = new THREE.CatmullRomCurve3(pts);
+  const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 80, 0.022, 6), MAT.hose);
+  return tube;
+}
+
+function makeRack() {
+  const g = new THREE.Group();
+  const W = 6, D = 1.2, H = 4;
+  for (const x of [-W / 2, W / 2]) for (const z of [-D / 2, D / 2]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, H, 0.12), MAT.rackPost);
+    post.position.set(x, H / 2, z); g.add(post);
+  }
+  for (const y of [1.3, 2.6, 3.9]) {
+    for (const z of [-D / 2, D / 2]) {
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(W, 0.12, 0.1), MAT.rackBeam);
+      beam.position.set(0, y, z); g.add(beam);
+    }
+    for (let b = 0; b < 4; b++) {
+      if (Math.random() < 0.25) continue;
+      const bw = 0.9 + Math.random() * 0.4;
+      const box = new THREE.Mesh(new THREE.BoxGeometry(bw, 0.55 + Math.random() * 0.3, 1.0), Math.random() < 0.3 ? MAT.boxWhite : MAT.box);
+      box.position.set(-W / 2 + 0.8 + b * 1.45, y + 0.35, 0); box.castShadow = true; g.add(box);
+    }
+  }
+  return g;
+}
+
+function makeFan() {
+  const g = new THREE.Group();
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.3, 12), MAT.steel);
+  g.add(hub);
+  const blades = new THREE.Group();
+  for (let i = 0; i < 6; i++) {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.04, 0.3), MAT.steel);
+    b.position.x = 1.4;
+    const holder = new THREE.Group(); holder.rotation.y = (i / 6) * Math.PI * 2; holder.add(b);
+    blades.add(holder);
+  }
+  g.add(blades);
+  g.userData.blades = blades;
+  return g;
+}
+
+/* ------------------------------- component ------------------------------- */
+
+const OP_COLORS = [0x3a66a8, 0xb9772e, 0x2e7d4f, 0x8f5390, 0xa8923a, 0x3f8f8f, 0x9c4f45, 0x5c5f99];
+
+function makeNameTag(name, colorHex) {
+  const c = document.createElement('canvas'); c.width = 320; c.height = 92;
+  const x = c.getContext('2d');
+  x.fillStyle = '#ffffff';
+  x.beginPath(); x.roundRect(0, 0, 320, 92, 28); x.fill();
+  x.fillStyle = '#' + colorHex.toString(16).padStart(6, '0');
+  x.beginPath(); x.roundRect(0, 0, 18, 92, { tl: 28, bl: 28, tr: 0, br: 0 }); x.fill();
+  x.fillStyle = '#1a2230'; x.font = '800 46px Arial, sans-serif'; x.textAlign = 'center';
+  x.fillText(String(name).slice(0, 12), 168, 60);
+  const tex = new THREE.CanvasTexture(c); tex.anisotropy = 4;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, opacity: 0.95 }));
+  sp.scale.set(1.3, 0.38, 1);
+  sp.renderOrder = 998;
+  return sp;
+}
+
+function makeCrewFigure(colorHex, name) {
+  const g = new THREE.Group();
+  const shirt = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.85 });
+  const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.55, 10), MAT.pants);
+  legs.position.y = 0.28; legs.castShadow = true;
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.21, 0.42, 4, 10), shirt);
+  torso.position.y = 0.85; torso.castShadow = true;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 14, 14), MAT.skin);
+  head.position.y = 1.32; head.castShadow = true;
+  const tag = makeNameTag(name, colorHex);
+  tag.position.y = 1.85;
+  g.add(legs, torso, head, tag);
+  return g;
+}
+
+const loadAssign = skuId => { try { return JSON.parse(localStorage.getItem(`sw-assign-${skuId}`)) || {}; } catch { return {}; } };
+const saveAssign = (skuId, a) => { try { localStorage.setItem(`sw-assign-${skuId}`, JSON.stringify(a)); } catch {} };
+
+export default function Floor() {
+  const mountRef = useRef();
+  const three = useRef({});
+  const simRef = useRef(null);
+  const tRef = useRef(0);
+  const playingRef = useRef(false);
+  const speedRef = useRef(120);
+  const clockRef = useRef();
+  const sliderRef = useRef();
+  const activeRef = useRef();
+  const idleCountRef = useRef();
+
+  const [skus, setSkus] = useState([]);
+  const [skuId, setSkuId] = useState(null);
+  const [size, setSize] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [operators, setOperators] = useState([]);
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState(120);
+  const [helping, setHelping] = useState(true);
+  const [shiftHours, setShiftHours] = useState(8);
+  const [target, setTarget] = useState(8);
+  const [quantity, setQuantity] = useState(3);
+  const [assignments, setAssignments] = useState({}); // opId -> {own:[seq], help:[seq]}
+  const [showAssign, setShowAssign] = useState(false);
+  const [mode, setMode] = useState('line'); // 'line' (assembly line) | 'free' (operators roam)
+
+  useEffect(() => {
+    api.get('/api/skus').then(list => { setSkus(list); if (list.length) setSkuId(p => p ?? list[0].id); });
+    api.get('/api/operators').then(setOperators);
+  }, []);
+  useEffect(() => { if (skuId == null) return; setSize(null); setAssignments(loadAssign(skuId)); api.get(`/api/skus/${skuId}`).then(setDetail); }, [skuId]);
+  useEffect(() => { playingRef.current = playing; }, [playing]);
+  useEffect(() => { speedRef.current = speed; }, [speed]);
+
+  const activeOps = operators.filter(o => o.active);
+  const sizes = detail ? [...new Set(detail.steps.flatMap(s => s.size_times ? Object.keys(s.size_times) : []))] : [];
+  const activeSize = size ?? (sizes.length ? sizes[Math.floor((sizes.length - 1) / 2)] : null);
+  const durOfStep = s => (activeSize && s.size_times && s.size_times[activeSize] != null) ? s.size_times[activeSize] : (s.effective_seconds || 0);
+
+  const simSteps = useMemo(() => detail ? detail.steps.map(s => ({
+    id: s.id, depends_on: s.depends_on || [], dep_overlap: s.dep_overlap || null,
+    effective_seconds: durOfStep(s),
+    helpable: !!s.helpable, help_seconds: s.help_seconds || 0,
+  })) : [], [detail, activeSize]); // eslint-disable-line
+
+  const sim = useMemo(() => {
+    if (!simSteps.length || !activeOps.length) return null;
+    const seqToId = {};
+    detail.steps.forEach(s => { seqToId[s.sequence] = s.id; });
+    const assignArr = activeOps.map(op => {
+      const a = assignments[op.id] || {};
+      return {
+        own: (a.own || []).map(q => seqToId[q]).filter(Boolean),
+        help: (a.help || []).map(q => seqToId[q]).filter(Boolean),
+      };
+    });
+    return simulateBuild(simSteps, activeOps.length, { helping, assignments: assignArr, quantity });
+  }, [simSteps, activeOps.length, assignments, helping, detail, quantity]); // eslint-disable-line
+
+  // Stations for LINE mode: same grouping as the 3D benches (saved Line
+  // Designer layout, else auto-balance), with per-station worker counts.
+  const stationGroups = useMemo(() => {
+    if (!detail) return [];
+    const steps = detail.steps;
+    const STN = 8;
+    let groups = null, workers = null;
+    try {
+      const saved = JSON.parse(localStorage.getItem(`sw-line-${skuId}`));
+      if (saved?.assign && Object.keys(saved.assign).length) {
+        const n = Math.min(STN, Math.max(1, saved.stationCount || STN));
+        const arr = Array.from({ length: n }, () => []);
+        for (const s of steps) arr[Math.min(n - 1, saved.assign[s.id] ?? 0)].push(s);
+        groups = arr.filter(g => g.length);
+        const w = saved.workers || {};
+        workers = groups.map(g => Math.max(1, ...g.map(s => w[s.id] || 1)));
+      }
+    } catch { /* ignore */ }
+    if (!groups) {
+      const total = steps.reduce((a, s) => a + durOfStep(s), 0);
+      const target = total / Math.min(STN, steps.length || 1);
+      groups = [[]]; let acc = 0;
+      for (const s of steps) { const t = durOfStep(s); if (acc > 0 && acc + t > target * 1.2 && groups.length < STN) { groups.push([]); acc = 0; } groups[groups.length - 1].push(s); acc += t; }
+      workers = groups.map(() => 1);
+    }
+    groups.forEach(g => g.sort((a, b) => a.sequence - b.sequence));
+    return groups.map((g, k) => ({ steps: g, workers: workers[k] }));
+  }, [detail, activeSize, skuId]); // eslint-disable-line
+
+  const lineSim = useMemo(() => {
+    if (!stationGroups.length) return null;
+    const stations = stationGroups.map(sg => ({
+      workers: sg.workers,
+      steps: sg.steps.map(s => ({ id: s.id, depends_on: s.depends_on || [], dep_need_at: s.dep_need_at || null, effective_seconds: durOfStep(s), helpable: true, help_seconds: s.help_seconds || 0 })),
+    }));
+    return simulateLine(stations, { quantity, shiftSeconds: Math.round(shiftHours * 3600) });
+  }, [stationGroups, quantity, shiftHours]); // eslint-disable-line
+
+  const activeSim = mode === 'line' ? lineSim : sim;
+
+  // keep the render loop fed
+  useEffect(() => {
+    simRef.current = activeSim;
+    if (three.current) three.current.total = activeSim ? activeSim.makespan : 0;
+    if (sliderRef.current && activeSim) { sliderRef.current.max = activeSim.makespan; if (tRef.current > activeSim.makespan) { tRef.current = 0; sliderRef.current.value = 0; } }
+  }, [activeSim]);
+
+  // ---- Scene setup (once) ----
+  useEffect(() => {
+    initMats();
+    const mount = mountRef.current;
+    const w = mount.clientWidth, h = mount.clientHeight || 520;
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xe9edf1);
+    scene.fog = new THREE.Fog(0xe9edf1, 55, 130);
+
+    const camera = new THREE.PerspectiveCamera(44, w / h, 0.1, 260);
+    camera.position.set(7, 15, 31);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.06;
+    mount.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true; controls.target.set(0, 0.6, -1.5); controls.maxPolarAngle = Math.PI / 2.05;
+    controls.maxDistance = 55;
+
+    // soft, even studio daylight — no harsh contrast
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xb8bcc2, 1.0));
+    const sun = new THREE.DirectionalLight(0xfff8ee, 0.85);
+    sun.position.set(16, 26, 14); sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.radius = 5;
+    for (const [k, v] of Object.entries({ left: -34, right: 34, top: 34, bottom: -34 })) sun.shadow.camera[k] = v;
+    scene.add(sun);
+    const fill = new THREE.DirectionalLight(0xeef2f8, 0.3);
+    fill.position.set(-18, 14, -10);
+    scene.add(fill);
+
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(110, 80),
+      new THREE.MeshStandardMaterial({ map: concreteTexture(), roughness: 0.55, metalness: 0.06 }));
+    floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true;
+    scene.add(floor);
+
+    // yellow-taped travel lanes in the aisle in front of the line
+    const addLane = (w, d, x, z) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.012, d), MAT.tape);
+      m.position.set(x, 0.006, z); scene.add(m);
+    };
+    for (const z of [2.6, 4.4, 6.2]) addLane(50, 0.12, 0, z);     // parallel lanes
+    addLane(0.12, 3.8, -24.5, 4.4); addLane(0.12, 3.8, 24.5, 4.4); // closed rectangle
+    // a parts cart staged in the aisle, feeding the line
+    const cart = makePartsCart(); cart.position.set(-7.5, 0, 3.5); cart.rotation.y = 0.18;
+    scene.add(cart);
+    three.current.cart = cart;
+    for (const [cx, cz] of [[-26, -11], [26, -11], [-26, 10], [26, 10]]) {
+      const col = new THREE.Mesh(new THREE.BoxGeometry(0.6, 8, 0.6), MAT.column);
+      col.position.set(cx, 4, cz); col.castShadow = true;
+      scene.add(col);
+    }
+    // tidy perimeter racking, far behind the line only
+    for (const rx of [-21, -10.5, 0, 10.5, 21]) {
+      const rack = makeRack(); rack.position.set(rx, 0, -14);
+      scene.add(rack);
+    }
+    for (let lx = -18; lx <= 18; lx += 6) {
+      for (const lz of [-3, 1.5]) {
+        const strip = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.08, 0.18),
+          new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xf6f3ea, emissiveIntensity: 1.3 }));
+        strip.position.set(lx, 6.6, lz);
+        scene.add(strip);
+      }
+    }
+    const fans = [];
+    for (const fx of [-10, 10]) {
+      const fan = makeFan(); fan.position.set(fx, 7.2, 0); scene.add(fan); fans.push(fan);
+    }
+
+    three.current = { scene, camera, renderer, controls, stationGroup: null, fans, total: 0 };
+
+    const ro = new ResizeObserver(() => {
+      const W = mount.clientWidth, H = mount.clientHeight || 520;
+      camera.aspect = W / H; camera.updateProjectionMatrix(); renderer.setSize(W, H);
+    });
+    ro.observe(mount);
+
+    let raf, last = performance.now();
+    const loop = (now) => {
+      const dt = (now - last) / 1000; last = now;
+      if (playingRef.current) {
+        tRef.current += dt * speedRef.current;
+        const tot = three.current.total || 0;
+        if (tRef.current >= tot) { tRef.current = tot; playingRef.current = false; setPlaying(false); }
+      }
+      for (const f of three.current.fans || []) f.userData.blades.rotation.y += dt * 0.8;
+      updateStations();
+      updateCrew(dt);
+      controls.update();
+      renderer.render(scene, camera);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+
+    return () => {
+      cancelAnimationFrame(raf); ro.disconnect(); controls.dispose();
+      renderer.dispose(); mount.removeChild(renderer.domElement);
+    };
+  }, []); // eslint-disable-line
+
+  // ---- Build stations when SKU/size changes ----
+  useEffect(() => {
+    const ctx = three.current;
+    if (!ctx.scene || !detail) return;
+    if (ctx.stationGroup) ctx.scene.remove(ctx.stationGroup);
+    const group = new THREE.Group();
+    ctx.scene.add(group);
+
+    const groups = stationGroups.map(sg => sg.steps);
+    if (!groups.length) return;
+
+    const spacing = 5.4;
+    const offset = ((groups.length - 1) * spacing) / 2;
+    const stations = [];
+    const benchSpots = new Map(); // stepId -> { primary: Vector3, helper: Vector3 }
+    const stepInfo = new Map();   // stepId -> { seq, name, station }
+    const stationSpots = [];      // per-station operator stand positions (line mode)
+    groups.forEach((g, k) => {
+      const px = k * spacing - offset;
+      const { st, led } = makeBench();
+      st.position.set(px, 0, -2.6); // one row, mats facing the aisle
+
+      // One product progressing down the line: station k rests at k/N built
+      // and advances toward (k+1)/N as its work completes.
+      const visual = makeSofaProduct();
+      visual.g.position.y = 1.04;
+      visual.update(k / groups.length);
+      st.add(visual.g);
+
+      const totalDur = g.reduce((a, s) => a + durOfStep(s), 0);
+      const label = makeStationLabel(k, g.map(s => `${s.sequence} · ${fullName(s)}`), totalDur > 0 ? formatTime(totalDur) : '—');
+      label.position.set(0, 3.35, 0); st.add(label);
+      group.add(st);
+      st.updateMatrixWorld(true);
+      g.forEach((s, j) => {
+        benchSpots.set(s.id, {
+          primary: st.localToWorld(new THREE.Vector3(-0.7 + Math.min(j, 3) * 0.5, 0, 1.55)),
+          helper: st.localToWorld(new THREE.Vector3(0.95, 0, 1.55)),
+        });
+        stepInfo.set(s.id, { seq: s.sequence, name: shortName(s), station: k + 1 });
+      });
+      stationSpots.push([-0.85, -0.1, 0.65].map(dx => st.localToWorld(new THREE.Vector3(dx, 0, 1.6))));
+      stations.push({
+        idx: k, stepIds: g.map(s => s.id), durs: g.map(s => durOfStep(s)),
+        totalDur, led, visual, noTime: totalDur <= 0,
+      });
+    });
+
+    ctx.controls.target.set(0, 0.6, -1.5);
+    ctx.stationGroup = group;
+    ctx.stations = stations;
+    ctx.benchSpots = benchSpots;
+    ctx.stepInfo = stepInfo;
+    ctx.stationSpots = stationSpots;
+    tRef.current = 0; if (sliderRef.current) sliderRef.current.value = 0;
+  }, [stationGroups]); // eslint-disable-line
+
+  // ---- Crew figures (named, colored) ----
+  useEffect(() => {
+    const ctx = three.current;
+    if (!ctx.scene) return;
+    if (ctx.crewGroup) ctx.scene.remove(ctx.crewGroup);
+    const crewGroup = new THREE.Group();
+    ctx.scene.add(crewGroup);
+    const crew = activeOps.map((op, i) => {
+      const color = OP_COLORS[i % OP_COLORS.length];
+      const fig = makeCrewFigure(color, op.name);
+      const home = new THREE.Vector3((i - (activeOps.length - 1) / 2) * 1.6, 0, 1.7);
+      fig.position.copy(home);
+      crewGroup.add(fig);
+      return { fig, home, name: op.name, color };
+    });
+    ctx.crewGroup = crewGroup;
+    ctx.crew = crew;
+  }, [operators.length, activeOps.map(o => o.id + o.name).join(',')]); // eslint-disable-line
+
+  function updateStations() {
+    const ctx = three.current;
+    const sm = simRef.current;
+    if (!ctx.stations || !sm) return;
+    const t = tRef.current;
+    const Q = sm.quantity || 1;
+    if (sm.kind === 'line') {
+      const N = ctx.stations.length || 1;
+      for (const s of ctx.stations) {
+        const ls = sm.stations[s.idx];
+        let active = false, prog = 0, doneCount = 0;
+        if (ls) {
+          const iv = ls.intervals.find(e => t >= e.start && t < e.finish);
+          if (iv) { active = true; prog = iv.finish > iv.start ? (t - iv.start) / (iv.finish - iv.start) : 1; }
+          doneCount = ls.intervals.filter(e => e.finish > 0 && t >= e.finish).length;
+        }
+        const allDone = ls && doneCount >= Q;
+        const state = active ? 'active' : (allDone ? 'done' : 'idle');
+        const led = s.led;
+        if (s.noTime && t > 0) { led.color.setHex(0xd9a427); led.emissive.setHex(0xd9a427); led.emissiveIntensity = 0.7; }
+        else { led.color.setHex(RING[state]); led.emissive.setHex(state === 'idle' ? 0x000000 : RING[state]); led.emissiveIntensity = active ? 1.1 : 0.5; }
+        s.visual.update((s.idx + (active ? prog : (allDone ? 1 : 0))) / N);
+      }
+      if (clockRef.current) clockRef.current.textContent = `${formatTime(t)} / ${formatTime(ctx.total || 0)}`;
+      if (sliderRef.current && playingRef.current) sliderRef.current.value = t;
+      return;
+    }
+    for (const s of ctx.stations) {
+      // a station holds several steps; each step has Q unit-instances
+      let active = false, done = 0;
+      s.stepIds.forEach((id, i) => {
+        const insts = sm.byTemplate.get(id) || [];
+        let fin = 0, partial = 0;
+        for (const e of insts) {
+          if (e.start != null && t >= e.start && (e.finish == null || t < e.finish)) {
+            active = true;
+            partial += e.finish > e.start ? (t - e.start) / (e.finish - e.start) : 1;
+          } else if (e.finish != null && t >= e.finish) fin++;
+        }
+        const w = s.totalDur > 0 ? s.durs[i] / s.totalDur : 1 / s.stepIds.length;
+        done += w * Math.min(1, (fin + partial) / Q);
+      });
+      const state = active ? 'active' : (done >= 0.999 ? 'done' : 'idle');
+      const led = s.led;
+      if (s.noTime && t > 0) {
+        led.color.setHex(0xd9a427); led.emissive.setHex(0xd9a427); led.emissiveIntensity = 0.7;
+      } else {
+        led.color.setHex(RING[state]);
+        led.emissive.setHex(state === 'idle' ? 0x000000 : RING[state]);
+        led.emissiveIntensity = state === 'active' ? 1.1 : 0.5;
+      }
+      s.visual.update((s.idx + Math.min(1, done)) / (ctx.stations.length || 1));
+    }
+    if (clockRef.current) clockRef.current.textContent = `${formatTime(t)} / ${formatTime(ctx.total || 0)}`;
+    if (sliderRef.current && playingRef.current) sliderRef.current.value = t;
+  }
+
+  function updateCrew(dt) {
+    const ctx = three.current;
+    const sm = simRef.current;
+    if (!ctx.crew || !sm || !ctx.benchSpots) return;
+    const t = tRef.current;
+    const lines = [];
+    let activeCount = 0;
+    if (sm.kind === 'line') {
+      // operators are pinned to stations (by each station's worker count)
+      const assignMap = []; let ci = 0;
+      for (let k = 0; k < sm.stations.length; k++) { const w = sm.stations[k].workers || 1; for (let sl = 0; sl < w && ci < ctx.crew.length; sl++) assignMap[ci++] = { k, slot: sl }; }
+      ctx.crew.forEach((c, i) => {
+        const a = assignMap[i];
+        let target = c.home, working = false;
+        if (a && ctx.stationSpots && ctx.stationSpots[a.k]) {
+          const spots = ctx.stationSpots[a.k];
+          target = spots[Math.min(a.slot, spots.length - 1)];
+          working = sm.stations[a.k].intervals.some(e => t >= e.start && t < e.finish);
+          if (working) activeCount++;
+        } else { target = new THREE.Vector3((i - (ctx.crew.length - 1) / 2) * 1.4, 0, 4.4); } // surplus stands back
+        const kk = 1 - Math.exp(-dt * 3);
+        c.fig.position.x += (target.x - c.fig.position.x) * kk;
+        c.fig.position.z += (target.z - c.fig.position.z) * kk;
+        const distSq = (target.x - c.fig.position.x) ** 2 + (target.z - c.fig.position.z) ** 2;
+        c.fig.position.y = working && distSq < 0.05 ? Math.abs(Math.sin(t * 3 + i)) * 0.05 : 0;
+      });
+      if (activeRef.current) {
+        const desc = sm.stations.filter(ls => ls.intervals.some(e => t >= e.start && t < e.finish))
+          .map(ls => { const u = ls.intervals.find(e => t >= e.start && t < e.finish); return `S${ls.idx + 1} #${(u.unit ?? 0) + 1}`; });
+        activeRef.current.textContent = desc.length ? `working: ${desc.join('  ·  ')}` : (t >= (ctx.total || 0) && ctx.total ? 'all units complete' : 'line idle');
+      }
+      if (idleCountRef.current) {
+        const unitsDone = sm.unitFinishes.filter(f => t >= f && f > 0).length;
+        idleCountRef.current.textContent = `${activeCount} working · ${ctx.crew.length - activeCount} idle  ·  units finished ${unitsDone}/${sm.quantity}`;
+      }
+      return;
+    }
+    ctx.crew.forEach((c, i) => {
+      const intervals = sm.operators[i]?.intervals || [];
+      const iv = intervals.find(v => t >= v.start && t < v.end);
+      let target = c.home, working = false;
+      if (iv) {
+        const spots = ctx.benchSpots.get(iv.template);
+        if (spots) { target = iv.role === 'help' ? spots.helper : spots.primary; working = true; activeCount++; }
+        const si = ctx.stepInfo && ctx.stepInfo.get(iv.template);
+        if (si) lines.push(`${c.name} → ${si.seq}. ${si.name} @S${si.station}${sm.quantity > 1 ? ` #${(iv.unit ?? 0) + 1}` : ''}${iv.role === 'help' ? ' (helping)' : ''}`);
+      }
+      const k = 1 - Math.exp(-dt * 3);
+      c.fig.position.x += (target.x - c.fig.position.x) * k;
+      c.fig.position.z += (target.z - c.fig.position.z) * k;
+      const distSq = (target.x - c.fig.position.x) ** 2 + (target.z - c.fig.position.z) ** 2;
+      c.fig.position.y = working && distSq < 0.05 ? Math.abs(Math.sin(t * 3 + i)) * 0.05 : 0;
+    });
+    if (activeRef.current) {
+      activeRef.current.textContent = lines.length ? lines.join('  ·  ')
+        : (t >= (ctx.total || 0) && ctx.total ? 'all units complete' : 'crew idle');
+    }
+    if (idleCountRef.current) {
+      const idleN = ctx.crew.length - activeCount;
+      const unitsDone = sm.unitFinishes.filter(f => t >= f && f > 0).length;
+      idleCountRef.current.textContent = `${activeCount} working · ${idleN} idle  ·  units finished ${unitsDone}/${sm.quantity}`;
+    }
+  }
+
+  const noTimeSteps = detail ? detail.steps.filter(s => durOfStep(s) <= 0) : [];
+  const shiftSeconds = Math.round(shiftHours * 3600);
+  const view = activeSim;
+  const freeUnitsPerShift = sim && sim.makespan > 0 ? Math.floor((quantity / sim.makespan) * shiftSeconds) : 0;
+  const lineUnitsPerShift = lineSim ? lineSim.unitsPerShift : 0;
+  const unitsPerShift = mode === 'line' ? lineUnitsPerShift : freeUnitsPerShift;
+  const hitsTarget = unitsPerShift >= target;
+  const neverStarted = (mode === 'free' && sim && detail) ? detail.steps.filter(s => {
+    const insts = sim.byTemplate.get(s.id) || [];
+    return insts.length > 0 && insts.every(e => e.start == null);
+  }) : [];
+
+  function toggleAssign(opId, kind, seq) {
+    setAssignments(prev => {
+      const next = { ...prev, [opId]: { own: [...(prev[opId]?.own || [])], help: [...(prev[opId]?.help || [])] } };
+      const arr = next[opId][kind];
+      const ix = arr.indexOf(seq);
+      if (ix >= 0) arr.splice(ix, 1); else arr.push(seq);
+      saveAssign(skuId, next);
+      return next;
+    });
+  }
+  const anyAssigned = Object.values(assignments).some(a => (a.own?.length || 0) + (a.help?.length || 0) > 0);
+
+  return (
+    <>
+      <div className="toolbar">
+        <h1 style={{ margin: 0 }}>3D Floor — simulation</h1>
+        <div className="spacer" />
+        <div className="seg">
+          <button className={mode === 'line' ? 'on' : ''} onClick={() => { setMode('line'); tRef.current = 0; setPlaying(false); }}>Line</button>
+          <button className={mode === 'free' ? 'on' : ''} onClick={() => { setMode('free'); tRef.current = 0; setPlaying(false); }}>Free-flow</button>
+        </div>
+        <select value={skuId || ''} onChange={e => setSkuId(Number(e.target.value))} style={{ width: 240 }}>
+          {skus.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        {sizes.length > 0 && (
+          <select value={activeSize || ''} onChange={e => setSize(e.target.value)} style={{ width: 160 }}>
+            {sizes.map(sz => <option key={sz} value={sz}>{sizeLabel(sz)}</option>)}
+          </select>
+        )}
+      </div>
+      <p className="subtitle">{mode === 'line'
+        ? 'Assembly LINE: each operator stays at one of the 8 stations, a unit flows station to station (one unit per bench), and output is paced by the slowest station. This is the line you design in the Line Designer / Workflows.'
+        : 'FREE-FLOW: named operators roam between benches, helping where you send them and peeling off when their own task is ready. Set assignments below.'}</p>
+
+      {sim && lineSim && (
+        <div className="card" style={{ padding: '10px 14px' }}>
+          <div className="cmp-strip">
+            <strong>Compare (build {quantity}, {shiftHours}h shift):</strong>
+            <span className={mode === 'line' ? 'pick' : ''}>Line — {formatLong(lineSim.makespan)} · {lineSim.unitsPerShift}/shift · {Math.round(lineSim.utilization * 100)}% util · {lineSim.operatorsCount} ops</span>
+            <span className={mode === 'free' ? 'pick' : ''}>Free-flow — {formatLong(sim.makespan)} · {freeUnitsPerShift}/shift · {Math.round(sim.utilization * 100)}% util · {activeOps.length} ops</span>
+          </div>
+        </div>
+      )}
+
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div ref={mountRef} style={{ width: '100%', height: 520, position: 'relative' }} />
+      </div>
+
+      {view && (
+        <div className="card">
+          <div className="row" style={{ gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div className="field" style={{ maxWidth: 130 }}>
+              <label>Make (units)</label>
+              <input type="number" min="1" max="30" value={quantity} onChange={e => setQuantity(Math.max(1, Math.min(30, Number(e.target.value))))} />
+            </div>
+            <div className="stat" style={{ borderLeftColor: '#1a56b0' }}>
+              <div className="stat-value">{formatLong(view.makespan)}</div>
+              <div className="stat-label">to build {quantity} — {mode === 'line' ? `${view.operatorsCount} on the line` : `${activeOps.length} operators${helping ? ' + helping' : ''}`}</div>
+            </div>
+            {mode === 'line' && (
+              <div className="stat" style={{ borderLeftColor: '#b3261e' }}>
+                <div className="stat-value">{formatTime(view.cycleTime)}</div>
+                <div className="stat-label">cycle time (bottleneck = Station {view.bottleneck + 1})</div>
+              </div>
+            )}
+            <div className="stat" style={{ borderLeftColor: hitsTarget ? '#1c7c3c' : '#b3261e' }}>
+              <div className="stat-value">{unitsPerShift} / {target}</div>
+              <div className="stat-label">units/{shiftHours}h vs target</div>
+            </div>
+            <div className="stat" style={{ borderLeftColor: view.utilization < 0.5 ? '#b3261e' : view.utilization < 0.75 ? '#e0913d' : '#1c7c3c' }}>
+              <div className="stat-value">{Math.round(view.utilization * 100)}%</div>
+              <div className="stat-label">crew utilization ({formatLong(view.idleSeconds)} idle total)</div>
+            </div>
+            <div className="field" style={{ maxWidth: 90 }}>
+              <label>Target</label>
+              <input type="number" min="1" value={target} onChange={e => setTarget(Math.max(1, Number(e.target.value)))} />
+            </div>
+            <div className="field" style={{ maxWidth: 90 }}>
+              <label>Shift (h)</label>
+              <input type="number" min="0.5" step="0.5" value={shiftHours} onChange={e => setShiftHours(Math.max(0.5, Number(e.target.value)))} />
+            </div>
+            {mode === 'free' && (
+              <div className="field" style={{ maxWidth: 150 }}>
+                <label>Auto-helping</label>
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', textTransform: 'none', fontWeight: 400, marginTop: 6 }}>
+                  <input type="checkbox" style={{ width: 'auto' }} checked={helping} onChange={e => setHelping(e.target.checked)} />
+                  idle ops help
+                </label>
+              </div>
+            )}
+          </div>
+          {neverStarted.length > 0 && (
+            <div className="alert error" style={{ marginTop: 8 }}>
+              Never started: {neverStarted.map(s => `${s.sequence}. ${(s.tag_id ? s.tag_name : s.name)}`).join(', ')} — an assigned owner may never be free, or the dependency graph is blocked.
+            </div>
+          )}
+        </div>
+      )}
+
+      {view && (
+        <div className="card">
+          <h2 style={{ marginTop: 0 }}>Operator workload <span className="muted" style={{ fontWeight: 400 }}>— building {quantity} unit{quantity > 1 ? 's' : ''}; who works and who waits</span></h2>
+          {activeOps.map((op, i) => {
+            let o, stationLabel = '';
+            if (mode === 'line') {
+              let ci = 0, st = null;
+              for (const ls of view.stations) { if (i >= ci && i < ci + ls.workers) { st = ls; break; } ci += ls.workers; }
+              o = st ? { busySeconds: st.busy, idleSeconds: st.idle } : { busySeconds: 0, idleSeconds: view.makespan };
+              stationLabel = st ? ` · Station ${st.idx + 1}` : ' · spare';
+            } else {
+              o = sim.operators[i] || { busySeconds: 0, idleSeconds: 0 };
+            }
+            const busyPct = view.makespan > 0 ? (o.busySeconds / view.makespan) * 100 : 0;
+            return (
+              <div key={op.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                <span style={{ width: 130, fontWeight: 600 }}>
+                  <span style={{ display: 'inline-block', width: 11, height: 11, borderRadius: 6, background: '#' + OP_COLORS[i % OP_COLORS.length].toString(16).padStart(6, '0'), marginRight: 6 }} />
+                  {op.name}<span className="muted" style={{ fontWeight: 400, fontSize: 11 }}>{stationLabel}</span>
+                </span>
+                <div style={{ flex: 1, height: 20, background: '#e7e3da', borderRadius: 5, overflow: 'hidden' }}>
+                  <div style={{ width: `${busyPct}%`, height: '100%', background: busyPct < 35 ? '#b3261e' : busyPct < 70 ? '#e0913d' : '#1c7c3c' }} />
+                </div>
+                <span className="muted" style={{ width: 200, fontSize: 12, textAlign: 'right' }}>
+                  busy {formatLong(o.busySeconds)} · <strong style={{ color: o.idleSeconds > o.busySeconds ? '#b3261e' : 'inherit' }}>idle {formatLong(o.idleSeconds)}</strong> ({Math.round(busyPct)}%)
+                </span>
+              </div>
+            );
+          })}
+          <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+            Bars are share of the run each operator is working. Lots of red/short bars = too many people for this many units — raise "Make" or drop operators. Building more units at once keeps the crew busier (that's flow).
+          </p>
+        </div>
+      )}
+
+      <div className="card">
+        <div className="toolbar" style={{ marginBottom: 8 }}>
+          <button className="primary" onClick={() => {
+            if (tRef.current >= (three.current.total || 0)) { tRef.current = 0; }
+            setPlaying(p => !p);
+          }}>{playing ? '⏸ Pause' : '▶ Play'}</button>
+          <button className="small" onClick={() => { tRef.current = 0; if (sliderRef.current) sliderRef.current.value = 0; setPlaying(false); }}>⟲ Reset</button>
+          <span ref={clockRef} className="time" style={{ fontSize: 16, minWidth: 150 }}>0:00 / {formatTime(view ? view.makespan : 0)}</span>
+          <div className="spacer" />
+          {mode === 'free' && (
+            <button className={showAssign ? 'small primary' : 'small'} onClick={() => setShowAssign(v => !v)}>
+              {showAssign ? 'Hide assignments' : '⚙ Assignments'}{anyAssigned ? ' •' : ''}
+            </button>
+          )}
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', textTransform: 'none', fontWeight: 400, minWidth: 230 }}>
+            Speed <strong style={{ minWidth: 52, textAlign: 'right' }}>{speed}×</strong>
+            <input type="range" min="5" max="1200" step="5" value={speed} style={{ width: 120 }}
+              onChange={e => setSpeed(Number(e.target.value))} />
+          </label>
+        </div>
+        <input ref={sliderRef} type="range" min="0" max={view ? view.makespan : 1} defaultValue="0" style={{ width: '100%' }}
+          onInput={e => { tRef.current = Number(e.target.value); setPlaying(false); }} />
+        <div className="muted" style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <span>Crew: <strong ref={activeRef}>idle</strong></span>
+          <strong ref={idleCountRef} style={{ whiteSpace: 'nowrap' }} />
+        </div>
+        {noTimeSteps.length > 0 && (
+          <div className="alert warn" style={{ marginTop: 8, padding: '6px 10px', fontSize: 12 }}>
+            {noTimeSteps.map(s => (s.tag_id ? s.tag_name : s.name)).join(', ')} {noTimeSteps.length === 1 ? 'has' : 'have'} no recorded time — they run instantly (amber ring).
+          </div>
+        )}
+        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+          <span style={{ color: '#1fa84f' }}>● working</span> &nbsp; <span style={{ color: '#1a56b0' }}>● done</span> &nbsp; <span style={{ color: '#8e98a6' }}>● waiting</span>
+          &nbsp;— mark steps helpable (and set 2-person times) on the <strong>Staffing</strong> page; the same flags drive this simulation.
+        </div>
+      </div>
+
+      {showAssign && detail && mode === 'free' && (
+        <div className="card">
+          <h2 style={{ marginTop: 0 }}>Operator assignments <span className="muted" style={{ fontWeight: 400 }}>— OWN: only they run it. HELP: where they go when idle (until their own task is ready). Blank = automatic.</span></h2>
+          <table className="data">
+            <thead>
+              <tr><th style={{ width: 130 }}>Operator</th><th>Owns steps</th><th>Helps on (when idle)</th></tr>
+            </thead>
+            <tbody>
+              {activeOps.map((op, i) => {
+                const a = assignments[op.id] || {};
+                return (
+                  <tr key={op.id}>
+                    <td>
+                      <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 6, background: '#' + OP_COLORS[i % OP_COLORS.length].toString(16).padStart(6, '0'), marginRight: 6 }} />
+                      <strong>{op.name}</strong>
+                    </td>
+                    <td>
+                      {detail.steps.map(s => (
+                        <button key={s.id} className={`chip-mini ${(a.own || []).includes(s.sequence) ? 'on' : ''}`}
+                          title={(s.tag_id ? s.tag_name : s.name) || ''}
+                          onClick={() => toggleAssign(op.id, 'own', s.sequence)}>{s.sequence}</button>
+                      ))}
+                    </td>
+                    <td>
+                      {detail.steps.filter(s => s.helpable).map(s => (
+                        <button key={s.id} className={`chip-mini help ${(a.help || []).includes(s.sequence) ? 'on' : ''}`}
+                          title={(s.tag_id ? s.tag_name : s.name) || ''}
+                          onClick={() => toggleAssign(op.id, 'help', s.sequence)}>{s.sequence}</button>
+                      ))}
+                      {detail.steps.filter(s => s.helpable).length === 0 && <span className="muted" style={{ fontSize: 12 }}>no steps marked helpable yet (Staffing page)</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div className="toolbar" style={{ marginTop: 8 }}>
+            <button className="small" onClick={() => { setAssignments({}); saveAssign(skuId, {}); }}>Reset all to automatic</button>
+            <span className="muted" style={{ fontSize: 12 }}>Assignments are saved per product on this computer. The simulation, stats, and 3D playback all recompute instantly when you change them.</span>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

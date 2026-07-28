@@ -1,0 +1,85 @@
+import { useRef } from 'react';
+import { Routes, Route, NavLink } from 'react-router-dom';
+import { isLocal, backupData, restoreData } from '@backend';
+import Insights from './pages/Insights.jsx';
+import Dashboard from './pages/Dashboard.jsx';
+import SkuList from './pages/SkuList.jsx';
+import SkuDetail from './pages/SkuDetail.jsx';
+import Tags from './pages/Tags.jsx';
+import ImportPage from './pages/ImportPage.jsx';
+import Planner from './pages/Planner.jsx';
+import Improvements from './pages/Improvements.jsx';
+import Floor from './pages/Floor.jsx';
+import LineDesigner from './pages/LineDesigner.jsx';
+import ProcessMap from './pages/ProcessMap.jsx';
+import Workflows from './pages/Workflows.jsx';
+import Compare from './pages/Compare.jsx';
+import Layout from './pages/Layout.jsx';
+import Staffing from './pages/Staffing.jsx';
+import Assistant from './pages/Assistant.jsx';
+
+export default function App() {
+  const restoreInput = useRef();
+
+  return (
+    <div className="layout">
+      <nav className="sidebar">
+        <div className="brand">Standard Work<small>Labor time tracking</small></div>
+        <NavLink to="/" end>⭐ Insights</NavLink>
+        <NavLink to="/dashboard">Labor &amp; Charts</NavLink>
+        <NavLink to="/skus">SKUs</NavLink>
+        <NavLink to="/staffing">Staffing</NavLink>
+        <NavLink to="/line">Line Designer</NavLink>
+        <NavLink to="/floor">3D Floor</NavLink>
+        <div style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: '#7d8aa0', padding: '14px 12px 4px' }}>More tools</div>
+        <NavLink to="/tags">Shared Steps</NavLink>
+        <NavLink to="/compare">Compare</NavLink>
+        <NavLink to="/planner">Day Planner</NavLink>
+        <NavLink to="/map">Process Map</NavLink>
+        <NavLink to="/workflows">Workflows</NavLink>
+        <NavLink to="/layout">Layout</NavLink>
+        <NavLink to="/improvements">Improvements</NavLink>
+        <NavLink to="/import">Import</NavLink>
+        <NavLink to="/assistant">Assistant</NavLink>
+        {isLocal && (
+          <div style={{ position: 'absolute', bottom: 20, left: 12, right: 12 }}>
+            <div style={{ fontSize: 11, color: '#7d8aa0', padding: '0 12px 8px' }}>
+              Data is saved in this browser. Back up regularly.
+            </div>
+            <a href="#backup" onClick={e => { e.preventDefault(); backupData(); }}>⬇ Backup data</a>
+            <a href="#restore" onClick={e => { e.preventDefault(); restoreInput.current.click(); }}>⬆ Restore backup</a>
+            <input type="file" accept=".json" hidden ref={restoreInput}
+              onChange={e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                if (window.confirm('Restoring replaces ALL current data with the backup. Continue?')) {
+                  restoreData(file).catch(err => alert(err.message));
+                }
+                e.target.value = '';
+              }} />
+          </div>
+        )}
+      </nav>
+      <main className="main">
+        <Routes>
+          <Route path="/" element={<Insights />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/skus" element={<SkuList />} />
+          <Route path="/skus/:id" element={<SkuDetail />} />
+          <Route path="/tags" element={<Tags />} />
+          <Route path="/compare" element={<Compare />} />
+          <Route path="/import" element={<ImportPage />} />
+          <Route path="/planner" element={<Planner />} />
+          <Route path="/staffing" element={<Staffing />} />
+          <Route path="/line" element={<LineDesigner />} />
+          <Route path="/map" element={<ProcessMap />} />
+          <Route path="/workflows" element={<Workflows />} />
+          <Route path="/layout" element={<Layout />} />
+          <Route path="/improvements" element={<Improvements />} />
+          <Route path="/floor" element={<Floor />} />
+          <Route path="/assistant" element={<Assistant />} />
+        </Routes>
+      </main>
+    </div>
+  );
+}

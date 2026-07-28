@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Meritage 3-Seater — Line Floor Plan</title>
+<style>
+  body{margin:0;background:#eef0f2;font-family:"Inter","Segoe UI",Arial,sans-serif;color:#15263a;padding:22px}
+  .wrap{max-width:1040px;margin:0 auto}
+  .bar{display:flex;align-items:center;justify-content:space-between;margin:0 4px 14px}
+  h1{font-size:20px;margin:0;color:#15263a}
+  .sub{color:#5d6b78;font-size:13px;margin:2px 0 0}
+  button{background:#15263a;color:#fff;border:0;border-radius:8px;padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer}
+  button:hover{background:#22364f}
+  .stage{background:#fff;border:1px solid #dfe3e8;border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.05),0 10px 30px rgba(0,0,0,.06);padding:8px}
+  svg{width:100%;height:auto;display:block}
+  .note{font-size:12px;color:#5d6b78;margin:12px 6px 0;line-height:1.5}
+  .note b{color:#15263a}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar">
+    <div>
+      <h1>Meritage 3-Seater — Assembly Line Floor Plan</h1>
+      <p class="sub">As-built layout · 8 operators · times in minutes per unit</p>
+    </div>
+    <button onclick="downloadPNG()">⬇ Download PNG</button>
+  </div>
+  <div class="stage" id="stage"></div>
+  <div class="note"><b>Flow:</b> the cart pre-stages parts to all feeder benches. Feeders (Connectors, Arms, Back frame, Trellis, Seat frame) run in parallel, then converge into Full Assembly, which hands the finished sofa to Packing &amp; Ship. <b>Seat frame (47 min, rust)</b> is the bottleneck — it sets the line pace at ~9/day. Packing has no dedicated operators; the 2 Full-Assembly operators pack during their wait time.</div>
+</div>
+
+<script>
+const NAVY="#15263a", INK="#1c2024", MUT="#6b7785", LINE="#c2cad3",
+      BLUE="#2f6df6", GREY="#9aa3ad", RUST="#b3502e", GOLD="#c98a2e",
+      TABLE="#f4f1ea", TABLETOP="#e7e0d2", SHIP="#2f7d52";
+
+// id, name, people, time(min), grid box
+const ST = [
+  {id:'cart', name:'Cart / Supply', note:'parts pre-staged', ppl:null, time:null, x:360, y:24,  w:210, h:78, kind:'supply'},
+  {id:'con',  name:'Connectors',    ppl:1, time:'19.25', x:30,  y:165, w:188, h:104},
+  {id:'arm',  name:'Arms assembly', ppl:2, time:'32',    x:248, y:165, w:188, h:104},
+  {id:'bak',  name:'Back frame',    ppl:1, time:'43.5',  x:466, y:165, w:188, h:104},
+  {id:'tre',  name:'Trellis',       ppl:1, time:'22.5',  x:684, y:165, w:188, h:104},
+  {id:'sea',  name:'Seat frame',    ppl:1, time:'47',    x:30,  y:352, w:188, h:104, bottleneck:true},
+  {id:'fa',   name:'Full assembly', ppl:2, time:'29',    x:360, y:352, w:210, h:104, kind:'assembly'},
+  {id:'pak',  name:'Packing / Ship',ppl:0, time:'18',    x:360, y:540, w:210, h:104, kind:'ship'},
+];
+const by = Object.fromEntries(ST.map(s=>[s.id,s]));
+const cx = s => s.x + s.w/2, cy = s => s.y + s.h/2;
+// edge point on box toward target
+function edge(s, tx, ty){
+  const dx=tx-cx(s), dy=ty-cy(s);
+  const hw=s.w/2, hh=s.h/2;
+  if(dx===0&&dy===0) return [cx(s),cy(s)];
+  const sx = dx!==0 ? hw/Math.abs(dx) : Infinity;
+  const sy = dy!==0 ? hh/Math.abs(dy) : Infinity;
+  const t = Math.min(sx,sy);
+  return [cx(s)+dx*t, cy(s)+dy*t];
+}
+
+function personIcon(x,y,fill){
+  // simple head + shoulders, ~16px tall
+  return `<g transform="translate(${x},${y})">
+    <circle cx="0" cy="-4.2" r="3.4" fill="${fill}"/>
+    <path d="M -5.4 4.6 a 5.4 5.4 0 0 1 10.8 0 z" fill="${fill}"/>
+  </g>`;
+}
+
+function tableSVG(s){
+  const r=12;
+  let stroke = s.bottleneck ? RUST : (s.kind==='supply'? LINE : "#cfd6de");
+  let sw = s.bottleneck ? 3 : 1.5;
+  let topFill = s.kind==='supply' ? "#eef2f6" : TABLETOP;
+  let bodyFill = s.kind==='supply' ? "#f7f9fb" : TABLE;
+  let g = `<g>`;
+  // table body
+  g += `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" rx="${r}" fill="${bodyFill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+  // table "surface" top strip
+  g += `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="34" rx="${r}" fill="${topFill}" stroke="none"/>`;
+  g += `<rect x="${s.x}" y="${s.y+22}" width="${s.w}" height="12" fill="${topFill}"/>`;
+  g += `<line x1="${s.x}" y1="${s.y+34}" x2="${s.x+s.w}" y2="${s.y+34}" stroke="${stroke}" stroke-width="1" opacity="0.5"/>`;
+  // title
+  g += `<text x="${s.x+14}" y="${s.y+22}" font-size="14.5" font-weight="700" fill="${NAVY}">${s.name}</text>`;
+
+  if(s.kind==='supply'){
+    g += `<text x="${s.x+14}" y="${s.y+56}" font-size="12" fill="${MUT}">${s.note}</text>`;
+    g += `</g>`; return g;
+  }
+
+  // people icons row
+  const py = s.y+58;
+  if(s.ppl>0){
+    const startX = s.x+22;
+    for(let i=0;i<s.ppl;i++) g += personIcon(startX+i*24, py, NAVY);
+    g += `<text x="${s.x+22+s.ppl*24+2}" y="${py+4}" font-size="12.5" fill="${MUT}">${s.ppl} ${s.ppl>1?'people':'person'}</text>`;
+  } else {
+    g += `<text x="${s.x+18}" y="${py+4}" font-size="12.5" fill="${MUT}" font-style="italic">0 dedicated (FA pair)</text>`;
+  }
+
+  // time pill (bottom-right)
+  const tw=70, th=24, tx=s.x+s.w-tw-12, ty2=s.y+s.h-th-12;
+  const tcol = s.bottleneck?RUST:NAVY;
+  g += `<rect x="${tx}" y="${ty2}" width="${tw}" height="${th}" rx="6" fill="#fff" stroke="${tcol}" stroke-width="1.3"/>`;
+  g += `<text x="${tx+tw/2}" y="${ty2+16}" text-anchor="middle" font-size="12.5" font-weight="700" fill="${tcol}">${s.time} min</text>`;
+
+  if(s.bottleneck){
+    g += `<text x="${s.x+14}" y="${s.y+s.h-18}" font-size="11" font-weight="700" fill="${RUST}">BOTTLENECK</text>`;
+  }
+  if(s.kind==='ship'){
+    g += `<text x="${s.x+14}" y="${s.y+s.h-18}" font-size="11" font-weight="700" fill="${SHIP}">→ SHIP OUT</text>`;
+  }
+  g += `</g>`;
+  return g;
+}
+
+function arrow(ax,ay,bx,by,color,dash){
+  const dd = dash?`stroke-dasharray="6 5"`:``;
+  return `<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${color}" stroke-width="${dash?1.6:2.2}" ${dd} marker-end="url(#${color===BLUE?'ahb':color===SHIP?'ahs':'ahg'})"/>`;
+}
+
+function build(){
+  const W=920, H=700;
+  let svg = `<svg id="plan" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" font-family="Inter, Segoe UI, Arial, sans-serif">`;
+  svg += `<defs>
+    <marker id="ahb" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="${BLUE}"/></marker>
+    <marker id="ahg" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="${GREY}"/></marker>
+    <marker id="ahs" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="${SHIP}"/></marker>
+  </defs>`;
+  svg += `<rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>`;
+  // factory outline
+  svg += `<rect x="10" y="10" width="${W-20}" height="${H-20}" rx="16" fill="none" stroke="#e4e8ec" stroke-width="2"/>`;
+
+  // ARROWS (under tables)
+  // cart -> feeders + seat (dashed grey)
+  ['con','arm','bak','tre','sea'].forEach(id=>{
+    const a=edge(by.cart, cx(by[id]), cy(by[id]));
+    const b=edge(by[id], cx(by.cart), cy(by.cart));
+    svg+=arrow(a[0],a[1],b[0],b[1],GREY,true);
+  });
+  // feeders -> full assembly (blue)
+  ['con','arm','bak','tre','sea'].forEach(id=>{
+    const a=edge(by[id], cx(by.fa), cy(by.fa));
+    const b=edge(by.fa, cx(by[id]), cy(by[id]));
+    svg+=arrow(a[0],a[1],b[0],b[1],BLUE,false);
+  });
+  // full assembly -> packing (grey)
+  {
+    const a=edge(by.fa, cx(by.pak), cy(by.pak));
+    const b=edge(by.pak, cx(by.fa), cy(by.fa));
+    svg+=arrow(a[0],a[1],b[0],b[1],GREY,false);
+  }
+  // packing -> ship out (green, exits right)
+  {
+    const a=[by.pak.x+by.pak.w, cy(by.pak)];
+    const b=[W-30, cy(by.pak)];
+    svg+=arrow(a[0],a[1],b[0],b[1],SHIP,false);
+    svg+=`<text x="${b[0]-4}" y="${b[1]-10}" text-anchor="end" font-size="11.5" font-weight="700" fill="${SHIP}">SHIP OUT</text>`;
+  }
+
+  // TABLES (over arrows)
+  ST.forEach(s=> svg+=tableSVG(s));
+
+  // legend
+  svg += `<g transform="translate(640,560)">
+    <text x="0" y="0" font-size="11.5" font-weight="700" fill="${NAVY}">LEGEND</text>
+    ${personIcon(8,18,NAVY)}<text x="22" y="22" font-size="11" fill="${MUT}">= 1 operator</text>
+    <rect x="0" y="34" width="22" height="13" rx="3" fill="#fff" stroke="${RUST}" stroke-width="2"/><text x="30" y="44" font-size="11" fill="${MUT}">bottleneck</text>
+    <line x1="2" y1="62" x2="24" y2="62" stroke="${BLUE}" stroke-width="2.2"/><text x="30" y="66" font-size="11" fill="${MUT}">part flow</text>
+    <line x1="2" y1="80" x2="24" y2="80" stroke="${GREY}" stroke-width="1.6" stroke-dasharray="6 5"/><text x="30" y="84" font-size="11" fill="${MUT}">supply</text>
+  </g>`;
+
+  svg += `</svg>`;
+  document.getElementById('stage').innerHTML = svg;
+}
+build();
+
+function downloadPNG(){
+  const svgEl = document.getElementById('plan');
+  const xml = new XMLSerializer().serializeToString(svgEl);
+  const svg64 = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(xml)));
+  const img = new Image();
+  img.onload = function(){
+    const scale=2, c=document.createElement('canvas');
+    c.width=920*scale; c.height=700*scale;
+    const ctx=c.getContext('2d');
+    ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,c.width,c.height);
+    ctx.drawImage(img,0,0,c.width,c.height);
+    const a=document.createElement('a');
+    a.download='Meritage_FloorPlan.png';
+    a.href=c.toDataURL('image/png');
+    a.click();
+  };
+  img.src=svg64;
+}
+</script>
+</body>
+</html>
