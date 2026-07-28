@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tuuci Shade</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+  body { background: #0b1d33; }
+  #game { display: block; width: 100vw; height: 100vh; cursor: none; }
+  #hud {
+    position: fixed; top: 16px; left: 16px; right: 16px;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    pointer-events: none; color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,.35);
+  }
+  .hud-box {
+    background: rgba(10, 30, 55, 0.45); backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,255,255,.18); border-radius: 12px;
+    padding: 10px 16px; font-size: 15px; line-height: 1.5;
+  }
+  .hud-box b { font-size: 22px; font-weight: 700; }
+  #overlay {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    background: rgba(6, 18, 34, 0.72); backdrop-filter: blur(4px);
+    color: #fff; z-index: 10; padding: 24px;
+  }
+  #overlay.hidden { display: none; }
+  #overlay h1 {
+    font-size: clamp(40px, 8vw, 72px); font-weight: 800; letter-spacing: -1px;
+    background: linear-gradient(180deg, #ffe9b0, #ffb347);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    margin-bottom: 8px;
+  }
+  #overlay .tagline { font-size: 18px; opacity: .85; margin-bottom: 24px; }
+  #overlay .rules {
+    max-width: 460px; font-size: 15px; line-height: 1.7; opacity: .9;
+    background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+    border-radius: 14px; padding: 18px 24px; margin-bottom: 28px;
+  }
+  #overlay button {
+    font-size: 18px; font-weight: 700; color: #08283f;
+    background: linear-gradient(180deg, #ffd97a, #ffb347);
+    border: none; border-radius: 999px; padding: 14px 44px; cursor: pointer;
+    box-shadow: 0 6px 20px rgba(255, 179, 71, .35);
+    transition: transform .12s ease;
+  }
+  #overlay button:hover { transform: scale(1.05); }
+  #final-score { font-size: 20px; margin-bottom: 20px; }
+  #final-score b { font-size: 34px; color: #ffd97a; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud" style="display:none">
+  <div class="hud-box">Score<br><b id="score">0</b></div>
+  <div class="hud-box" style="text-align:right">Dots lost <span id="lost">0</span> / <span id="maxlost">5</span><br>Level <b id="level">1</b></div>
+</div>
+
+<div id="overlay">
+  <h1>Tuuci Shade</h1>
+  <div class="tagline">Keep every floating dot cool under your umbrella.</div>
+  <div class="rules" id="rules">
+    ☂️ Move your mouse (or finger) to steer the floating umbrella.<br>
+    🔆 The sun drifts across the sky — shade falls opposite the sun.<br>
+    🔵 Dots in your shade cool down and earn you points.<br>
+    🔴 Dots left in the sun heat up… and pop if they overheat.<br>
+    Lose 5 dots and the game is over. Shade wisely!
+  </div>
+  <div id="final-score" style="display:none">Final score: <b id="final-score-value">0</b></div>
+  <button id="start-btn">Play</button>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const hud = document.getElementById('hud');
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('start-btn');
+  const scoreEl = document.getElementById('score');
+  const lostEl = document.getElementById('lost');
+  const maxLostEl = document.getElementById('maxlost');
+  const levelEl = document.getElementById('level');
+  const finalScoreBox = document.getElementById('final-score');
+  const finalScoreVal = document.getElementById('final-score-value');
+  const rulesEl = document.getElementById('rules');
+
+  let W = 0, H = 0, DPR = 1;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const MAX_LOST = 5;
+  const CANOPY_R = 95;          // umbrella canopy radius
+  const state = {
+    running: false,
+    time: 0,
+    score: 0,
+    lost: 0,
+    level: 1,
+    dots: [],
+    particles: [],
+    spawnTimer: 0,
+    umbrella: { x: W / 2, y: H / 2, tx: W / 2, ty: H / 2, bob: 0 },
+    sun: { angle: -Math.PI * 0.75 },   // position along sky arc
+  };
+
+  const pointer = { x: W / 2, y: H / 2 };
+  window.addEventListener('mousemove', e => { pointer.x = e.clientX; pointer.y = e.clientY; });
+  window.addEventListener('touchmove', e => {
+    const t = e.touches[0];
+    pointer.x = t.clientX; pointer.y = t.clientY;
+    e.preventDefault();
+  }, { passive: false });
+
+  function sunPos() {
+    // Sun travels along a wide arc above the play field.
+    const a = state.sun.angle;
+    return {
+      x: W / 2 + Math.cos(a) * W * 0.55,
+      y: H * 0.42 + Math.sin(a) * H * 0.55
+    };
+  }
+
+  function spawnDot() {
+    const margin = 60;
+    state.dots.push({
+      x: margin + Math.random() * (W - margin * 2),
+      y: H * 0.35 + Math.random() * (H * 0.55),
+      vx: (Math.random() - 0.5) * 30,
+      vy: (Math.random() - 0.5) * 30,
+      r: 10 + Math.random() * 6,
+      heat: 0.15 + Math.random() * 0.15,   // 0 = cool, 1 = pop
+      phase: Math.random() * Math.PI * 2,
+      shaded: false,
+    });
+  }
+
+  function popDot(d) {
+    for (let i = 0; i < 18; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 40 + Math.random() * 140;
+      state.particles.push({
+        x: d.x, y: d.y,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 0.7 + Math.random() * 0.4,
+        maxLife: 1,
+        r: 2 + Math.random() * 3,
+        color: '255, 110, 80'
+      });
+    }
+  }
+
+  function sparkle(x, y) {
+    state.particles.push({
+      x: x + (Math.random() - 0.5) * 20,
+      y: y + (Math.random() - 0.5) * 20,
+      vx: (Math.random() - 0.5) * 20, vy: -30 - Math.random() * 30,
+      life: 0.6, maxLife: 0.6,
+      r: 1.5 + Math.random() * 2,
+      color: '140, 220, 255'
+    });
+  }
+
+  // A dot is shaded if it sits inside the shadow ellipse the canopy casts,
+  // which is offset away from the sun.
+  function shadowCenter() {
+    const s = sunPos();
+    const u = state.umbrella;
+    const dx = u.x - s.x, dy = u.y - s.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const off = 55; // how far the shade skews away from the sun
+    return { x: u.x + (dx / len) * off, y: u.y + (dy / len) * off };
+  }
+
+  function reset() {
+    state.time = 0;
+    state.score = 0;
+    state.lost = 0;
+    state.level = 1;
+    state.dots = [];
+    state.particles = [];
+    state.spawnTimer = 0;
+    state.sun.angle = -Math.PI * 0.75;
+    state.umbrella.x = state.umbrella.tx = W / 2;
+    state.umbrella.y = state.umbrella.ty = H / 2;
+    for (let i = 0; i < 3; i++) spawnDot();
+    scoreEl.textContent = '0';
+    lostEl.textContent = '0';
+    levelEl.textContent = '1';
+    maxLostEl.textContent = MAX_LOST;
+  }
+
+  function gameOver() {
+    state.running = false;
+    finalScoreVal.textContent = Math.floor(state.score);
+    finalScoreBox.style.display = 'block';
+    rulesEl.style.display = 'none';
+    startBtn.textContent = 'Play again';
+    overlay.classList.remove('hidden');
+    hud.style.display = 'none';
+    canvas.style.cursor = 'default';
+  }
+
+  startBtn.addEventListener('click', () => {
+    reset();
+    state.running = true;
+    overlay.classList.add('hidden');
+    hud.style.display = 'flex';
+    canvas.style.cursor = 'none';
+  });
+
+  function update(dt) {
+    state.time += dt;
+    state.level = 1 + Math.floor(state.time / 25);
+    levelEl.textContent = state.level;
+
+    // Sun drifts, a bit faster each level.
+    state.sun.angle += dt * (0.06 + state.level * 0.015);
+
+    // Umbrella eases toward the pointer with a gentle float-bob.
+    const u = state.umbrella;
+    u.bob += dt * 2.2;
+    u.tx = pointer.x;
+    u.ty = pointer.y;
+    const ease = 1 - Math.pow(0.002, dt);
+    u.x += (u.tx - u.x) * ease;
+    u.y += (u.ty - u.y) * ease + Math.sin(u.bob) * 0.25;
+
+    // Spawn dots over time; more dots at higher levels.
+    state.spawnTimer -= dt;
+    const targetDots = Math.min(3 + state.level, 10);
+    if (state.spawnTimer <= 0 && state.dots.length < targetDots) {
+      spawnDot();
+      state.spawnTimer = 4;
+    }
+
+    const sc = shadowCenter();
+    const heatRate = 0.055 + state.level * 0.012;
+    const coolRate = 0.16;
+
+    for (let i = state.dots.length - 1; i >= 0; i--) {
+      const d = state.dots[i];
+      d.phase += dt;
+      // Gentle floating drift with soft wall bounce.
+      d.x += d.vx * dt + Math.sin(d.phase * 1.3) * 14 * dt;
+      d.y += d.vy * dt + Math.cos(d.phase) * 14 * dt;
+      if (d.x < 30) { d.x = 30; d.vx = Math.abs(d.vx); }
+      if (d.x > W - 30) { d.x = W - 30; d.vx = -Math.abs(d.vx); }
+      if (d.y < H * 0.28) { d.y = H * 0.28; d.vy = Math.abs(d.vy); }
+      if (d.y > H - 30) { d.y = H - 30; d.vy = -Math.abs(d.vy); }
+
+      d.shaded = Math.hypot(d.x - sc.x, d.y - sc.y) < CANOPY_R;
+
+      if (d.shaded) {
+        d.heat = Math.max(0, d.heat - coolRate * dt);
+        state.score += dt * 10;
+        if (Math.random() < dt * 6) sparkle(d.x, d.y);
+      } else {
+        d.heat += heatRate * dt;
+        if (d.heat >= 1) {
+          popDot(d);
+          state.dots.splice(i, 1);
+          state.lost++;
+          lostEl.textContent = state.lost;
+          if (state.lost >= MAX_LOST) { gameOver(); return; }
+        }
+      }
+    }
+
+    scoreEl.textContent = Math.floor(state.score);
+
+    for (let i = state.particles.length - 1; i >= 0; i--) {
+      const p = state.particles[i];
+      p.life -= dt;
+      if (p.life <= 0) { state.particles.splice(i, 1); continue; }
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 60 * dt;
+    }
+  }
+
+  function drawBackground() {
+    const s = sunPos();
+    const day = Math.max(0, Math.min(1, 1 - (s.y / (H * 0.9)))); // higher sun = brighter
+    const skyTop = `hsl(${205 + day * 5}, 70%, ${18 + day * 30}%)`;
+    const skyBot = `hsl(${28}, ${40 + day * 40}%, ${30 + day * 35}%)`;
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, skyTop);
+    g.addColorStop(1, skyBot);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // Sun with glow.
+    const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, 260);
+    glow.addColorStop(0, 'rgba(255, 220, 130, 0.9)');
+    glow.addColorStop(0.25, 'rgba(255, 190, 90, 0.35)');
+    glow.addColorStop(1, 'rgba(255, 190, 90, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 260, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffe9a8';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 34, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawShadow() {
+    const sc = shadowCenter();
+    const g = ctx.createRadialGradient(sc.x, sc.y, 0, sc.x, sc.y, CANOPY_R);
+    g.addColorStop(0, 'rgba(10, 25, 50, 0.42)');
+    g.addColorStop(0.8, 'rgba(10, 25, 50, 0.30)');
+    g.addColorStop(1, 'rgba(10, 25, 50, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(sc.x, sc.y, CANOPY_R, 0, Math.PI * 2);
+    ctx.fill();
+    // Faint rim so the player can read the shade zone.
+    ctx.strokeStyle = 'rgba(150, 200, 255, 0.25)';
+    ctx.setLineDash([6, 8]);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(sc.x, sc.y, CANOPY_R, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function drawDots() {
+    for (const d of state.dots) {
+      const bobY = Math.sin(d.phase * 2) * 2;
+      // Heat ring.
+      if (!d.shaded && d.heat > 0.55) {
+        const alarm = (d.heat - 0.55) / 0.45;
+        ctx.strokeStyle = `rgba(255, 80, 60, ${0.3 + alarm * 0.6})`;
+        ctx.lineWidth = 2 + alarm * 2;
+        ctx.beginPath();
+        ctx.arc(d.x, d.y + bobY, d.r + 6 + Math.sin(state.time * 10) * alarm * 2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      // Body: blue when cool, red when hot.
+      const hue = 205 - d.heat * 190;
+      const grad = ctx.createRadialGradient(d.x - d.r * 0.3, d.y + bobY - d.r * 0.3, 1, d.x, d.y + bobY, d.r);
+      grad.addColorStop(0, `hsl(${hue}, 85%, 75%)`);
+      grad.addColorStop(1, `hsl(${hue}, 75%, 52%)`);
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(d.x, d.y + bobY, d.r, 0, Math.PI * 2);
+      ctx.fill();
+      // Heat meter arc.
+      ctx.strokeStyle = d.shaded ? 'rgba(140, 230, 255, 0.9)' : `hsla(${hue}, 90%, 65%, 0.9)`;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(d.x, d.y + bobY, d.r + 4, -Math.PI / 2, -Math.PI / 2 + d.heat * Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  function drawParticles() {
+    for (const p of state.particles) {
+      ctx.fillStyle = `rgba(${p.color}, ${p.life / p.maxLife})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawUmbrella() {
+    const u = state.umbrella;
+    const s = sunPos();
+    const tilt = Math.atan2(u.x - s.x, s.y - u.y) * 0.25; // lean slightly away from sun
+    const bobY = Math.sin(u.bob) * 4;
+
+    ctx.save();
+    ctx.translate(u.x, u.y + bobY);
+    ctx.rotate(tilt);
+
+    // Pole.
+    ctx.strokeStyle = '#7a5230';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, -8);
+    ctx.lineTo(0, 78);
+    ctx.stroke();
+    // Curved handle.
+    ctx.beginPath();
+    ctx.arc(-9, 78, 9, 0, Math.PI);
+    ctx.stroke();
+
+    // Canopy: scalloped panels.
+    const R = CANOPY_R;
+    const panels = 6;
+    ctx.beginPath();
+    ctx.moveTo(-R, 0);
+    ctx.quadraticCurveTo(-R * 0.9, -R * 0.85, 0, -R * 0.78);
+    ctx.quadraticCurveTo(R * 0.9, -R * 0.85, R, 0);
+    for (let i = panels; i > 0; i--) {
+      const x1 = -R + (2 * R * i) / panels;
+      const x0 = -R + (2 * R * (i - 1)) / panels;
+      ctx.quadraticCurveTo((x0 + x1) / 2, 14, x0, 0);
+    }
+    ctx.closePath();
+    const cg = ctx.createLinearGradient(0, -R, 0, 14);
+    cg.addColorStop(0, '#2f9ec7');
+    cg.addColorStop(1, '#1c6f96');
+    ctx.fillStyle = cg;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Rib seams.
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 1.5;
+    for (let i = 1; i < panels; i++) {
+      const x = -R + (2 * R * i) / panels;
+      ctx.beginPath();
+      ctx.moveTo(0, -R * 0.78);
+      ctx.quadraticCurveTo(x * 0.6, -R * 0.5, x, 0);
+      ctx.stroke();
+    }
+    // Finial.
+    ctx.fillStyle = '#7a5230';
+    ctx.beginPath();
+    ctx.arc(0, -R * 0.82, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min((now - last) / 1000, 0.05);
+    last = now;
+
+    if (state.running) update(dt);
+
+    drawBackground();
+    if (state.running || state.dots.length) {
+      drawShadow();
+      drawDots();
+      drawParticles();
+      drawUmbrella();
+    }
+
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
